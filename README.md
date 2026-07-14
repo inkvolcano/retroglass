@@ -47,6 +47,7 @@ ROMs and BIOS files are **not** included — dump them from hardware you own.
 - **Home computers** (MSX/C64/Amiga/ZX Spectrum/Amstrad) have a joystick+fire layout; LibretroDroid has no keyboard-device path, so full typing relies on each core's own on-screen keyboard (navigate with the gamepad).
 - **Arcade** romsets must match FBNeo's expected versions; Neo Geo needs `neogeo.zip`.
 - While the glasses occupy the USB-C port the phone can't charge — use a USB-C hub with power passthrough for long sessions.
+- **Wireless displays add lag.** A wired external display (USB-C/DisplayPort/HDMI) is near-zero latency and is the intended experience. **Miracast / "Smart View" wireless displays work** (they register as a normal external display), but add ~100–300 ms of input latency, which is noticeable in fast games. **Chromecast via Google Cast is not supported** — Cast streams pre-encoded media, not a live game surface, so there is no display to render onto; only wired displays and Miracast-style wireless displays appear as real external screens.
 
 ## Licensing & distribution
 
