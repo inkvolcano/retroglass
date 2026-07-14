@@ -18,25 +18,32 @@ WORK="${WORK:-$(mktemp -d)}"
 mkdir -p "$JNI_OUT" "$WORK"
 
 # name | git repo | path to the folder containing jni/Android.mk (relative to repo root)
-# These use the standard ndk-build path. CMake-based cores (mgba, ppsspp, melonds,
-# mupen64plus_next) and heavier builds (play, vice, puae, mednafen_saturn) need their
-# own build invocation and are handled case-by-case — not in this simple loop.
+# These 12 build cleanly via the standard ndk-build path and come out 16 KB-aligned
+# (verified). Together with the 8 cores the buildbot already ships aligned (fceumm,
+# gambatte, pcsx_rearmed, flycast, fbneo, mednafen_pce_fast, mednafen_ngp, prosystem)
+# that is 20/32 systems Play-ready.
 CORES=(
   "snes9x|https://github.com/libretro/snes9x|libretro"
   "genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX|libretro"
-  "picodrive|https://github.com/libretro/picodrive|."
   "handy|https://github.com/libretro/libretro-handy|."
   "vecx|https://github.com/libretro/libretro-vecx|."
   "freeintv|https://github.com/libretro/FreeIntv|."
-  "gearcoleco|https://github.com/libretro/gearcoleco|."
   "mednafen_wswan|https://github.com/libretro/beetle-wswan-libretro|."
   "mednafen_vb|https://github.com/libretro/beetle-vb-libretro|."
   "atari800|https://github.com/libretro/libretro-atari800|."
   "cap32|https://github.com/libretro/libretro-cap32|."
-  "fuse|https://github.com/libretro/fuse-libretro|."
   "opera|https://github.com/libretro/opera-libretro|."
   "pokemini|https://github.com/libretro/PokeMini|."
+  "stella2023|https://github.com/libretro/stella|."
 )
+
+# STILL 4 KB (need dedicated work — not in the simple loop):
+#   fuse, bluemsx, picodrive  -> ndk-build compile errors, need patching
+#   gearcoleco                -> no jni/Android.mk (different build layout)
+#   mednafen_saturn           -> builds but extremely slow
+#   mgba, melonds             -> CMake (use android.toolchain.cmake)
+#   mupen64plus_next, vice_x64, puae -> make-based, per-core flags
+#   ppsspp, play              -> large CMake projects with submodules
 
 for entry in "${CORES[@]}"; do
   IFS='|' read -r name repo sub <<<"$entry"
