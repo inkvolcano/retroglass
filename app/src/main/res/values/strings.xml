@@ -22,9 +22,20 @@
     <string name="rom_missing">ROM file is missing</string>
     <string name="loading">Loading %1$s…</string>
     <string name="gamepad_connected">Gamepad connected — touch controls hidden. Use the back gesture for the menu.</string>
-    <string name="gamepad_coop">Local co-op: phone is Player 1, gamepads are Player 2+.</string>
-    <string name="menu_coop_on">Local co-op (phone = P1): On</string>
-    <string name="menu_coop_off">Local co-op (phone = P1): Off</string>
+    <string name="menu_controllers">Controllers / players</string>
+    <string name="player_off">Off</string>
+    <string name="player_n">Player %1$d</string>
+    <string name="ctrl_phone">Phone (touch)</string>
+    <string name="ctrl_set_player">Assign to player…</string>
+    <string name="ctrl_remap">Remap buttons…</string>
+    <string name="ctrl_stick_dpad_on">Left stick as D-pad: On</string>
+    <string name="ctrl_stick_dpad_off">Left stick as D-pad: Off</string>
+    <string name="ctrl_reset_map">Reset button mapping</string>
+    <string name="ctrl_map_reset">Button mapping reset</string>
+    <string name="remap_title">Remap: %1$s</string>
+    <string name="remap_default">(default)</string>
+    <string name="remap_press">Press the button for %1$s…</string>
+    <string name="remap_done">Bound %1$s</string>
     <string name="paused_disconnect">⏸  Paused — external display disconnected\nTap to resume on the phone, or reconnect the display</string>
     <string name="menu_screen_size_local">Screen size (phone)</string>
     <string name="emulator_error_full">%1$s\n%2$s</string>

@@ -88,6 +88,9 @@ class EmulationActivity : AppCompatActivity() {
     private var presentation: GamePresentation? = null
     private var menuDialog: AlertDialog? = null
     private lateinit var layoutStore: LayoutStore
+    private lateinit var inputConfig: com.nvanloo.retroglass.controller.InputConfig
+    private var bindingCaptureDevice: String? = null
+    private var bindingCapture: ((Int) -> Unit)? = null
     private var videoScale: Float = 1.0f
     private var videoScaleLocal: Float = 0.62f
     private var fastForward = false
@@ -132,32 +135,43 @@ class EmulationActivity : AppCompatActivity() {
             sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
     }
 
-    /**
-     * In single-player, hides the touch controller while a gamepad is connected (the
-     * gamepad becomes P1; two gamepads auto-route to P1/P2). In local-multiplayer, the
-     * touch pad stays as P1 and gamepads are routed to P2+.
-     */
+    /** Shows the touch pad only when the phone is assigned to a player port. */
     private fun updateForGamepad(announce: Boolean) {
-        val pad = hasGamepad()
-        val coop = layoutStore.localMultiplayer()
-        controllerView.visibility = if (pad && !coop) View.GONE else View.VISIBLE
-        if (pad && announce && !gamepadHintShown) {
+        controllerView.visibility = if (phonePort() >= 0) View.VISIBLE else View.GONE
+        if (hasGamepad() && announce && !gamepadHintShown) {
             gamepadHintShown = true
-            val msg = if (coop) R.string.gamepad_coop else R.string.gamepad_connected
-            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.gamepad_connected, Toast.LENGTH_LONG).show()
         }
-        if (!pad) gamepadHintShown = false
+        if (!hasGamepad()) gamepadHintShown = false
     }
 
     private fun isGamepadEvent(source: Int): Boolean =
         source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
             source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
 
-    /** Player port for a gamepad. In co-op the phone is P1 (port 0), so gamepads start at 1. */
-    private fun gamepadPort(device: InputDevice?): Int {
-        val n = device?.controllerNumber ?: 0
-        return if (n >= 1) n else 1
+    private fun deviceKey(device: InputDevice?): String = device?.descriptor ?: "gamepad"
+
+    private fun connectedGamepads(): List<InputDevice> {
+        val result = mutableListOf<InputDevice>()
+        for (id in InputDevice.getDeviceIds()) {
+            val d = InputDevice.getDevice(id) ?: continue
+            if (isGamepadEvent(d.sources)) result.add(d)
+        }
+        return result.sortedBy { if (it.controllerNumber <= 0) 99 else it.controllerNumber }
     }
+
+    /** Default port when the user hasn't assigned one: phone is P1 unless a pad is present. */
+    private fun defaultPort(deviceKey: String, device: InputDevice?): Int =
+        if (deviceKey == com.nvanloo.retroglass.controller.InputConfig.PHONE) {
+            if (hasGamepad()) com.nvanloo.retroglass.controller.InputConfig.PORT_OFF else 0
+        } else {
+            ((device?.controllerNumber ?: 1) - 1).coerceAtLeast(0)
+        }
+
+    private fun portFor(deviceKey: String, device: InputDevice?): Int =
+        inputConfig.storedPort(deviceKey) ?: defaultPort(deviceKey, device)
+
+    private fun phonePort(): Int = portFor(com.nvanloo.retroglass.controller.InputConfig.PHONE, null)
 
     /** Android face buttons sit opposite RetroPad's; swap A/B and X/Y (as LibretroDroid does). */
     private fun androidToRetroKey(keyCode: Int): Int? = when (keyCode) {
@@ -174,25 +188,27 @@ class EmulationActivity : AppCompatActivity() {
         else -> null
     }
 
-    // Forward physical gamepad input to the emulator, which may live in a Presentation
-    // on the external display and so never receives these events on its own.
+    // Forward physical gamepad input to the emulator (which may live in a Presentation on
+    // the external display), honoring the per-controller port assignment and remap.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val v = retroView
         if (v != null && isGamepadEvent(event.source) && event.keyCode != KeyEvent.KEYCODE_BACK) {
-            if (layoutStore.localMultiplayer()) {
-                // Route to P2+ so the phone can stay as P1.
-                val retroKey = androidToRetroKey(event.keyCode)
-                if (retroKey != null && event.action != KeyEvent.ACTION_MULTIPLE) {
-                    v.sendKeyEvent(event.action, retroKey, gamepadPort(event.device))
-                    return true
-                }
-            } else {
-                val handled = when (event.action) {
-                    KeyEvent.ACTION_DOWN -> v.onKeyDown(event.keyCode, event)
-                    KeyEvent.ACTION_UP -> v.onKeyUp(event.keyCode, event)
-                    else -> false
-                }
-                if (handled) return true
+            val key = deviceKey(event.device)
+            val capture = bindingCapture
+            if (capture != null && bindingCaptureDevice == key && event.action == KeyEvent.ACTION_DOWN &&
+                androidToRetroKey(event.keyCode) != null
+            ) {
+                bindingCapture = null
+                bindingCaptureDevice = null
+                capture(event.keyCode)
+                return true
+            }
+            val port = portFor(key, event.device)
+            if (port < 0) return true
+            val retroKey = inputConfig.bindings(key)[event.keyCode] ?: androidToRetroKey(event.keyCode)
+            if (retroKey != null && event.action != KeyEvent.ACTION_MULTIPLE) {
+                v.sendKeyEvent(event.action, retroKey, port)
+                return true
             }
         }
         return super.dispatchKeyEvent(event)
@@ -201,17 +217,25 @@ class EmulationActivity : AppCompatActivity() {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val v = retroView
         if (v != null && isGamepadEvent(event.source)) {
-            if (layoutStore.localMultiplayer()) {
-                val port = gamepadPort(event.device)
-                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD,
-                    event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_HAT_Y), port)
-                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT,
-                    event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y), port)
-                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
-                    event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), port)
-                return true
+            val key = deviceKey(event.device)
+            val port = portFor(key, event.device)
+            if (port < 0) return true
+            val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
+            val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
+            val lx = event.getAxisValue(MotionEvent.AXIS_X)
+            val ly = event.getAxisValue(MotionEvent.AXIS_Y)
+            if (inputConfig.leftStickAsDpad(key)) {
+                val dx = if (lx > 0.5f) 1f else if (lx < -0.5f) -1f else hatX
+                val dy = if (ly > 0.5f) 1f else if (ly < -0.5f) -1f else hatY
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, dx, dy, port)
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, 0f, 0f, port)
+            } else {
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, hatX, hatY, port)
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, lx, ly, port)
             }
-            if (v.onGenericMotionEvent(event)) return true
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
+                event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), port)
+            return true
         }
         return super.onGenericMotionEvent(event)
     }
@@ -237,6 +261,7 @@ class EmulationActivity : AppCompatActivity() {
         mediaRouter = getSystemService(Context.MEDIA_ROUTER_SERVICE) as android.media.MediaRouter
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         layoutStore = LayoutStore(this)
+        inputConfig = com.nvanloo.retroglass.controller.InputConfig(this)
         videoScale = layoutStore.videoScale()
         videoScaleLocal = layoutStore.localVideoScale()
 
@@ -661,11 +686,12 @@ class EmulationActivity : AppCompatActivity() {
             retroView?.sendKeyEvent(
                 if (pressed) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
                 keyCode,
+                phonePort().coerceAtLeast(0),
             )
         }
 
         override fun onDpad(x: Float, y: Float) {
-            retroView?.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, x, y)
+            retroView?.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, x, y, phonePort().coerceAtLeast(0))
         }
 
         override fun onStick(id: String, x: Float, y: Float) {
@@ -675,7 +701,7 @@ class EmulationActivity : AppCompatActivity() {
             } else {
                 GLRetroView.MOTION_SOURCE_ANALOG_LEFT
             }
-            retroView?.sendMotionEvent(source, x, y)
+            retroView?.sendMotionEvent(source, x, y, phonePort().coerceAtLeast(0))
         }
 
         override fun onMenu() = showMenu()
@@ -701,12 +727,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(
             if (layoutStore.rumbleEnabled()) R.string.menu_rumble_on else R.string.menu_rumble_off,
         ) to { layoutStore.setRumbleEnabled(!layoutStore.rumbleEnabled()) }
-        actions += getString(
-            if (layoutStore.localMultiplayer()) R.string.menu_coop_on else R.string.menu_coop_off,
-        ) to {
-            layoutStore.setLocalMultiplayer(!layoutStore.localMultiplayer())
-            updateForGamepad(true)
-        }
+        actions += getString(R.string.menu_controllers) to { showControllers() }
         actions += getString(R.string.menu_reset) to { retroView?.reset(); Unit }
         actions += getString(R.string.menu_exit) to { exitGame() }
 
@@ -735,6 +756,98 @@ class EmulationActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ------------------------------------------------------------ controllers
+
+    private fun portLabel(port: Int): String =
+        if (port < 0) getString(R.string.player_off) else getString(R.string.player_n, port + 1)
+
+    /** Lists the phone plus each connected gamepad; tap one to configure it. */
+    private fun showControllers() {
+        data class Ctrl(val key: String, val name: String, val device: InputDevice?)
+        val PHONE = com.nvanloo.retroglass.controller.InputConfig.PHONE
+        val items = mutableListOf(Ctrl(PHONE, getString(R.string.ctrl_phone), null))
+        connectedGamepads().forEach { items.add(Ctrl(deviceKey(it), it.name, it)) }
+
+        val labels = items.map { "${it.name}  —  ${portLabel(portFor(it.key, it.device))}" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_controllers)
+            .setItems(labels) { _, which ->
+                val c = items[which]
+                showControllerOptions(c.key, c.name, c.device, c.key != PHONE)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showControllerOptions(key: String, name: String, device: InputDevice?, isGamepad: Boolean) {
+        val opts = mutableListOf(getString(R.string.ctrl_set_player))
+        if (isGamepad) {
+            opts += getString(R.string.ctrl_remap)
+            opts += getString(
+                if (inputConfig.leftStickAsDpad(key)) R.string.ctrl_stick_dpad_on else R.string.ctrl_stick_dpad_off,
+            )
+            opts += getString(R.string.ctrl_reset_map)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setItems(opts.toTypedArray()) { _, which ->
+                when (opts[which]) {
+                    getString(R.string.ctrl_set_player) -> showPlayerPicker(key, name, device)
+                    getString(R.string.ctrl_remap) -> showRemap(key, name)
+                    getString(R.string.ctrl_reset_map) -> {
+                        inputConfig.clearBindings(key)
+                        Toast.makeText(this, R.string.ctrl_map_reset, Toast.LENGTH_SHORT).show()
+                    }
+                    else -> inputConfig.setLeftStickAsDpad(key, !inputConfig.leftStickAsDpad(key))
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showPlayerPicker(key: String, name: String, device: InputDevice?) {
+        val ports = listOf(0, 1, 2, 3, com.nvanloo.retroglass.controller.InputConfig.PORT_OFF)
+        val labels = ports.map { portLabel(it) }.toTypedArray()
+        val current = ports.indexOf(portFor(key, device)).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                inputConfig.setPort(key, ports[which])
+                updateForGamepad(false)
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showRemap(key: String, name: String) {
+        val buttons = com.nvanloo.retroglass.controller.InputConfig.RETRO_BUTTONS
+        fun labelFor(index: Int): String {
+            val (bName, retroKey) = buttons[index]
+            val phys = inputConfig.physicalFor(key, retroKey)
+            val physName = phys?.let { KeyEvent.keyCodeToString(it).removePrefix("KEYCODE_") } ?: getString(R.string.remap_default)
+            return "$bName  →  $physName"
+        }
+        val labels = buttons.indices.map { labelFor(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.remap_title, name))
+            .setItems(labels) { _, which ->
+                val (bName, retroKey) = buttons[which]
+                val prompt = Toast.makeText(this, getString(R.string.remap_press, bName), Toast.LENGTH_LONG)
+                prompt.show()
+                bindingCaptureDevice = key
+                bindingCapture = { physicalKey ->
+                    inputConfig.bind(key, physicalKey, retroKey)
+                    prompt.cancel()
+                    Toast.makeText(this, getString(R.string.remap_done, bName), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ ->
+                bindingCapture = null; bindingCaptureDevice = null
+            }
             .show()
     }
 
