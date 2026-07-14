@@ -37,23 +37,27 @@ CORES=(
   "stella2023|https://github.com/libretro/stella|."
   "mgba|https://github.com/libretro/mgba|."
   "mupen64plus_next|https://github.com/libretro/mupen64plus-libretro-nx|."
+  "picodrive|https://github.com/libretro/picodrive|."
 )
-# => 22/32 systems Play-ready (14 rebuilt here + 8 already aligned from the buildbot).
+# => 23/32 systems Play-ready (15 rebuilt here + 8 already aligned from the buildbot).
 
 # STILL 4 KB (need dedicated per-core work — build errors with NDK r28's clang or
 # heavy CMake projects; not in this loop):
-#   fuse         -> needs a generated config.h (autotools)
-#   bluemsx, picodrive, vice_x64, puae -> ndk-build compile errors, need patches
-#   melonds      -> libc++ macro clash in its jni; use its CMake build instead
-#   gearcoleco   -> no jni/Android.mk (make platform=android)
-#   mednafen_saturn -> builds but extremely slow
-#   ppsspp, play -> large CMake projects with submodules
+#   fuse            -> needs a generated config.h (autotools)
+#   bluemsx         -> cascade of old-C errors (implicit decls, incompatible fn ptrs)
+#   vice_x64, puae  -> std::auto_ptr removed in C++17 / other C++ errors
+#   melonds (DS)    -> libc++ macro clash in its jni; use its CMake build instead
+#   gearcoleco      -> no jni/Android.mk (make platform=android)
+#   mednafen_saturn -> hangs on one heavy compilation unit with NDK r28
+#   ppsspp (PSP), play (PS2) -> large CMake projects with submodules
 
 for entry in "${CORES[@]}"; do
   IFS='|' read -r name repo sub <<<"$entry"
   echo "=== $name ==="
   dir="$WORK/$name"
-  [ -d "$dir" ] || git clone --depth 1 "$repo" "$dir"
+  # --recurse-submodules matters: several cores (e.g. picodrive -> libchdr) fail
+  # to build without their submodules.
+  [ -d "$dir" ] || git clone --depth 1 --recurse-submodules "$repo" "$dir"
   # Find a jni/Android.mk anywhere in the tree (some cores nest it, e.g. mgba).
   jni="$(dirname "$(find "$dir" -path '*/jni/Android.mk' | head -n1)" 2>/dev/null)"
   if [ -z "$jni" ] || [ ! -f "$jni/Android.mk" ]; then echo "  no jni/Android.mk, skipping"; continue; fi
