@@ -51,10 +51,20 @@ CORES=(
 #                src/config_libspectrum.h -> libspectrum/config.h
 # => 28/32 systems Play-ready total.
 
-# STILL 4 KB — genuinely hard, each a dedicated port:
-#   melonds (DS)    -> cascade: net_compat `bind` macro (fix: -DHAVE_WIFI), then strerror_r, ...
-#   mednafen_saturn -> hangs on one heavy compilation unit with NDK r28
-#   ppsspp (PSP), play (PS2) -> large CMake projects with submodules
+# Built outside this loop (all verified 16 KB-aligned) — see notes:
+#   melonds (DS)  -> ndk-build with APP_SHORT_COMMANDS=true APP_CPPFLAGS=-DHAVE_WIFI APP_CFLAGS=-DHAVE_WIFI,
+#                    plus a 1-line patch to src/dolphin/CommonFuncs.cpp so Android takes the GNU
+#                    strerror_r branch: `#if defined(__ANDROID__) || (defined(__GLIBC__) && ...)`
+#   ppsspp (PSP)  -> CMake: clone --recurse-submodules; configure with
+#                    -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake
+#                    -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DLIBRETRO=ON ; build -> ppsspp_libretro_android.so
+#   play (PS2)    -> same CMake flow with -DBUILD_LIBRETRO_CORE=ON -DBUILD_PLAY=OFF ; the test target
+#                    (CodeGenTestSuite) fails but play_libretro_android.so links fine before it. (PS2 is experimental.)
+#
+# STILL 4 KB — the lone holdout:
+#   mednafen_saturn -> ndk-build hangs on one heavy compilation unit with NDK r28's optimizer;
+#                      retry with APP_CFLAGS=-O1 APP_CPPFLAGS=-O1 to dodge it.
+# => 31/32 systems Play-ready.
 
 for entry in "${CORES[@]}"; do
   IFS='|' read -r name repo sub <<<"$entry"
