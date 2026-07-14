@@ -38,16 +38,21 @@ CORES=(
   "mgba|https://github.com/libretro/mgba|."
   "mupen64plus_next|https://github.com/libretro/mupen64plus-libretro-nx|."
   "picodrive|https://github.com/libretro/picodrive|."
+  "puae|https://github.com/libretro/libretro-uae|."
+  "gearcoleco|https://github.com/drhelius/Gearcoleco|."
 )
-# => 23/32 systems Play-ready (15 rebuilt here + 8 already aligned from the buildbot).
+# => 20/32 build with the plain loop above. Four more need extra flags/prep — run
+# them by hand with APP_SHORT_COMMANDS=true (all verified 16 KB-aligned):
+#   vice_x64  (github.com/libretro/vice-libretro):   APP_CPPFLAGS="-std=gnu++14 -fpermissive"
+#   bluemsx   (github.com/libretro/blueMSX-libretro): APP_CFLAGS="-Wno-implicit-function-declaration \
+#                -Wno-incompatible-function-pointer-types -Wno-int-conversion"
+#   fuse      (github.com/libretro/fuse-libretro):    first copy the config headers the Makefile's
+#                `cp` can't create on Windows: src/config_fuse.h -> fuse/config.h and
+#                src/config_libspectrum.h -> libspectrum/config.h
+# => 28/32 systems Play-ready total.
 
-# STILL 4 KB (need dedicated per-core work — build errors with NDK r28's clang or
-# heavy CMake projects; not in this loop):
-#   fuse            -> needs a generated config.h (autotools)
-#   bluemsx         -> cascade of old-C errors (implicit decls, incompatible fn ptrs)
-#   vice_x64, puae  -> std::auto_ptr removed in C++17 / other C++ errors
-#   melonds (DS)    -> libc++ macro clash in its jni; use its CMake build instead
-#   gearcoleco      -> no jni/Android.mk (make platform=android)
+# STILL 4 KB — genuinely hard, each a dedicated port:
+#   melonds (DS)    -> cascade: net_compat `bind` macro (fix: -DHAVE_WIFI), then strerror_r, ...
 #   mednafen_saturn -> hangs on one heavy compilation unit with NDK r28
 #   ppsspp (PSP), play (PS2) -> large CMake projects with submodules
 
@@ -61,7 +66,10 @@ for entry in "${CORES[@]}"; do
   # Find a jni/Android.mk anywhere in the tree (some cores nest it, e.g. mgba).
   jni="$(dirname "$(find "$dir" -path '*/jni/Android.mk' | head -n1)" 2>/dev/null)"
   if [ -z "$jni" ] || [ ! -f "$jni/Android.mk" ]; then echo "  no jni/Android.mk, skipping"; continue; fi
-  ( cd "$jni" && "$NDK_BUILD" APP_ABI=arm64-v8a APP_PLATFORM=android-26 -j"$(nproc)" )
+  # APP_SHORT_COMMANDS avoids the Windows link command-length limit for big cores
+  # (harmless elsewhere).
+  ( cd "$jni" && "$NDK_BUILD" APP_ABI=arm64-v8a APP_PLATFORM=android-26 \
+      APP_SHORT_COMMANDS=true -j"$(nproc)" )
   so="$(find "$dir" -path '*/libs/arm64-v8a/*.so' | head -n1)"
   cp "$so" "$JNI_OUT/lib$name.so"
   echo "  -> lib$name.so"
