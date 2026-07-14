@@ -48,9 +48,15 @@ ROMs and BIOS files are **not** included — dump them from hardware you own.
 
 ## Licensing & distribution
 
-RetroGlass is **GPL-3.0** (see [`LICENSE`](LICENSE)) because LibretroDroid and the bundled libretro cores are GPL.
+RetroGlass is **GPL-3.0** (see [`LICENSE`](LICENSE)) because LibretroDroid and the bundled libretro cores are GPL. Distribute via **GitHub Releases**, **[F-Droid](https://f-droid.org/)**, or the **Google Play Store** — [Lemuroid](https://play.google.com/store/apps/details?id=com.swordfish.lemuroid) (GPL-3.0, libretro) is on all three, so a GPL libretro emulator on Play is fine as long as the source is public (it is).
 
-**This is why it is not on Google Play:** the GPL is widely held to be incompatible with Google Play's Developer Distribution Agreement (the DDA's redistribution restrictions conflict with the freedoms the GPL guarantees). This is the same reason [RetroArch](https://www.retroarch.com/) is not on Google Play. Distribute via **GitHub Releases** or **[F-Droid](https://f-droid.org/)** instead.
+### Play Store: the 16 KB requirement
+
+The real gate for Play is not licensing but **[16 KB page-size support](https://android-developers.googleblog.com/2025/05/prepare-play-apps-for-devices-with-16kb-page-size.html)** (required for all Play submissions targeting Android 15+ since Nov 2025). Native `.so` files must have 16 KB-aligned LOAD segments.
+
+- Prebuilt cores from the libretro nightly buildbot (via `fetch_cores.sh`) are **mostly 4 KB-aligned** — fine for sideloading/GitHub/F-Droid, but **not** Play-compliant.
+- **`scripts/build_cores_ndk.sh`** rebuilds cores from source with **NDK r28+**, which produces 16 KB-aligned binaries. Verify with `python scripts/check_16k.py`.
+- For a Play build, rebuild all bundled cores 16 KB-aligned (or ship a Play flavor with only the aligned subset). CMake/heavier cores (mgba, ppsspp, melonDS, mupen64plus_next, PCSX2/Play!, VICE, PUAE, Saturn) need their own build invocation.
 
 ## Credits
 
