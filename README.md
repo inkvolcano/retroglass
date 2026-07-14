@@ -1,6 +1,8 @@
 # RetroGlass
 
-A multi-system retro console emulator for Android whose defining feature is an **extended display mode**: plug in USB-C display glasses (XREAL, Rokid, …) or any USB-C/HDMI monitor, and the **game renders on the external display** while your **phone becomes the touch controller** — the same technique VLC uses to put video on a second screen. Unplug the glasses and the game hops back onto the phone automatically.
+A multi-system retro console emulator for Android whose defining feature is an **extended display mode**: connect **any external display** — USB-C/DisplayPort display glasses (XREAL, Rokid, …), a USB-C or HDMI **monitor or TV**, or a wireless/Cast display — and the **game renders on that display** while your **phone becomes the touch controller** — the same technique VLC uses to put video on a second screen. Disconnect it and the game hops back onto the phone automatically.
+
+It uses Android's `DisplayManager` + `Presentation`, which treats every external display the same way, so glasses and monitors are fully interchangeable. The in-game **screen rotation** (0/90/180/270°) is handy for a portrait monitor or vertical "TATE" arcade games, and **screen size/position** let you place the picture wherever it sits best on the external panel.
 
 Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with official [libretro](https://www.libretro.com/) cores.
 

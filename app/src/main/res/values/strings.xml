@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RetroGlass</string>
-    <string name="main_subtitle">32 systems — Arcade/Neo Geo · PSP · PS2* · PS1 · Dreamcast · Saturn · N64 · 3DO · SNES · NES · Mega Drive · 32X · Nintendo DS · GB/GBC · GBA · PC Engine · Neo Geo Pocket · Atari 2600/5200/7800/Lynx · WonderSwan · Virtual Boy · ColecoVision · Intellivision · Vectrex · Pokémon Mini · MSX · C64 · Amiga · ZX Spectrum · Amstrad — game on your USB-C glasses, phone is the controller. (*PS2 experimental)</string>
+    <string name="main_subtitle">32 systems — Arcade/Neo Geo · PSP · PS2* · PS1 · Dreamcast · Saturn · N64 · 3DO · SNES · NES · Mega Drive · 32X · Nintendo DS · GB/GBC · GBA · PC Engine · Neo Geo Pocket · Atari 2600/5200/7800/Lynx · WonderSwan · Virtual Boy · ColecoVision · Intellivision · Vectrex · Pokémon Mini · MSX · C64 · Amiga · ZX Spectrum · Amstrad — game on any external display (USB-C glasses, monitor, TV), phone is the controller. (*PS2 experimental)</string>
     <string name="add_roms">Add ROMs</string>
     <string name="search_games">Search games…</string>
     <string name="import_bios">BIOS</string>
@@ -22,7 +22,7 @@
     <string name="rom_missing">ROM file is missing</string>
     <string name="loading">Loading %1$s…</string>
     <string name="gamepad_connected">Gamepad connected — touch controls hidden. Use the back gesture for the menu.</string>
-    <string name="paused_disconnect">⏸  Paused — glasses disconnected\nTap to resume on the phone, or reconnect the glasses</string>
+    <string name="paused_disconnect">⏸  Paused — external display disconnected\nTap to resume on the phone, or reconnect the display</string>
     <string name="menu_screen_size_local">Screen size (phone)</string>
     <string name="emulator_error_full">%1$s\n%2$s</string>
     <string name="err_load_core">Could not load the emulator core for this system.</string>
