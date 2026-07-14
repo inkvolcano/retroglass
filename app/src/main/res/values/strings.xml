@@ -15,6 +15,10 @@
     <string name="delete_confirm">Remove this game (and its disc files) from the library?</string>
     <string name="delete">Delete</string>
     <string name="change_system">Change system</string>
+    <string name="favorite">★ Add to favorites</string>
+    <string name="unfavorite">★ Remove from favorites</string>
+    <string name="section_favorites">★ Favorites · %1$d</string>
+    <string name="section_recent">Recently played</string>
     <string name="rom_missing">ROM file is missing</string>
     <string name="loading">Loading %1$s…</string>
     <string name="gamepad_connected">Gamepad connected — touch controls hidden. Use the back gesture for the menu.</string>

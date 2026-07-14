@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: RomAdapter
     private lateinit var emptyView: TextView
     private var searchQuery = ""
+    private val history by lazy { com.nvanloo.retroglass.model.GameHistory(this) }
 
     private val pickRoms = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -131,7 +132,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         adapter = RomAdapter(
-            onClick = { entry -> EmulationActivity.launch(this, entry.file.absolutePath, entry.console) },
+            onClick = { entry ->
+                history.recordPlayed(entry.file.absolutePath)
+                EmulationActivity.launch(this, entry.file.absolutePath, entry.console)
+            },
             onLongClick = { entry -> showGameOptions(entry) },
         )
         val recycler = RecyclerView(this).apply {
@@ -164,8 +168,25 @@ class MainActivity : AppCompatActivity() {
         val roms = RomLibrary.scan(this)
         val q = searchQuery.lowercase()
         val filtered = if (q.isEmpty()) roms else roms.filter { it.displayName.lowercase().contains(q) }
-        val byConsole = filtered.groupBy { it.console }
+        val byPath = filtered.associateBy { it.file.absolutePath }
         val rows = mutableListOf<Row>()
+
+        // Favorites (in their console order for stability)
+        val favs = filtered.filter { history.isFavorite(it.file.absolutePath) }
+        if (favs.isNotEmpty()) {
+            rows.add(Row.Header(getString(R.string.section_favorites, favs.size)))
+            favs.sortedBy { it.displayName.lowercase() }.forEach { rows.add(Row.Game(it)) }
+        }
+
+        // Recently played (most recent first)
+        val recents = history.recents().mapNotNull { byPath[it] }.take(8)
+        if (recents.isNotEmpty()) {
+            rows.add(Row.Header(getString(R.string.section_recent)))
+            recents.forEach { rows.add(Row.Game(it)) }
+        }
+
+        // Everything, grouped by system
+        val byConsole = filtered.groupBy { it.console }
         for (console in com.nvanloo.retroglass.model.Console.entries) {
             val games = byConsole[console] ?: continue
             rows.add(Row.Header("${console.displayName}  ·  ${games.size}"))
@@ -176,7 +197,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showGameOptions(entry: RomEntry) {
+        val path = entry.file.absolutePath
+        val favLabel = getString(
+            if (history.isFavorite(path)) R.string.unfavorite else R.string.favorite,
+        )
         val options = arrayOf(
+            favLabel,
             getString(R.string.change_system),
             getString(R.string.delete),
         )
@@ -184,8 +210,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle(entry.displayName)
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> chooseSystem(entry)
-                    1 -> confirmDelete(entry)
+                    0 -> { history.toggleFavorite(path); refresh() }
+                    1 -> chooseSystem(entry)
+                    2 -> confirmDelete(entry)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
