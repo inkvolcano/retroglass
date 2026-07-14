@@ -35,24 +35,28 @@ CORES=(
   "opera|https://github.com/libretro/opera-libretro|."
   "pokemini|https://github.com/libretro/PokeMini|."
   "stella2023|https://github.com/libretro/stella|."
+  "mgba|https://github.com/libretro/mgba|."
+  "mupen64plus_next|https://github.com/libretro/mupen64plus-libretro-nx|."
 )
+# => 22/32 systems Play-ready (14 rebuilt here + 8 already aligned from the buildbot).
 
-# STILL 4 KB (need dedicated work — not in the simple loop):
-#   fuse, bluemsx, picodrive  -> ndk-build compile errors, need patching
-#   gearcoleco                -> no jni/Android.mk (different build layout)
-#   mednafen_saturn           -> builds but extremely slow
-#   mgba, melonds             -> CMake (use android.toolchain.cmake)
-#   mupen64plus_next, vice_x64, puae -> make-based, per-core flags
-#   ppsspp, play              -> large CMake projects with submodules
+# STILL 4 KB (need dedicated per-core work — build errors with NDK r28's clang or
+# heavy CMake projects; not in this loop):
+#   fuse         -> needs a generated config.h (autotools)
+#   bluemsx, picodrive, vice_x64, puae -> ndk-build compile errors, need patches
+#   melonds      -> libc++ macro clash in its jni; use its CMake build instead
+#   gearcoleco   -> no jni/Android.mk (make platform=android)
+#   mednafen_saturn -> builds but extremely slow
+#   ppsspp, play -> large CMake projects with submodules
 
 for entry in "${CORES[@]}"; do
   IFS='|' read -r name repo sub <<<"$entry"
   echo "=== $name ==="
   dir="$WORK/$name"
   [ -d "$dir" ] || git clone --depth 1 "$repo" "$dir"
-  jni="$dir/$sub/jni"
-  if [ ! -f "$jni/Android.mk" ]; then jni="$dir/jni"; fi
-  if [ ! -f "$jni/Android.mk" ]; then echo "  no jni/Android.mk, skipping"; continue; fi
+  # Find a jni/Android.mk anywhere in the tree (some cores nest it, e.g. mgba).
+  jni="$(dirname "$(find "$dir" -path '*/jni/Android.mk' | head -n1)" 2>/dev/null)"
+  if [ -z "$jni" ] || [ ! -f "$jni/Android.mk" ]; then echo "  no jni/Android.mk, skipping"; continue; fi
   ( cd "$jni" && "$NDK_BUILD" APP_ABI=arm64-v8a APP_PLATFORM=android-26 -j"$(nproc)" )
   so="$(find "$dir" -path '*/libs/arm64-v8a/*.so' | head -n1)"
   cp "$so" "$JNI_OUT/lib$name.so"
