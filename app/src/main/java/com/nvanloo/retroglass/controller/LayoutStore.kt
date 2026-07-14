@@ -109,4 +109,8 @@ class LayoutStore(context: Context) {
     /** Video filter: 0=Off/Default, 1=CRT, 2=LCD, 3=Sharp. */
     fun shaderIndex(): Int = prefs.getInt("shader", 0)
     fun setShaderIndex(v: Int) { prefs.edit().putInt("shader", v).apply() }
+
+    /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
+    fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)
+    fun setLocalMultiplayer(v: Boolean) { prefs.edit().putBoolean("local_mp", v).apply() }
 }

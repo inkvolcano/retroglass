@@ -132,13 +132,19 @@ class EmulationActivity : AppCompatActivity() {
             sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
     }
 
-    /** Hides the touch controller while a physical gamepad is connected. */
+    /**
+     * In single-player, hides the touch controller while a gamepad is connected (the
+     * gamepad becomes P1; two gamepads auto-route to P1/P2). In local-multiplayer, the
+     * touch pad stays as P1 and gamepads are routed to P2+.
+     */
     private fun updateForGamepad(announce: Boolean) {
         val pad = hasGamepad()
-        controllerView.visibility = if (pad) View.GONE else View.VISIBLE
+        val coop = layoutStore.localMultiplayer()
+        controllerView.visibility = if (pad && !coop) View.GONE else View.VISIBLE
         if (pad && announce && !gamepadHintShown) {
             gamepadHintShown = true
-            Toast.makeText(this, R.string.gamepad_connected, Toast.LENGTH_LONG).show()
+            val msg = if (coop) R.string.gamepad_coop else R.string.gamepad_connected
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
         if (!pad) gamepadHintShown = false
     }
@@ -147,24 +153,66 @@ class EmulationActivity : AppCompatActivity() {
         source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
             source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
 
+    /** Player port for a gamepad. In co-op the phone is P1 (port 0), so gamepads start at 1. */
+    private fun gamepadPort(device: InputDevice?): Int {
+        val n = device?.controllerNumber ?: 0
+        return if (n >= 1) n else 1
+    }
+
+    /** Android face buttons sit opposite RetroPad's; swap A/B and X/Y (as LibretroDroid does). */
+    private fun androidToRetroKey(keyCode: Int): Int? = when (keyCode) {
+        KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_BUTTON_B
+        KeyEvent.KEYCODE_BUTTON_B -> KeyEvent.KEYCODE_BUTTON_A
+        KeyEvent.KEYCODE_BUTTON_X -> KeyEvent.KEYCODE_BUTTON_Y
+        KeyEvent.KEYCODE_BUTTON_Y -> KeyEvent.KEYCODE_BUTTON_X
+        KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1,
+        KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2,
+        KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR,
+        KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_SELECT,
+        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> keyCode
+        else -> null
+    }
+
     // Forward physical gamepad input to the emulator, which may live in a Presentation
     // on the external display and so never receives these events on its own.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val v = retroView
         if (v != null && isGamepadEvent(event.source) && event.keyCode != KeyEvent.KEYCODE_BACK) {
-            val handled = when (event.action) {
-                KeyEvent.ACTION_DOWN -> v.onKeyDown(event.keyCode, event)
-                KeyEvent.ACTION_UP -> v.onKeyUp(event.keyCode, event)
-                else -> false
+            if (layoutStore.localMultiplayer()) {
+                // Route to P2+ so the phone can stay as P1.
+                val retroKey = androidToRetroKey(event.keyCode)
+                if (retroKey != null && event.action != KeyEvent.ACTION_MULTIPLE) {
+                    v.sendKeyEvent(event.action, retroKey, gamepadPort(event.device))
+                    return true
+                }
+            } else {
+                val handled = when (event.action) {
+                    KeyEvent.ACTION_DOWN -> v.onKeyDown(event.keyCode, event)
+                    KeyEvent.ACTION_UP -> v.onKeyUp(event.keyCode, event)
+                    else -> false
+                }
+                if (handled) return true
             }
-            if (handled) return true
         }
         return super.dispatchKeyEvent(event)
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val v = retroView
-        if (v != null && isGamepadEvent(event.source) && v.onGenericMotionEvent(event)) return true
+        if (v != null && isGamepadEvent(event.source)) {
+            if (layoutStore.localMultiplayer()) {
+                val port = gamepadPort(event.device)
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD,
+                    event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_HAT_Y), port)
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT,
+                    event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y), port)
+                v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
+                    event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), port)
+                return true
+            }
+            if (v.onGenericMotionEvent(event)) return true
+        }
         return super.onGenericMotionEvent(event)
     }
 
@@ -653,6 +701,12 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(
             if (layoutStore.rumbleEnabled()) R.string.menu_rumble_on else R.string.menu_rumble_off,
         ) to { layoutStore.setRumbleEnabled(!layoutStore.rumbleEnabled()) }
+        actions += getString(
+            if (layoutStore.localMultiplayer()) R.string.menu_coop_on else R.string.menu_coop_off,
+        ) to {
+            layoutStore.setLocalMultiplayer(!layoutStore.localMultiplayer())
+            updateForGamepad(true)
+        }
         actions += getString(R.string.menu_reset) to { retroView?.reset(); Unit }
         actions += getString(R.string.menu_exit) to { exitGame() }
 

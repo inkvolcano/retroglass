@@ -16,6 +16,7 @@ Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with offi
 - **Portrait & landscape** — in portrait the game sits across the top with the controller below; rotate freely.
 - **Screen size, rotation (0/90/180/270°) and position** controls.
 - **Physical gamepad support** — auto-hides the touch pad; input forwarded even when the game is on the glasses.
+- **Local multiplayer** — two Bluetooth controllers act as P1/P2 automatically; or enable *Local co-op* to keep the phone as Player 1 with gamepads as P2–P4 on the external screen. (Network netplay across phones is **not** supported — that's a RetroArch-frontend feature LibretroDroid doesn't implement.)
 - **Video filters** (CRT/LCD/Sharp), **fast-forward**, **rumble → vibration**, **save-state slots** + auto-save/resume, **multi-disc** swapping, **BIOS status** screen, **library grouping + search**.
 
 ## Build

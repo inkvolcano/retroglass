@@ -22,6 +22,9 @@
     <string name="rom_missing">ROM file is missing</string>
     <string name="loading">Loading %1$s…</string>
     <string name="gamepad_connected">Gamepad connected — touch controls hidden. Use the back gesture for the menu.</string>
+    <string name="gamepad_coop">Local co-op: phone is Player 1, gamepads are Player 2+.</string>
+    <string name="menu_coop_on">Local co-op (phone = P1): On</string>
+    <string name="menu_coop_off">Local co-op (phone = P1): Off</string>
     <string name="paused_disconnect">⏸  Paused — external display disconnected\nTap to resume on the phone, or reconnect the display</string>
     <string name="menu_screen_size_local">Screen size (phone)</string>
     <string name="emulator_error_full">%1$s\n%2$s</string>
