@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RetroGlass — retro emulator for USB-C display glasses</title>
+<style>
+  :root {
+    --bg: #14141a; --panel: #1c1c25; --panel2: #232330;
+    --text: #e9e9f2; --muted: #a0a0b4; --accent: #7c6cf2; --accent2: #2d8cff;
+    --green: #26b57a; --red: #e4574c; --line: #2c2c3a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 22px 80px; }
+  header { text-align: center; padding: 30px 0 10px; }
+  h1 { font-size: 2.4rem; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h1 .g { background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { color: var(--muted); font-size: 1.05rem; }
+  h2 { font-size: 1.35rem; margin: 42px 0 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 22px 0 6px; color: var(--accent2); }
+  p, li { color: #d7d7e4; }
+  a { color: var(--accent2); }
+  code { background: var(--panel2); padding: 2px 7px; border-radius: 5px;
+    font: 0.86em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #d6d3ff; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 22px; margin: 14px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .chip { display: inline-block; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; margin: 3px 4px 3px 0; font-size: 0.85rem; }
+  .sys { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .sys b { display: block; font-size: 1.05rem; }
+  .sys span { color: var(--muted); font-size: 0.85rem; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; overflow-x: auto; display: block; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 0.94rem; }
+  th { color: var(--muted); font-weight: 600; }
+  .ok { color: var(--green); } .warn { color: #f0b429; }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding: 10px 0 10px 44px; border-bottom: 1px solid var(--line); }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 8px;
+    width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: grid; place-items: center; font-weight: 700; font-size: 0.9rem; }
+  .note { border-left: 3px solid var(--accent2); background: rgba(45,140,255,0.08);
+    padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 14px 0; }
+  .warnbox { border-left: 3px solid #f0b429; background: rgba(240,180,41,0.08);
+    padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 14px 0; }
+  footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 50px; }
+  .kbd { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1><span class="g">RetroGlass</span></h1>
+  <div class="tag">A retro console emulator for Android whose game plays on your USB-C display glasses<br>while your phone becomes the controller.</div>
+</header>
+
+<div class="card">
+  <b>What it is, in one line:</b> plug XREAL (or any USB-C / HDMI) display glasses into your phone,
+  and the game renders on the glasses in a big virtual screen while the phone shows a touch gamepad —
+  the same trick VLC uses to put video on an external display. Unplug the glasses and the game hops
+  back onto the phone automatically.
+</div>
+
+<h2>Supported systems</h2>
+<p>Emulation runs on <a href="https://github.com/Swordfish90/LibretroDroid">LibretroDroid</a> with official
+<a href="https://buildbot.libretro.com/">libretro</a> cores bundled inside the APK (arm64):</p>
+<div class="grid">
+  <div class="sys"><b>PlayStation 2 <span style="color:#f0b429">(experimental)</span></b><span>Play! · .iso .chd .cso — low compatibility on phones</span></div>
+  <div class="sys"><b>PlayStation</b><span>PCSX-ReARMed · .chd .pbp .cue+.bin .iso .m3u</span></div>
+  <div class="sys"><b>Dreamcast</b><span>Flycast · .gdi .cdi .chd</span></div>
+  <div class="sys"><b>Nintendo 64</b><span>Mupen64Plus-Next · .n64 .z64 .v64</span></div>
+  <div class="sys"><b>SNES</b><span>Snes9x · .sfc .smc</span></div>
+  <div class="sys"><b>NES</b><span>FCEUmm · .nes .fds</span></div>
+  <div class="sys"><b>Mega Drive / Genesis</b><span>Genesis Plus GX · .md .gen .bin (+ SMS/GG)</span></div>
+  <div class="sys"><b>Game Boy / Color</b><span>Gambatte · .gb .gbc</span></div>
+  <div class="sys"><b>Game Boy Advance</b><span>mGBA · .gba</span></div>
+  <div class="sys"><b>PC Engine / TurboGrafx</b><span>Mednafen PCE · .pce .sgx</span></div>
+  <div class="sys"><b>Neo Geo Pocket / Color</b><span>Mednafen NGP · .ngp .ngc</span></div>
+  <div class="sys"><b>Atari Lynx</b><span>Handy · .lnx</span></div>
+  <div class="sys"><b>Atari 2600</b><span>Stella · .a26</span></div>
+  <div class="sys"><b>Atari 7800</b><span>ProSystem · .a78</span></div>
+  <div class="sys"><b>WonderSwan / Color</b><span>Mednafen WSwan · .ws .wsc</span></div>
+  <div class="sys"><b>Virtual Boy</b><span>Mednafen VB · .vb</span></div>
+  <div class="sys"><b>PSP</b><span>PPSSPP · .iso .cso .pbp</span></div>
+  <div class="sys"><b>Nintendo DS</b><span>melonDS · .nds</span></div>
+  <div class="sys"><b>Sega Saturn</b><span>Beetle Saturn · .chd .cue (BIOS)</span></div>
+  <div class="sys"><b>Sega 32X</b><span>PicoDrive · .32x</span></div>
+  <div class="sys"><b>3DO</b><span>Opera · .iso .chd (BIOS)</span></div>
+  <div class="sys"><b>ColecoVision</b><span>Gearcoleco · .col (BIOS)</span></div>
+  <div class="sys"><b>Intellivision</b><span>FreeIntv · .int (BIOS)</span></div>
+  <div class="sys"><b>Vectrex</b><span>vecx · .vec</span></div>
+  <div class="sys"><b>Pokémon Mini</b><span>PokeMini · .min</span></div>
+  <div class="sys"><b>Atari 5200</b><span>Atari800 · .a52</span></div>
+  <div class="sys"><b>MSX</b><span>blueMSX · .mx1 .mx2 .dsk</span></div>
+  <div class="sys"><b>Commodore 64</b><span>VICE · .d64 .t64 .prg</span></div>
+  <div class="sys"><b>Amiga</b><span>PUAE · .adf .hdf (Kickstart)</span></div>
+  <div class="sys"><b>ZX Spectrum</b><span>Fuse · .tzx .tap .z80</span></div>
+  <div class="sys"><b>Amstrad CPC</b><span>Caprice32 · .dsk .cdt</span></div>
+</div>
+  <div class="sys"><b>Arcade / Neo Geo</b><span>FBNeo · .zip romsets (BIOS: neogeo.zip)</span></div>
+</div>
+<div class="warnbox"><strong>Home computers</strong> (MSX, C64, Amiga, ZX Spectrum, Amstrad) have a
+<strong>joystick + fire</strong> layout. Full typing isn't possible through the emulation layer (LibretroDroid has no
+keyboard-device path), but VICE/PUAE/fuse each include their <strong>own on-screen keyboard</strong> you navigate
+with the gamepad. <strong>Arcade</strong> romsets are imported as <code>.zip</code> intact and must match FBNeo's
+romset version; Neo Geo needs <code>neogeo.zip</code> as BIOS. Several systems need a <strong>BIOS</strong> (Saturn,
+3DO, ColecoVision, Intellivision, Amiga Kickstart, Neo Geo) — the <em>BIOS</em> button shows what's present/missing.</div>
+
+<h2>How the extended-display mode works</h2>
+<p>The defining feature. When the app detects an external display it moves the game there and turns the
+phone into a full-screen controller.</p>
+<div class="card">
+<h3>The mechanism</h3>
+<ul>
+  <li>An <code>android.app.Presentation</code> window is shown on the external display. On a phone that mirrors
+  its screen by default (all of them, over USB-C DisplayPort), a Presentation automatically <em>replaces</em>
+  the mirrored image — so the glasses show only the game, and the phone stays fully touchable as the pad.</li>
+  <li>External displays are detected via <code>MediaRouter</code>'s live-video route and <code>DisplayManager</code>,
+  filtering out internal panels — important on foldables like the Galaxy Z Flip, whose <em>cover screen</em>
+  otherwise looks like an external "presentation" display.</li>
+  <li>There is exactly <strong>one</strong> emulator instance (the native core is a process-wide singleton). On
+  plug/unplug the single game view is <em>reparented</em> between the phone and the glasses — the emulator is
+  never torn down, so gameplay continues seamlessly. This also survives Android handing out a fresh display
+  id on every reconnect.</li>
+</ul>
+</div>
+<div class="note">No XREAL SDK is needed — the glasses appear as a standard 1920×1080 external monitor. Audio auto-routes
+to the glasses as a USB audio device. The only real-world catch: while the glasses occupy the USB-C port the
+phone can't charge, so a <strong>USB-C hub with power passthrough</strong> is recommended for long sessions.</div>
+
+<h2>Controller</h2>
+<p>Each system gets a controller styled to match its real pad, drawn natively (no images) so it scales cleanly.</p>
+<h3>Multiple layouts to choose from</h3>
+<p>From the in-game menu → <em>Choose controller layout</em>, per system, remembered per system:</p>
+<div>
+  <span class="chip">Default</span>
+  <span class="chip">Large buttons</span>
+  <span class="chip">Compact</span>
+  <span class="chip">Bottom-heavy</span>
+  <span class="chip">Left-handed</span>
+  <span class="chip">Full-screen</span>
+</div>
+<h3>Customise any layout</h3>
+<p>Menu → <em>Edit layout</em>: drag any control to move it, pinch to resize it. Changes are saved per layout,
+per system. <em>Reset</em> restores the layout's defaults.</p>
+<h3>Screen size</h3>
+<p>Menu → <em>Screen size</em>: a slider that scales the game image on the glasses (and a separate, smaller
+default when playing on the phone with no glasses, so the picture sits as a comfortable centered window).</p>
+
+<h2>Portrait &amp; landscape</h2>
+<p>Rotate the phone freely. In <strong>portrait with no glasses</strong>, the game shows as a screen across the top
+and the controller sits below it (classic handheld layout); the size slider sets how tall the screen is. In
+<strong>landscape</strong>, the game is centered with the controller as an overlay. With glasses connected, either
+orientation works and the phone is a full controller.</p>
+
+<h2>Screen size, rotation &amp; position</h2>
+<p>Menu → <em>Screen size</em> gives size, a <strong>Rotate</strong> button (0/90/180/270° — for vertical “TATE”
+shmups, or comfort on the glasses) and <strong>horizontal/vertical position</strong> sliders to nudge the picture
+when it isn’t filling the whole display. <em>Reset</em> restores straight and centered.</p>
+
+<h2>Quality-of-life</h2>
+<ul>
+  <li><strong>Physical gamepad support</strong> — connect a Bluetooth controller and the touch pad auto-hides; input works even with the game on the glasses.</li>
+  <li><strong>Video filters</strong> — Off / CRT scanlines / LCD grid / Sharp, from the menu.</li>
+  <li><strong>Save-state slots</strong> (4 manual) plus <strong>auto-save on exit &amp; auto-resume on launch</strong>.</li>
+  <li><strong>BIOS status</strong> — the BIOS button shows which systems have their BIOS and which are missing (with expected filenames).</li>
+  <li><strong>Library</strong> grouped by system with a search box.</li>
+  <li><strong>Fast-forward</strong> (2×) and <strong>rumble → phone vibration</strong> toggles.</li>
+  <li><strong>Auto-pause on glasses disconnect</strong> — the game freezes as a small screen with tap-to-resume.</li>
+  <li><strong>Loading indicator</strong> while disc-based games spin up; per-system layouts &amp; drag/resize editor.</li>
+</ul>
+
+<h2>Getting started</h2>
+<ol class="steps">
+  <li><b>Install</b> — sideload <code>RetroGlass.apk</code> (allow "install unknown apps"). arm64 phones only.</li>
+  <li><b>Add ROMs</b> — tap <em>Add ROMs</em> and pick your game files (multi-select and .zip supported). Games
+  are auto-sorted to the right system.</li>
+  <li><b>PlayStation BIOS</b> — tap <em>Import BIOS</em> and add a PS1 BIOS (<code>scph1001.bin</code> etc.) for
+  best compatibility. Without it PS1 games run on an HLE BIOS that works for many but not all titles.</li>
+  <li><b>Play</b> — tap a game. Plug the glasses in any time — before or during play — and the game moves to them.</li>
+</ol>
+
+<h2>Disc systems share file types</h2>
+<div class="note">PlayStation, PlayStation 2 and Dreamcast all use <code>.chd</code>/<code>.cue</code>/<code>.iso</code>, which
+can't be told apart by filename — so shared disc images import as PlayStation by default. <strong>Long-press a
+game → Change system</strong> to move it to PS2 or Dreamcast. Dreamcast <code>.gdi</code>/<code>.cdi</code> files
+are recognised automatically.</div>
+
+<h2>PAL PlayStation games &amp; LibCrypt</h2>
+<div class="warnbox">
+Many <strong>PAL</strong> PlayStation games (e.g. Final Fantasy VIII PAL, <code>SLES-02080</code>) use
+<strong>LibCrypt</strong> copy protection, which hides data in the disc's subchannel. A plain <code>.chd</code>
+doesn't contain it, so the game boots to a black screen. Two fixes:
+<ul style="margin:10px 0 0">
+  <li>Use an <strong>NTSC-U (US)</strong> release — those have no LibCrypt and just work.</li>
+  <li>Import the matching <strong><code>.sbi</code></strong> subchannel file next to the disc (RetroGlass now
+  accepts <code>.sbi</code> via <em>Add ROMs</em> and stores it alongside the game so PCSX-ReARMed picks it up),
+  or use a <code>.chd</code> rebuilt from a Redump dump that includes subchannel data.</li>
+</ul>
+</div>
+
+<h2>Error reporting</h2>
+<p>If a game fails to load (bad dump, missing BIOS, LibCrypt without .sbi, unsupported core), the error is shown
+<strong>on the glasses</strong> as well as on the phone — so you're not left staring at a black external screen
+wondering what happened.</p>
+
+<h2>What was built (development log)</h2>
+<table>
+<tr><th>Area</th><th>Status</th></tr>
+<tr><td>8 emulator cores bundled &amp; running</td><td class="ok">verified NES + PS1 on device</td></tr>
+<tr><td>Extended display on real XREAL Air 2 Pro</td><td class="ok">verified (game on glasses, pad on phone)</td></tr>
+<tr><td>Seamless plug/unplug (reparent, not restart)</td><td class="ok">verified</td></tr>
+<tr><td>Foldable cover-screen exclusion</td><td class="ok">verified on Galaxy Z Flip6</td></tr>
+<tr><td>6 controller layouts + drag/resize editor</td><td class="ok">verified</td></tr>
+<tr><td>Video-size slider (glasses + phone)</td><td class="warn">implemented, pending on-device confirm</td></tr>
+<tr><td>Small centered layout when no glasses</td><td class="warn">implemented</td></tr>
+<tr><td>.sbi / PAL LibCrypt support</td><td class="warn">implemented</td></tr>
+<tr><td>Errors shown on glasses view</td><td class="warn">implemented</td></tr>
+</table>
+
+<h2>Technical notes</h2>
+<div class="card">
+<ul>
+  <li><b>Package:</b> <code>com.nvanloo.retroglass</code> · minSdk 26 · target 35 · arm64-v8a</li>
+  <li><b>Emulation:</b> LibretroDroid 0.14.0 (GLSurfaceView + Oboe audio + save states) from JitPack.</li>
+  <li><b>Cores:</b> nightly libretro builds in <code>jniLibs/arm64-v8a</code>, dlopened by path at runtime.</li>
+  <li><b>Licensing:</b> LibretroDroid and the cores are GPL, so this build is GPL and for personal sideloading
+  (not a Play Store app). ROMs/BIOS must be dumped from hardware you own.</li>
+</ul>
+</div>
+
+<footer>
+RetroGlass · built with Claude Code · this file is a plain static HTML summary, safe to open in any browser.
+</footer>
+</div>
+</body>
+</html>

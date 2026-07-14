@@ -1,0 +1,45 @@
+# Android / Gradle build
+*.iml
+.gradle/
+/build/
+/app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+build/
+local.properties
+
+# IDE / tooling
+.idea/
+*.hprof
+.claude/
+
+# Bundled libretro cores are GPL binaries fetched from the buildbot, not committed.
+# Run scripts/fetch_cores.sh (or .ps1) to populate these.
+/app/src/main/jniLibs/**/*.so
+
+# Signing
+*.keystore
+*.jks
+
+# Built artifacts
+*.apk
+*.aab
+
+# BIOS / ROM files must never be committed (copyright)
+*.bin
+*.bios
+*.rom
+*.chd
+*.cue
+*.iso
+*.pbp
+*.sbi
+*.nds
+*.gba
+*.zip
+!gradle/wrapper/gradle-wrapper.jar
+
+# OS
+.DS_Store
+Thumbs.db
