@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#0b0b0e;font-family:system-ui,'Helvetica Neue',sans-serif}a{color:#8B7FD4}a:hover{color:#B9B4E0}</style></helmet>
+<div style="display:flex;gap:56px;justify-content:center;align-items:flex-start;padding:40px;flex-wrap:wrap">
+  <div style="display:flex;flex-direction:column;gap:14px;align-items:center">
+    <div style="font-size:13px;letter-spacing:2px;color:rgba(255,255,255,.5);text-transform:uppercase">Splash screen</div>
+    <dc-import name="RetroGlass Menu" screen="splash" hint-size="412px,990px"></dc-import>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px;align-items:center">
+    <div style="font-size:13px;letter-spacing:2px;color:rgba(255,255,255,.5);text-transform:uppercase">Library</div>
+    <dc-import name="RetroGlass Menu" screen="library" hint-size="412px,990px"></dc-import>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

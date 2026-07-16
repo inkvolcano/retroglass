@@ -27,7 +27,20 @@ object BiosCatalog {
         BiosReq("Intellivision", listOf("exec.bin", "grom.bin"), "Required (needs both)"),
         BiosReq("Amiga (Kickstart)", listOf("kick34005.a500", "kick40068.a1200", "kick.rom"), "Required"),
         BiosReq("Famicom Disk System", listOf("disksys.rom"), "Only for .fds games"),
+        BiosReq("Sega CD / Mega-CD", listOf("bios_CD_U.bin", "bios_CD_E.bin", "bios_CD_J.bin"),
+            "Required — region BIOS (US / EU / JP)"),
+        BiosReq("PC Engine CD", listOf("syscard3.pce"), "Required — Super System Card 3"),
+        BiosReq("Neo Geo CD", listOf("neocd.bin", "neocd_z.bin", "neocd_sz.bin", "neocd_f.bin"),
+            "Required — CD BIOS (front / top / CDZ)"),
+        BiosReq("Sega NAOMI", listOf("naomi.zip"), "Required — NAOMI BIOS zip"),
+        BiosReq("Atomiswave", listOf("awbios.zip"), "Required — Atomiswave BIOS zip"),
     )
+
+    /** Every accepted BIOS filename across all systems, lowercased — for auto-routing on import. */
+    val knownBiosNames: Set<String> = requirements.flatMap { it.files }.map { it.lowercase() }.toSet()
+
+    /** True if a picked file is a recognised BIOS that belongs in the system directory. */
+    fun isBios(fileName: String): Boolean = fileName.lowercase() in knownBiosNames
 
     data class Status(val system: String, val present: Boolean, val note: String, val filenames: String)
 

@@ -61,10 +61,11 @@ CORES=(
 #   play (PS2)    -> same CMake flow with -DBUILD_LIBRETRO_CORE=ON -DBUILD_PLAY=OFF ; the test target
 #                    (CodeGenTestSuite) fails but play_libretro_android.so links fine before it. (PS2 is experimental.)
 #
-# STILL 4 KB — the lone holdout:
-#   mednafen_saturn -> ndk-build hangs on one heavy compilation unit with NDK r28's optimizer;
-#                      retry with APP_CFLAGS=-O1 APP_CPPFLAGS=-O1 to dodge it.
-# => 31/32 systems Play-ready.
+# Saturn — the former holdout, now DONE:
+#   mednafen_saturn -> ndk-build hung on one heavy compilation unit with NDK r28's default
+#                      optimizer; building with APP_CFLAGS=-O1 APP_CPPFLAGS=-O1 dodges the
+#                      hang and still comes out 16 KB-aligned (0x4000). ~10 MB .so.
+# => 32/32 systems Play-ready. 🎉
 
 for entry in "${CORES[@]}"; do
   IFS='|' read -r name repo sub <<<"$entry"

@@ -35,6 +35,12 @@ class ControllerView @JvmOverloads constructor(
     attrs: android.util.AttributeSet? = null,
 ) : View(context, attrs) {
 
+    companion object {
+        const val LAYOUT_PORTRAIT = 0   // as authored (game above, pad below / handheld)
+        const val LAYOUT_FRAME = 1      // landscape, game on the phone: pad frames a centred screen
+        const val LAYOUT_FULLPAD = 2    // landscape, external display: full-screen pad
+    }
+
     interface Listener {
         fun onButton(keyCode: Int, pressed: Boolean)
         fun onDpad(x: Float, y: Float)
@@ -52,6 +58,8 @@ class ControllerView @JvmOverloads constructor(
         // D-pad current direction / stick current deflection
         var valueX = 0f
         var valueY = 0f
+        // Turbo/autofire: current toggled output state while held.
+        var turboState = false
     }
 
     private var console: Console = Console.NES
@@ -65,6 +73,15 @@ class ControllerView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** How the layout is arranged: portrait (as authored) or a landscape rearrangement
+     *  ([LayoutPreview]/gen_landscape_frame). Frame = game on the phone; full pad = external display. */
+    var layoutMode: Int = LAYOUT_PORTRAIT
+        set(value) {
+            if (field == value) return
+            field = value
+            reloadControls()
+        }
+
     var editMode: Boolean = false
         set(value) {
             field = value
@@ -75,8 +92,43 @@ class ControllerView @JvmOverloads constructor(
 
     private var selected: ControlState? = null
 
+    /** Control ids set to autofire (turbo) while held. Set by EmulationActivity. */
+    var turboIds: Set<String> = emptySet()
+    private val turboHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var turboRunning = false
+    private val turboTick = object : Runnable {
+        override fun run() {
+            var any = false
+            for (c in controls) {
+                if (c.pressed && c.def.type == ControlType.BUTTON &&
+                    c.def.id in turboIds && c.def.id != "_menu" && !isCButton(c.def.id) && !isKeypad(c.def.id)
+                ) {
+                    any = true
+                    c.turboState = !c.turboState
+                    listener?.onButton(c.def.keyCode, c.turboState)
+                }
+            }
+            if (any) turboHandler.postDelayed(this, 50) else turboRunning = false
+        }
+    }
+
+    private fun startTurbo() {
+        if (!turboRunning) {
+            turboRunning = true
+            turboHandler.postDelayed(turboTick, 50)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        turboHandler.removeCallbacks(turboTick)
+        turboRunning = false
+    }
+
     // pointerId -> control being driven (play mode)
-    private val pointerTargets = mutableMapOf<Int, ControlState>()
+    // A pointer usually drives one control, but a co-centred D-pad + button (the N64
+    // "Z in the D-pad" combo) lets a single finger hold a direction and the centre together.
+    private val pointerTargets = mutableMapOf<Int, List<ControlState>>()
     // pointerId used for dragging in edit mode
     private var dragPointer = -1
     private var dragOffsetX = 0f
@@ -132,13 +184,28 @@ class ControllerView @JvmOverloads constructor(
 
     private fun reloadControls() {
         val overrides = layoutStore.load(console, presetId)
-        val defs = ControllerDefs.presetOrDefault(console, presetId).controls + menuControl()
+        var base = ControllerDefs.presetOrDefault(console, presetId).controls
+        val landscape = layoutMode != LAYOUT_PORTRAIT
+        if (landscape && width > 0 && height > 0) {
+            base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
+                w = width.toFloat(), h = height.toFloat())
+        }
+        val defs = base + menuControl()
         controls = defs.map { def ->
-            val p = overrides[def.id] ?: ControlPlacement(def.x, def.y, 1f)
+            // Landscape layouts are computed, not user-tweaked, so ignore the per-preset portrait overrides.
+            val p = if (landscape) ControlPlacement(def.x, def.y, 1f)
+            else overrides[def.id] ?: ControlPlacement(def.x, def.y, 1f)
             ControlState(def, p)
         }.toMutableList()
         pointerTargets.clear()
         invalidate()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // The landscape transform depends on the view's real width/height (aspect-correction and the
+        // size cap), so recompute it once the view is measured or resized.
+        if (layoutMode != LAYOUT_PORTRAIT && (w != oldw || h != oldh)) reloadControls()
     }
 
     private fun menuControl() = ControlDef(
@@ -164,16 +231,44 @@ class ControllerView @JvmOverloads constructor(
 
     private fun minDim() = min(width, height).toFloat()
 
-    private fun controlRadius(c: ControlState): Float =
-        c.def.size * c.placement.scale * minDim() / 2f
+    /** Button-sizing reference: the shorter edge in portrait, but capped in landscape so buttons
+     *  don't balloon on a tall/near-square screen (foldable, tablet). Matches LandscapeLayout. */
+    private fun sizeBase(): Float =
+        if (layoutMode != LAYOUT_PORTRAIT) min(minDim(), width * 0.46f) else minDim()
 
-    private fun centerX(c: ControlState) = c.placement.cx * width
-    private fun centerY(c: ControlState) = c.placement.cy * height
+    private fun controlRadius(c: ControlState): Float =
+        c.def.size * c.placement.scale * sizeBase() / 2f
+
+    /** Half-width of a control's visible box, matching how [drawControl] draws each shape. */
+    private fun halfExtentX(c: ControlState): Float = when (c.def.shape) {
+        ControlShape.BAR -> barHalfLen(c)
+        ControlShape.PILL -> controlRadius(c) * 1.85f
+        ControlShape.CIRCLE -> controlRadius(c) * if (c.def.plateColor != Color.TRANSPARENT) 1.28f else 1f
+        else -> controlRadius(c)
+    }
+
+    private fun halfExtentY(c: ControlState): Float = when (c.def.shape) {
+        ControlShape.BAR -> barHalfThick(c)
+        ControlShape.PILL -> controlRadius(c) * 0.8f
+        ControlShape.CIRCLE -> controlRadius(c) * if (c.def.plateColor != Color.TRANSPARENT) 1.28f else 1f
+        else -> controlRadius(c)
+    }
+
+    /** Keeps a control's whole box on-screen: centres it if it's wider than the view,
+     *  otherwise pins it so neither edge is clipped. A safety net over the authored
+     *  layouts (also guards the scaled presets and user edits). */
+    private fun clampCenter(raw: Float, half: Float, extent: Int): Float {
+        if (extent <= 0) return raw
+        return if (half * 2f >= extent) extent / 2f else raw.coerceIn(half, extent - half)
+    }
+
+    private fun centerX(c: ControlState) = clampCenter(c.placement.cx * width, halfExtentX(c), width)
+    private fun centerY(c: ControlState) = clampCenter(c.placement.cy * height, halfExtentY(c), height)
 
     // BAR controls use their size as a fraction of the view WIDTH (bar length);
     // thickness is a small fixed fraction of the shorter edge.
     private fun barHalfLen(c: ControlState) = c.def.size * c.placement.scale * width / 2f
-    private fun barHalfThick(c: ControlState) = minDim() * 0.062f * c.placement.scale
+    private fun barHalfThick(c: ControlState) = sizeBase() * 0.062f * c.placement.scale
 
     /** Effective half-extents for hit-testing (pills are wider than tall). */
     private fun hitTest(c: ControlState, x: Float, y: Float, slop: Float = 1.15f): Boolean {
@@ -184,7 +279,7 @@ class ControllerView @JvmOverloads constructor(
         }
         val r = controlRadius(c) * slop
         return when (c.def.shape) {
-            ControlShape.PILL -> abs(dx) <= r * 2.0f && abs(dy) <= r
+            ControlShape.PILL -> abs(dx) <= r * 1.85f && abs(dy) <= r
             ControlShape.CROSS, ControlShape.PSX_CROSS -> abs(dx) <= r && abs(dy) <= r
             else -> hypot(dx, dy) <= r
         }
@@ -192,6 +287,26 @@ class ControllerView @JvmOverloads constructor(
 
     private fun findControl(x: Float, y: Float): ControlState? =
         controls.firstOrNull { hitTest(it, x, y) }
+
+    /**
+     * Controls under a touch. Normally the single topmost one, but if the touch lands on a
+     * D-pad that has a button sitting at its centre (the N64 Z-in-D-pad layout), both are
+     * returned so one finger can press a direction and the centre button at once.
+     */
+    private fun findControls(x: Float, y: Float): List<ControlState> {
+        val hits = controls.filter { hitTest(it, x, y) }
+        if (hits.size <= 1) return hits
+        val dpad = hits.firstOrNull { it.def.type == ControlType.DPAD }
+        val centre = dpad?.let { coCenteredButton(it) }?.takeIf { it in hits }
+        return if (dpad != null && centre != null) listOf(centre, dpad) else listOf(hits.first())
+    }
+
+    /** A button sitting at a D-pad's centre (the N64 Z-in-D-pad combo), if any. */
+    private fun coCenteredButton(dpad: ControlState): ControlState? =
+        controls.firstOrNull {
+            it.def.type == ControlType.BUTTON &&
+                hypot(centerX(it) - centerX(dpad), centerY(it) - centerY(dpad)) < controlRadius(dpad)
+        }
 
     // ---------------------------------------------------------------- input
 
@@ -206,25 +321,39 @@ class ControllerView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val index = event.actionIndex
                 val id = event.getPointerId(index)
-                val target = findControl(event.getX(index), event.getY(index)) ?: return true
-                pointerTargets[id] = target
-                engage(target, event.getX(index), event.getY(index), pressDown = true)
+                val targets = findControls(event.getX(index), event.getY(index))
+                if (targets.isEmpty()) return true
+                pointerTargets[id] = targets
+                targets.forEach { engage(it, event.getX(index), event.getY(index), pressDown = true) }
             }
             MotionEvent.ACTION_MOVE -> {
                 for (i in 0 until event.pointerCount) {
                     val id = event.getPointerId(i)
-                    val target = pointerTargets[id] ?: continue
-                    if (target.def.type != ControlType.BUTTON) {
-                        engage(target, event.getX(i), event.getY(i), pressDown = false)
+                    val targets = pointerTargets[id] ?: continue
+                    val px = event.getX(i)
+                    val py = event.getY(i)
+                    targets.forEach {
+                        if (it.def.type != ControlType.BUTTON) engage(it, px, py, pressDown = false)
+                    }
+                    // If the finger slides onto the centre button of a D-pad it's holding (e.g.
+                    // dragging from a direction into N64's Z), latch that button on too.
+                    val dpad = targets.firstOrNull { it.def.type == ControlType.DPAD }
+                    if (dpad != null) {
+                        val centre = coCenteredButton(dpad)
+                        if (centre != null && centre !in targets && hitTest(centre, px, py)) {
+                            engage(centre, px, py, pressDown = true)
+                            pointerTargets[id] = targets + centre
+                        }
                     }
                 }
             }
             MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
                 val index = event.actionIndex
                 val id = event.getPointerId(index)
-                val target = pointerTargets.remove(id)
-                // Only release when no other finger is still holding the same control.
-                if (target != null && target !in pointerTargets.values) release(target)
+                val targets = pointerTargets.remove(id).orEmpty()
+                // Only release a control if no other finger is still holding it.
+                val stillHeld = pointerTargets.values.flatten().toSet()
+                targets.forEach { if (it !in stillHeld) release(it) }
                 if (event.actionMasked == MotionEvent.ACTION_UP) releaseEverything()
             }
             MotionEvent.ACTION_CANCEL -> releaseEverything()
@@ -238,8 +367,13 @@ class ControllerView @JvmOverloads constructor(
                 if (pressDown && !c.pressed) {
                     c.pressed = true
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                    if (c.def.id == "_menu") listener?.onMenu()
-                    else listener?.onButton(c.def.keyCode, true)
+                    when {
+                        c.def.id == "_menu" -> listener?.onMenu()
+                        isCButton(c.def.id) -> sendCButtons()
+                        isKeypadDir(c.def.id) -> sendKeypad()
+                        c.def.id in turboIds -> { c.turboState = true; listener?.onButton(c.def.keyCode, true); startTurbo() }
+                        else -> listener?.onButton(c.def.keyCode, true)
+                    }
                 }
             }
             ControlType.DPAD -> {
@@ -299,7 +433,12 @@ class ControllerView @JvmOverloads constructor(
             ControlType.BUTTON -> {
                 if (c.pressed) {
                     c.pressed = false
-                    if (c.def.id != "_menu") listener?.onButton(c.def.keyCode, false)
+                    when {
+                        c.def.id == "_menu" -> {}
+                        isCButton(c.def.id) -> sendCButtons()
+                        isKeypadDir(c.def.id) -> sendKeypad()
+                        else -> listener?.onButton(c.def.keyCode, false)
+                    }
                 }
             }
             ControlType.DPAD -> {
@@ -321,6 +460,61 @@ class ControllerView @JvmOverloads constructor(
     private fun releaseEverything() {
         controls.forEach { if (it.pressed) release(it) }
         pointerTargets.clear()
+    }
+
+    // The N64 has four discrete yellow C-buttons (not a second stick); the core reads them
+    // as the right analog, so each held C-button adds its direction and we send the sum.
+    /** Pressable face/shoulder buttons that can be set to turbo (id -> display label). */
+    fun toggleableButtons(): List<Pair<String, String>> =
+        controls.filter { it.def.type == ControlType.BUTTON && it.def.id != "_menu" && !isCButton(it.def.id) && !isKeypad(it.def.id) }
+            .map { it.def.id to it.def.label.ifBlank { it.def.id.uppercase() } }
+
+    private fun isCButton(id: String): Boolean = id.startsWith("c_")
+
+    private fun cDir(id: String): Pair<Float, Float> = when (id) {
+        "c_up" -> 0f to -1f
+        "c_down" -> 0f to 1f
+        "c_left" -> -1f to 0f
+        "c_right" -> 1f to 0f
+        else -> 0f to 0f
+    }
+
+    private fun sendCButtons() {
+        var nx = 0f
+        var ny = 0f
+        for (s in controls) {
+            if (s.pressed && isCButton(s.def.id)) {
+                val (dx, dy) = cDir(s.def.id)
+                nx += dx
+                ny += dy
+            }
+        }
+        listener?.onStick("cbuttons", nx.coerceIn(-1f, 1f), ny.coerceIn(-1f, 1f))
+    }
+
+    // The Intellivision keypad's numbers 1-4 and 6-9 map to the right analog (a 3x3 disc);
+    // 5/0/Clear/Enter are ordinary buttons (R3/L3/L2/R2). See FreeIntv's RetroPad mapping.
+    private val KEYPAD_DIRS: Map<String, Pair<Float, Float>> = mapOf(
+        "kp_1" to (-0.7f to -0.7f), "kp_2" to (0f to -1f), "kp_3" to (0.7f to -0.7f),
+        "kp_4" to (-1f to 0f), /* 5 = R3 thumb */          "kp_6" to (1f to 0f),
+        "kp_7" to (-0.7f to 0.7f), "kp_8" to (0f to 1f), "kp_9" to (0.7f to 0.7f),
+    )
+
+    private fun isKeypad(id: String): Boolean = id.startsWith("kp_")
+
+    private fun isKeypadDir(id: String): Boolean = id in KEYPAD_DIRS
+
+    private fun sendKeypad() {
+        var nx = 0f
+        var ny = 0f
+        for (s in controls) {
+            if (s.pressed && isKeypadDir(s.def.id)) {
+                val (dx, dy) = KEYPAD_DIRS.getValue(s.def.id)
+                nx += dx
+                ny += dy
+            }
+        }
+        listener?.onStick("intvkp", nx.coerceIn(-1f, 1f), ny.coerceIn(-1f, 1f))
     }
 
     // ---------------------------------------------------------------- edit mode
@@ -438,12 +632,17 @@ class ControllerView @JvmOverloads constructor(
                     canvas.drawCircle(cx, cy, r * 0.94f, strokePaint)
                 }
                 textPaint.color = withAlpha(def.labelColor, alpha)
-                textPaint.textSize = r * if (def.label.length > 1) 0.62f else 0.95f
+                // Uniform glyph size across all round buttons, shrinking to fit a tiny button and
+                // scaling multi-character labels (e.g. "FIRE") down by length so they don't overflow.
+                textPaint.textSize = min(
+                    sizeBase() * 0.082f,
+                    min(r * 1.25f, r * 3f / max(1, def.label.length)),
+                )
                 canvas.drawText(def.label, cx, cy - (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)
             }
 
             ControlShape.PILL -> {
-                val w = r * 2.1f
+                val w = r * 1.85f
                 fillPaint.color = withAlpha(if (c.pressed) lighten(def.fillColor) else def.fillColor, alpha)
                 canvas.drawRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, fillPaint)
                 textPaint.color = withAlpha(def.labelColor, alpha)

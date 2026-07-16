@@ -1,30 +1,61 @@
 package com.nvanloo.retroglass
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.hardware.input.InputManager
 import android.os.Bundle
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import com.nvanloo.retroglass.controller.InputConfig
+import com.nvanloo.retroglass.controller.LayoutStore
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.button.MaterialButton
 import com.nvanloo.retroglass.model.BiosCatalog
+import com.nvanloo.retroglass.model.Console
 import com.nvanloo.retroglass.model.RomEntry
 import com.nvanloo.retroglass.model.RomLibrary
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var adapter: RomAdapter
-    private lateinit var emptyView: TextView
+    private lateinit var gamesAdapter: GamesAdapter
+    private lateinit var carouselAdapter: ConsoleCarouselAdapter
+    private lateinit var carousel: RecyclerView
+    private lateinit var emptyView: LinearLayout
+    private lateinit var sortToggle: TextView
+    private lateinit var searchBox: android.widget.EditText
+    private lateinit var consoleTitle: TextView
+    private lateinit var consoleMeta: TextView
+    private lateinit var dotsRow: LinearLayout
+    private lateinit var controllerBar: LinearLayout
+    private val inputConfig by lazy { InputConfig(this) }
+    private val layoutStore by lazy { com.nvanloo.retroglass.controller.LayoutStore(this) }
+    private var bindingCapture: ((Int) -> Unit)? = null
+    private var bindingCaptureDevice: String? = null
+    private val snapHelper = androidx.recyclerview.widget.PagerSnapHelper()
+    private var listConsoles: List<com.nvanloo.retroglass.model.Console> = emptyList()
+    private var allGames: List<RomEntry> = emptyList()
+    // Adapter position of the centred tile (large when looping — real console = pos mod size).
+    private var selectedIndex = 0
+    private var itemW = 0
+    private fun realIndex() = if (listConsoles.isEmpty()) 0 else selectedIndex.mod(listConsoles.size)
     private var searchQuery = ""
     private val history by lazy { com.nvanloo.retroglass.model.GameHistory(this) }
+    private val uiPrefs by lazy { getSharedPreferences("ui", MODE_PRIVATE) }
+    // Sort games within the selected console: 0 = A–Z, 1 = recently played.
+    private var gamesSort: Int
+        get() = uiPrefs.getInt("games_sort", 0)
+        set(v) = uiPrefs.edit().putInt("games_sort", v).apply()
 
     private val pickRoms = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
@@ -57,81 +88,337 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
+    private val pickFolder = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        importFolder(uri)
+    }
+
+    private var pendingCoverGame: RomEntry? = null
+
+    private val pickCover = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val entry = pendingCoverGame ?: return@registerForActivityResult
+        pendingCoverGame = null
+        if (uri == null) return@registerForActivityResult
+        val ok = com.nvanloo.retroglass.model.GameCovers.setFromUri(this, entry.file.absolutePath, uri)
+        if (ok) refresh() else Toast.makeText(this, R.string.cover_failed, Toast.LENGTH_SHORT).show()
+    }
+
+    private val createBackup = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        Thread {
+            val n = runCatching { com.nvanloo.retroglass.model.SaveBackup.export(this, uri) }.getOrDefault(-1)
+            runOnUiThread {
+                Toast.makeText(
+                    this,
+                    if (n >= 0) getString(R.string.backup_done, n) else getString(R.string.backup_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }.start()
+    }
+
+    private val restoreBackup = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        Thread {
+            val n = runCatching { com.nvanloo.retroglass.model.SaveBackup.import(this, uri) }.getOrDefault(-1)
+            runOnUiThread {
+                Toast.makeText(
+                    this,
+                    if (n >= 0) getString(R.string.restore_done, n) else getString(R.string.backup_failed),
+                    Toast.LENGTH_LONG,
+                ).show()
+                refresh()
+            }
+        }.start()
+    }
+
+    private fun showBackupMenu() {
+        val options = arrayOf(getString(R.string.backup_save), getString(R.string.restore_save))
+        AlertDialog.Builder(this)
+            .setTitle(R.string.backup_title)
+            .setItems(options) { _, which ->
+                if (which == 0) createBackup.launch("retroglass-saves.zip")
+                else restoreBackup.launch(arrayOf("application/zip", "application/octet-stream"))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    /** On launch, if a crash log was written last session, offer to view/share it. */
+    private fun checkForCrashReport() {
+        val dir = RetroGlassApp.crashDir(application)
+        val logs = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.name } ?: return
+        if (logs.isEmpty()) return
+        val latest = logs.last()
+        val text = runCatching { latest.readText() }.getOrNull() ?: return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.crash_title)
+            .setMessage(getString(R.string.crash_message))
+            .setPositiveButton(R.string.crash_share) { _, _ ->
+                startActivity(
+                    Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "RetroGlass crash report")
+                            putExtra(Intent.EXTRA_TEXT, text)
+                        },
+                        getString(R.string.crash_share),
+                    ),
+                )
+                logs.forEach { it.delete() }
+            }
+            .setNegativeButton(R.string.crash_dismiss) { _, _ -> logs.forEach { it.delete() } }
+            .show().gamepadNavigable()
+    }
+
+    /** Recursively scans a folder into the unified library on a background thread. */
+    private fun importFolder(uri: android.net.Uri) {
+        Toast.makeText(this, R.string.scanning_folder, Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = RomLibrary.importTree(this, uri)
+            runOnUiThread {
+                val message = buildString {
+                    append(getString(R.string.imported_count, result.imported.size))
+                    if (result.skipped.isNotEmpty()) {
+                        append("\n")
+                        append(getString(R.string.skipped_files, result.skipped.take(8).joinToString(", ")))
+                    }
+                }
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                refresh()
+            }
+        }.start()
+    }
+
+    private fun showAddSource() {
+        val options = arrayOf(
+            getString(R.string.scan_all),
+            getString(R.string.add_files),
+            getString(R.string.add_folder),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.add_roms)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> startStorageScan()
+                    1 -> pickRoms.launch(arrayOf("*/*"))
+                    else -> pickFolder.launch(null)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ---- All-storage auto-scan (internal + SD + USB) --------------------------------
+
+    private var pendingScan: (() -> Unit)? = null
+
+    private val allFilesPerm = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val go = pendingScan; pendingScan = null
+        if (RomLibrary.hasAllFilesAccess()) go?.invoke()
+        else Toast.makeText(this, R.string.scan_perm_needed, Toast.LENGTH_LONG).show()
+    }
+
+    private val readPerm = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val go = pendingScan; pendingScan = null
+        if (granted) go?.invoke()
+        else Toast.makeText(this, R.string.scan_perm_needed, Toast.LENGTH_LONG).show()
+    }
+
+    private fun ensureStorageAccess(then: () -> Unit) {
+        if (RomLibrary.hasAllFilesAccess()) { then(); return }
+        pendingScan = then
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val uri = android.net.Uri.parse("package:$packageName")
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, uri)
+            runCatching { allFilesPerm.launch(intent) }.onFailure {
+                allFilesPerm.launch(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        } else {
+            readPerm.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    private fun startStorageScan() {
+        ensureStorageAccess {
+            Toast.makeText(this, R.string.scanning_storage, Toast.LENGTH_SHORT).show()
+            Thread {
+                val found = runCatching { RomLibrary.scanAllStorage(this) }.getOrDefault(emptyList())
+                runOnUiThread { showScanResults(found) }
+            }.start()
+        }
+    }
+
+    private fun showScanResults(found: List<RomLibrary.Found>) {
+        if (found.isEmpty()) {
+            Toast.makeText(this, R.string.scan_none, Toast.LENGTH_LONG).show()
+            return
+        }
+        val roms = found.count { !it.isBios }
+        val bios = found.count { it.isBios }
+        fun apply(move: Boolean) {
+            Toast.makeText(this, R.string.scan_adding, Toast.LENGTH_SHORT).show()
+            Thread {
+                val n = RomLibrary.applyScan(this, found, move)
+                runOnUiThread {
+                    Toast.makeText(this, getString(R.string.scan_added, n), Toast.LENGTH_LONG).show()
+                    refresh()
+                }
+            }.start()
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.scan_found, roms, bios))
+            .setMessage(R.string.scan_choose)
+            .setPositiveButton(R.string.scan_keep) { _, _ -> apply(move = false) }
+            .setNeutralButton(R.string.scan_move) { _, _ -> apply(move = true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Debug-only: dump the real layout coordinates so scripts/gen_layout_previews.py can
+        // render the doc's controller-layout previews straight from ground truth. No-op in release.
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            try {
+                java.io.File(filesDir, "layout_dump.json")
+                    .writeText(com.nvanloo.retroglass.model.ControllerDefs.dumpLayoutsJson())
+            } catch (_: Throwable) {}
+        }
+
+        val d = resources.displayMetrics.density
+        fun dp(v: Float) = (v * d).toInt()
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#141419"))
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad)
+            // Transparent: the base colour + the black hero band come from the frame behind it.
+            fitsSystemWindows = true
         }
 
-        val title = TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 28f
+        // ---- top bar: centred RETRO / GLASS lockup + settings + overflow
+        fun iconButton(glyph: String, size: Float, onTap: () -> Unit) = TextView(this).apply {
+            text = glyph
+            setTextColor(Color.parseColor("#C7C7D2"))
+            textSize = size
+            gravity = Gravity.CENTER
+            setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onTap() }
+        }
+        val logoBox = android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.retroglass_logo)
+            adjustViewBounds = true
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+        }
+        // ---- console carousel: looping snapping pager; neighbours scaled + dimmed.
+        // Landscape puts the carousel in a ~42%-wide left pane, so size the tile to that pane.
+        val landscape = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val heroW = if (landscape) (resources.displayMetrics.widthPixels * 0.42f).toInt()
+                    else resources.displayMetrics.widthPixels
+        itemW = (heroW * 0.56f).toInt()
+        carouselAdapter = ConsoleCarouselAdapter()
+        carousel = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity, RecyclerView.HORIZONTAL, false)
+            adapter = carouselAdapter
+            clipChildren = false
+            setPadding(0, dp(6f), 0, dp(4f))
+        }
+        snapHelper.attachToRecyclerView(carousel)
+        carousel.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) { transformCarousel() }
+            override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+                transformCarousel()
+                if (newState != RecyclerView.SCROLL_STATE_IDLE) return
+                val lm = rv.layoutManager as LinearLayoutManager
+                val v = snapHelper.findSnapView(lm) ?: return
+                val pos = lm.getPosition(v)
+                if (pos != selectedIndex) selectConsole(pos)
+            }
+        })
+        // Tapping anywhere on a side (arrow → screen edge) steps; centre tap plays. Swipe still scrolls.
+        val carouselTaps = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
+                if (listConsoles.isEmpty()) return false
+                val cx = carousel.width / 2f
+                when {
+                    e.x < cx - itemW / 2f -> moveCarousel(-1)
+                    e.x > cx + itemW / 2f -> moveCarousel(1)
+                    else -> launchFirstGame(listConsoles[realIndex()])
+                }
+                return true
+            }
+        })
+        carousel.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean {
+                carouselTaps.onTouchEvent(e)
+                return false
+            }
+        })
+
+        consoleTitle = TextView(this).apply {
             setTextColor(Color.WHITE)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }
-        val subtitle = TextView(this).apply {
-            text = getString(R.string.main_subtitle)
-            textSize = 13f
-            setTextColor(Color.parseColor("#99FFFFFF"))
-        }
-
-        val buttonRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            val topMargin = (12 * resources.displayMetrics.density).toInt()
-            setPadding(0, topMargin, 0, topMargin)
-        }
-        val addButton = MaterialButton(this).apply {
-            text = getString(R.string.add_roms)
-            setOnClickListener { pickRoms.launch(arrayOf("*/*")) }
-        }
-        val biosButton = MaterialButton(
-            this, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle,
-        ).apply {
-            text = getString(R.string.import_bios)
-            setOnClickListener { showBiosStatus() }
-        }
-        buttonRow.addView(addButton)
-        buttonRow.addView(View(this), LinearLayout.LayoutParams((8 * resources.displayMetrics.density).toInt(), 1))
-        buttonRow.addView(biosButton)
-
-        emptyView = TextView(this).apply {
-            text = getString(R.string.empty_library)
-            setTextColor(Color.parseColor("#77FFFFFF"))
-            textSize = 14f
+            textSize = 25f
             gravity = Gravity.CENTER
-            val pad = (24 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad * 2, pad, pad)
+        }
+        consoleMeta = TextView(this).apply {
+            setTextColor(Color.parseColor("#9A9AA6"))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(2f), 0, dp(6f))
+        }
+        dotsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(2f), 0, dp(10f))
         }
 
-        val searchBox = android.widget.EditText(this).apply {
+        // ---- search (scoped to the selected console) + sort pill
+        searchBox = android.widget.EditText(this).apply {
             hint = getString(R.string.search_games)
             setHintTextColor(Color.parseColor("#66FFFFFF"))
             setTextColor(Color.WHITE)
             textSize = 15f
             maxLines = 1
             inputType = android.text.InputType.TYPE_CLASS_TEXT
-            background = GradientDrawable().apply {
-                cornerRadius = 24f
-                setColor(Color.parseColor("#232330"))
-            }
-            val p = (12 * resources.displayMetrics.density).toInt()
-            setPadding(p + p / 2, p, p, p)
+            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#1B1B22")) }
+            setPadding(dp(16f), dp(11f), dp(14f), dp(11f))
             addTextChangedListener(object : android.text.TextWatcher {
-                override fun afterTextChanged(s: android.text.Editable?) {
-                    searchQuery = s?.toString()?.trim().orEmpty()
-                    refresh()
-                }
+                override fun afterTextChanged(s: android.text.Editable?) { searchQuery = s?.toString()?.trim().orEmpty(); refreshGames() }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
         }
+        sortToggle = TextView(this).apply {
+            setTextColor(Color.parseColor("#C7C7D2"))
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#1B1B22")) }
+            setPadding(dp(14f), dp(11f), dp(14f), dp(11f))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { gamesSort = (gamesSort + 1) % 3; updateSortLabel(); refreshGames() }
+        }
+        updateSortLabel()
 
-        adapter = RomAdapter(
+        // ---- games list for the selected console
+        gamesAdapter = GamesAdapter(
             onClick = { entry ->
                 history.recordPlayed(entry.file.absolutePath)
                 EmulationActivity.launch(this, entry.file.absolutePath, entry.console)
@@ -140,83 +427,765 @@ class MainActivity : AppCompatActivity() {
         )
         val recycler = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = this@MainActivity.adapter
+            adapter = gamesAdapter
+            isFocusable = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
 
-        root.addView(title)
-        root.addView(subtitle)
-        root.addView(buttonRow)
-        root.addView(
-            searchBox,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                .apply { topMargin = (10 * resources.displayMetrics.density).toInt() },
-        )
-        root.addView(emptyView)
-        root.addView(
-            recycler,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-        )
-        setContentView(root)
+        emptyView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24f), dp(36f), dp(24f), dp(24f))
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.empty_library)
+                setTextColor(Color.parseColor("#88FFFFFF"))
+                textSize = 14f
+                gravity = Gravity.CENTER
+            })
+            // Prominent call-to-action when the library is empty.
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.scan_cta)
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#2D8CFF")) }
+                setPadding(dp(28f), dp(14f), dp(28f), dp(14f))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { startStorageScan() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(22f) })
+        }
+
+        // ---- controller bar: a centred row of player slots, sits between the carousel and the title
+        controllerBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(8f), dp(6f), dp(8f), dp(8f))
+        }
+
+        // hero = carousel with ‹ › arrows sitting just outside the centre tile (visual only —
+        // the whole side is tappable via the carousel's gesture handler above).
+        val peek = (heroW - itemW) / 2
+        fun arrow(glyph: String, gravity: Int) = TextView(this).apply {
+            text = glyph
+            setTextColor(Color.parseColor("#8CFFFFFF"))
+            textSize = 30f
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                gravity or Gravity.CENTER_VERTICAL,
+            ).apply {
+                val inset = (peek - dp(34f)).coerceAtLeast(dp(2f))
+                if (gravity == Gravity.START) marginStart = inset else marginEnd = inset
+            }
+        }
+        val heroBox = android.widget.FrameLayout(this).apply {
+            clipChildren = false
+            addView(carousel, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(arrow("‹", Gravity.START))
+            addView(arrow("›", Gravity.END))
+        }
+
+        fun iconsRow(topPad: Float) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setPadding(dp(6f), dp(topPad), dp(6f), 0)
+            addView(iconButton("⚙", 19f) { showBackupMenu() })
+            addView(iconButton("⋯", 22f) { showTopMenu() })
+        }
+
+        if (landscape) {
+            // ---- LANDSCAPE: black hero pane on the left; search + list on the right.
+            val leftPane = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setBackgroundColor(Color.BLACK)
+                setPadding(0, dp(12f), 0, dp(10f))
+            }
+            leftPane.addView(logoBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40f))
+                .apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(4f) })
+            leftPane.addView(heroBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            leftPane.addView(controllerBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))  // player slots between the carousel and the title
+            leftPane.addView(consoleTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            leftPane.addView(consoleMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            leftPane.addView(dotsRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
+            // One top row: (shortened) search + filter, then the gear + overflow — frees vertical
+            // space for the games list.
+            val topRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14f), dp(8f), dp(6f), dp(8f))
+            }
+            topRow.addView(searchBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            topRow.addView(View(this), LinearLayout.LayoutParams(dp(8f), 1))
+            topRow.addView(sortToggle)
+            topRow.addView(View(this), LinearLayout.LayoutParams(dp(4f), 1))
+            topRow.addView(iconButton("⚙", 19f) { showBackupMenu() })
+            topRow.addView(iconButton("⋯", 22f) { showTopMenu() })
+
+            val rightPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            rightPane.addView(topRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            rightPane.addView(emptyView)
+            rightPane.addView(recycler, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setBackgroundColor(Color.parseColor("#0B0B0E"))
+                fitsSystemWindows = true
+            }
+            row.addView(leftPane, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.42f))
+            row.addView(rightPane, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.58f))
+            setContentView(row)
+        } else {
+            // ---- PORTRAIT: vertical stack with the black hero band behind the transparent content.
+            val searchRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14f), dp(2f), dp(14f), dp(8f))
+            }
+            searchRow.addView(searchBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            searchRow.addView(View(this), LinearLayout.LayoutParams(dp(10f), 1))
+            searchRow.addView(sortToggle)
+            val topBar = android.widget.FrameLayout(this).apply {
+                setPadding(dp(14f), dp(10f), dp(6f), dp(6f))
+                addView(logoBox, android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(44f), Gravity.CENTER))
+                addView(iconsRow(4f), android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.END or Gravity.CENTER_VERTICAL))
+            }
+            root.addView(topBar)
+            root.addView(heroBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(172f)))
+            root.addView(controllerBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))  // player slots between the carousel and the title
+            root.addView(consoleTitle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            root.addView(consoleMeta, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            root.addView(dotsRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            root.addView(searchRow)
+            root.addView(emptyView)
+            root.addView(recycler, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+            val blackBand = View(this).apply { setBackgroundColor(Color.BLACK) }
+            val frame = android.widget.FrameLayout(this).apply {
+                setBackgroundColor(Color.parseColor("#0B0B0E"))
+                addView(blackBand, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0))
+                addView(root, android.widget.FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+            root.viewTreeObserver.addOnGlobalLayoutListener {
+                fun yInFrame(v: View): Float {
+                    var y = 0f
+                    var cur: View? = v
+                    while (cur != null && cur !== frame) { y += cur.y; cur = cur.parent as? View }
+                    return y
+                }
+                val top = (yInFrame(logoBox) + logoBox.height * 0.677f).toInt() // 0.677 = pill centre in the logo
+                val bottom = yInFrame(searchRow).toInt()
+                val lp = blackBand.layoutParams as android.widget.FrameLayout.LayoutParams
+                if (bottom > top && (lp.topMargin != top || lp.height != bottom - top)) {
+                    lp.topMargin = top
+                    lp.height = bottom - top
+                    blackBand.layoutParams = lp
+                }
+            }
+            setContentView(frame)
+        }
+        checkForCrashReport()
+    }
+
+    // Translate a gamepad's face button into "confirm" so a Bluetooth pad can launch the
+    // focused game (and operate the long-press options dialog) without touching the screen.
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        // Capturing a button for controller remap: bind the first gamepad key pressed.
+        if (bindingCapture != null && event.action == KeyEvent.ACTION_DOWN) {
+            val dev = event.device
+            if (dev != null && isGamepad(dev.sources) &&
+                (bindingCaptureDevice == null || surfaceKey(dev) == bindingCaptureDevice)
+            ) {
+                bindingCapture?.invoke(event.keyCode)
+                bindingCapture = null; bindingCaptureDevice = null
+                return true
+            }
+        }
+        if (event.keyCode == android.view.KeyEvent.KEYCODE_BUTTON_A) {
+            return super.dispatchKeyEvent(
+                android.view.KeyEvent(event.action, android.view.KeyEvent.KEYCODE_DPAD_CENTER),
+            )
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** A → confirm, B → back, so the long-press / BIOS dialogs work from a gamepad. */
+    private fun AlertDialog.gamepadNavigable(): AlertDialog {
+        setOnKeyListener { d, keyCode, ev ->
+            val mapped = when (keyCode) {
+                android.view.KeyEvent.KEYCODE_BUTTON_A -> android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                android.view.KeyEvent.KEYCODE_BUTTON_B -> android.view.KeyEvent.KEYCODE_BACK
+                else -> return@setOnKeyListener false
+            }
+            (d as? android.app.Dialog)?.window?.decorView
+                ?.dispatchKeyEvent(android.view.KeyEvent(ev.action, mapped))
+            true
+        }
+        return this
     }
 
     override fun onResume() {
         super.onResume()
         refresh()
+        buildControllerBar()
+        (getSystemService(INPUT_SERVICE) as? InputManager)?.registerInputDeviceListener(deviceListener, null)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        (getSystemService(INPUT_SERVICE) as? InputManager)?.unregisterInputDeviceListener(deviceListener)
     }
 
     private fun refresh() {
-        val roms = RomLibrary.scan(this)
+        allGames = RomLibrary.scan(this)
+        // Preserve the selected console across refreshes and across rotation (activity recreation).
+        val prevReal = if (selectedIndex != 0) realIndex() else uiPrefs.getInt("sel_console", 0)
+        // Consoles that actually have games, grouped by maker then newest-first (stable order).
+        listConsoles = allGames.map { it.console }.distinct()
+            .sortedWith(compareBy({ it.maker }, { -it.year }, { it.displayName }))
+        carouselAdapter.submit(listConsoles)
+
+        val hasGames = listConsoles.isNotEmpty()
+        emptyView.visibility = if (hasGames) View.GONE else View.VISIBLE
+        for (v in listOf(carousel, consoleTitle, consoleMeta, dotsRow)) {
+            v.visibility = if (hasGames) View.VISIBLE else View.GONE
+        }
+        if (!hasGames) { gamesAdapter.submit(emptyList()); return }
+
+        val size = listConsoles.size
+        val startReal = prevReal.coerceIn(0, size - 1)
+        // Start near the middle of the looped range so the user can swipe far both ways.
+        selectedIndex = if (size > 1) (carouselAdapter.itemCount / 2 / size) * size + startReal else startReal
+        carousel.post { centerCarousel(selectedIndex); transformCarousel() }
+        selectConsole(selectedIndex)
+    }
+
+    /** Scrolls so the tile at [pos] is horizontally centred in the viewport. */
+    private fun centerCarousel(pos: Int) {
+        val lm = carousel.layoutManager as? LinearLayoutManager ?: return
+        lm.scrollToPositionWithOffset(pos, (carousel.width - itemW) / 2)
+    }
+
+    /** Switches the hero + games list to the console at [index] in the carousel. */
+    private fun selectConsole(index: Int) {
+        if (listConsoles.isEmpty()) return
+        selectedIndex = index
+        val console = listConsoles[realIndex()]
+        val count = allGames.count { it.console == console }
+        consoleTitle.text = console.displayName
+        val gameWord = if (count == 1) getString(R.string.game_one) else getString(R.string.game_many)
+        val bios = when (biosStatusFor(console)) {
+            true -> "  ·  BIOS ✓"
+            false -> "  ·  BIOS needed"
+            null -> ""
+        }
+        consoleMeta.text = "${console.maker}  ·  ${console.year}  ·  $count $gameWord$bios"
+        searchBox.setText("")
+        searchQuery = ""
+        searchBox.hint = getString(R.string.search_in, console.displayName)
+        uiPrefs.edit().putInt("sel_console", realIndex()).apply()
+        buildDots(realIndex())
+        refreshGames()
+        buildControllerBar() // player count + layout depend on the console
+    }
+
+    /** Refreshes only the games list for the current console (search / sort). */
+    private fun refreshGames() {
+        if (listConsoles.isEmpty()) { gamesAdapter.submit(emptyList()); return }
+        val console = listConsoles[realIndex()]
         val q = searchQuery.lowercase()
-        val filtered = if (q.isEmpty()) roms else roms.filter { it.displayName.lowercase().contains(q) }
-        val byPath = filtered.associateBy { it.file.absolutePath }
-        val rows = mutableListOf<Row>()
+        var games = allGames.filter { it.console == console }
+        if (q.isNotEmpty()) games = games.filter { it.displayName.lowercase().contains(q) }
+        games = when (gamesSort) {
+            1 -> games.sortedByDescending { it.displayName.lowercase() }
+            2 -> {
+                val recents = history.recents()
+                games.sortedBy { val i = recents.indexOf(it.file.absolutePath); if (i < 0) Int.MAX_VALUE else i }
+            }
+            else -> games.sortedBy { it.displayName.lowercase() }
+        }
+        gamesAdapter.accent = console.accentColor
+        gamesAdapter.submit(games)
+    }
 
-        // Favorites (in their console order for stability)
-        val favs = filtered.filter { history.isFavorite(it.file.absolutePath) }
-        if (favs.isNotEmpty()) {
-            rows.add(Row.Header(getString(R.string.section_favorites, favs.size)))
-            favs.sortedBy { it.displayName.lowercase() }.forEach { rows.add(Row.Game(it)) }
+    /** Pagination dots under the hero; collapses to "n / total" past a dozen consoles. */
+    private fun buildDots(active: Int) {
+        dotsRow.removeAllViews()
+        val d = resources.displayMetrics.density
+        val n = listConsoles.size
+        if (n > 12) {
+            dotsRow.addView(TextView(this).apply {
+                text = "${active + 1} / $n"
+                setTextColor(Color.parseColor("#6A6A76"))
+                textSize = 11f
+            })
+            return
+        }
+        for (i in 0 until n) {
+            val on = i == active
+            dotsRow.addView(View(this).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = 100f
+                    setColor(if (on) Color.parseColor("#2D8CFF") else Color.parseColor("#3A3A44"))
+                }
+                layoutParams = LinearLayout.LayoutParams(((if (on) 16 else 6) * d).toInt(), (6 * d).toInt())
+                    .apply { marginEnd = (5 * d).toInt() }
+            })
+        }
+    }
+
+    /** null = this console needs no BIOS; true = BIOS present; false = required BIOS missing. */
+    private fun biosStatusFor(console: Console): Boolean? {
+        val sys = when (console) {
+            Console.PSX -> "PlayStation"
+            Console.PS2 -> "PlayStation 2"
+            Console.DREAMCAST -> "Dreamcast"
+            Console.SATURN -> "Saturn"
+            Console.THREEDO -> "3DO"
+            Console.COLECO -> "ColecoVision"
+            Console.INTELLIVISION -> "Intellivision"
+            Console.AMIGA -> "Amiga (Kickstart)"
+            Console.SEGACD -> "Sega CD / Mega-CD"
+            Console.PCECD -> "PC Engine CD"
+            Console.NEOGEOCD -> "Neo Geo CD"
+            Console.NAOMI -> "Sega NAOMI"
+            Console.ATOMISWAVE -> "Atomiswave"
+            else -> return null
+        }
+        return BiosCatalog.status(this).firstOrNull { it.system == sys }?.present
+    }
+
+    private fun launchFirstGame(console: com.nvanloo.retroglass.model.Console) {
+        val g = allGames.firstOrNull { it.console == console } ?: return
+        history.recordPlayed(g.file.absolutePath)
+        EmulationActivity.launch(this, g.file.absolutePath, console)
+    }
+
+    /** Coverflow emphasis: scale + fade each carousel tile by its distance from centre. */
+    private fun transformCarousel() {
+        val center = carousel.width / 2f
+        if (center <= 0f) return
+        for (i in 0 until carousel.childCount) {
+            val child = carousel.getChildAt(i)
+            val childCenter = (child.left + child.right) / 2f
+            val frac = (kotlin.math.abs(center - childCenter) / center).coerceIn(0f, 1f)
+            val scale = 1f - 0.34f * frac
+            child.scaleX = scale
+            child.scaleY = scale
+            child.alpha = 1f - 0.55f * frac
+        }
+    }
+
+    private fun moveCarousel(delta: Int) {
+        if (listConsoles.size <= 1) return
+        // Tiles are itemW wide with no gaps, so one item-width scroll advances exactly one console;
+        // the snap-on-idle finalises centring and the idle listener updates the selection.
+        carousel.smoothScrollBy(delta * itemW, 0)
+    }
+
+    private fun showTopMenu() {
+        val items = arrayOf(
+            getString(R.string.add_roms),
+            getString(R.string.import_bios),
+            getString(R.string.backup_title),
+        )
+        AlertDialog.Builder(this)
+            .setItems(items) { _, which ->
+                when (which) { 0 -> showAddSource(); 1 -> showBiosStatus(); else -> showBackupMenu() }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** 1–2 letter monogram from a game's name, skipping filler words. */
+    private fun initials(name: String): String {
+        val stop = setOf("the", "of", "and", "a", "an", "de", "la", "el")
+        val words = name.split(Regex("[\\s:_\\-]+")).filter { it.isNotBlank() && it.lowercase() !in stop }
+        return when {
+            words.isEmpty() -> name.take(2).uppercase()
+            words.size == 1 -> words[0].take(2).uppercase()
+            else -> (words[0].take(1) + words[1].take(1)).uppercase()
+        }
+    }
+
+    private fun lighten(c: Int): Int = Color.rgb(
+        (Color.red(c) + 45).coerceAtMost(255),
+        (Color.green(c) + 45).coerceAtMost(255),
+        (Color.blue(c) + 45).coerceAtMost(255),
+    )
+
+    private fun updateSortLabel() {
+        sortToggle.text = when (gamesSort) {
+            1 -> "↕  Z–A"
+            2 -> "↕  Recent"
+            else -> "↕  A–Z"
+        }
+    }
+
+    // ---------------------------------------- controller surfaces (bottom bar) ----------------
+
+    private data class Surface(val key: String, val name: String, val device: InputDevice?, val isGamepad: Boolean)
+
+    private fun isGamepad(sources: Int): Boolean =
+        sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+            sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
+
+    private fun connectedGamepads(): List<InputDevice> {
+        val result = mutableListOf<InputDevice>()
+        for (id in InputDevice.getDeviceIds()) {
+            val dev = InputDevice.getDevice(id) ?: continue
+            if (!dev.isVirtual && isGamepad(dev.sources)) result.add(dev)
+        }
+        return result.sortedBy { if (it.controllerNumber <= 0) 99 else it.controllerNumber }
+    }
+
+    private fun hasGamepad(): Boolean = connectedGamepads().isNotEmpty()
+
+    private fun surfaceKey(d: InputDevice?): String = d?.descriptor ?: "gamepad"
+
+    private fun portFor(key: String, device: InputDevice?): Int =
+        inputConfig.storedPort(key) ?: if (key == InputConfig.PHONE) {
+            if (hasGamepad()) InputConfig.PORT_OFF else 0
+        } else {
+            ((device?.controllerNumber ?: 1) - 1).coerceAtLeast(0)
         }
 
-        // Recently played (most recent first)
-        val recents = history.recents().mapNotNull { byPath[it] }.take(8)
-        if (recents.isNotEmpty()) {
-            rows.add(Row.Header(getString(R.string.section_recent)))
-            recents.forEach { rows.add(Row.Game(it)) }
-        }
+    private fun portLabel(port: Int): String =
+        if (port < 0) getString(R.string.player_off) else getString(R.string.player_n, port + 1)
 
-        // Everything, grouped by system
-        val byConsole = filtered.groupBy { it.console }
-        for (console in com.nvanloo.retroglass.model.Console.entries) {
-            val games = byConsole[console] ?: continue
-            rows.add(Row.Header("${console.displayName}  ·  ${games.size}"))
-            games.sortedBy { it.displayName.lowercase() }.forEach { rows.add(Row.Game(it)) }
+    private fun availableSurfaces(): List<Surface> {
+        val list = mutableListOf(Surface(InputConfig.PHONE, getString(R.string.surface_touch), null, false))
+        connectedGamepads().forEachIndexed { i, dev ->
+            val nm = dev.name?.takeIf { it.isNotBlank() } ?: getString(R.string.surface_pad, i + 1)
+            list.add(Surface(surfaceKey(dev), nm, dev, true))
         }
-        adapter.submit(rows)
-        emptyView.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+        return list
+    }
+
+    /** Rebuilds the bottom bar: a slot per player port the current console supports, each showing
+     *  the control layout + the controller assigned to it (empty slots greyed out). */
+    private fun buildControllerBar() {
+        if (!::controllerBar.isInitialized) return
+        controllerBar.removeAllViews()
+        val d = resources.displayMetrics.density
+        fun dp(v: Float) = (v * d).toInt()
+        val console = listConsoles.getOrNull(realIndex()) ?: return
+        val surfaces = availableSurfaces()
+
+        // Screen-mode selector, sitting to the left of the player slots.
+        controllerBar.addView(buildScreenModeCard())
+        controllerBar.addView(View(this).apply {
+            setBackgroundColor(Color.parseColor("#26262E"))
+        }, LinearLayout.LayoutParams(dp(1f), dp(58f)).apply { marginStart = dp(3f); marginEnd = dp(5f) })
+
+        val thumb = runCatching {
+            com.nvanloo.retroglass.controller.LayoutPreview.render(
+                console, com.nvanloo.retroglass.model.ControllerDefs.controlsFor(console), dp(42f), dp(60f),
+            )
+        }.getOrNull()
+        for (port in 0 until console.maxPlayers) {
+            val onPort = surfaces.filter { portFor(it.key, it.device) == port }
+            val occupied = onPort.isNotEmpty()
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(Color.parseColor("#161620")) }
+                setPadding(dp(9f), dp(6f), dp(9f), dp(6f))
+                alpha = if (occupied) 1f else 0.42f
+                isClickable = true; isFocusable = true
+                setOnClickListener { onPlayerSlotTap(port, onPort) }
+            }
+            card.addView(android.widget.ImageView(this).apply {
+                if (thumb != null) setImageBitmap(thumb)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(42f), dp(60f))
+            })
+            card.addView(TextView(this).apply {
+                text = "P${port + 1}"
+                setTextColor(Color.WHITE); textSize = 11f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setPadding(0, dp(2f), 0, 0)
+            })
+            card.addView(TextView(this).apply {
+                text = if (occupied) onPort.joinToString(" + ") { it.name } else getString(R.string.player_empty)
+                setTextColor(Color.parseColor(if (occupied) "#9AA0B0" else "#6A6A76"))
+                textSize = 9f; gravity = Gravity.CENTER; maxLines = 1
+                maxWidth = dp(62f); ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            // Sized so the screen-mode card + a divider + up to four slots all fit (and centre)
+            // in portrait and the narrow landscape left pane without clipping.
+            controllerBar.addView(card, LinearLayout.LayoutParams(dp(66f), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(2f); marginEnd = dp(2f)
+            })
+        }
+    }
+
+    // ---- screen-mode selector (left of the player slots): where/how the game is shown
+
+    /** Modes offered right now — Fullscreen only appears when a physical gamepad is connected. */
+    private fun availableScreenModes(): List<Int> {
+        val modes = mutableListOf(
+            LayoutStore.SCREEN_AUTO, LayoutStore.SCREEN_INT_PORTRAIT,
+            LayoutStore.SCREEN_INT_LANDSCAPE, LayoutStore.SCREEN_EXTERNAL,
+        )
+        if (hasGamepad()) modes.add(LayoutStore.SCREEN_FULLSCREEN)
+        return modes
+    }
+
+    private fun screenModeLabel(m: Int) = when (m) {
+        LayoutStore.SCREEN_INT_PORTRAIT -> getString(R.string.screen_int_portrait)
+        LayoutStore.SCREEN_INT_LANDSCAPE -> getString(R.string.screen_int_landscape)
+        LayoutStore.SCREEN_EXTERNAL -> getString(R.string.screen_external)
+        LayoutStore.SCREEN_FULLSCREEN -> getString(R.string.screen_fullscreen)
+        else -> getString(R.string.screen_auto)
+    }
+
+    private fun screenModeShort(m: Int) = when (m) {
+        LayoutStore.SCREEN_INT_PORTRAIT -> getString(R.string.screen_short_portrait)
+        LayoutStore.SCREEN_INT_LANDSCAPE -> getString(R.string.screen_short_landscape)
+        LayoutStore.SCREEN_EXTERNAL -> getString(R.string.screen_short_external)
+        LayoutStore.SCREEN_FULLSCREEN -> getString(R.string.screen_short_fullscreen)
+        else -> getString(R.string.screen_short_auto)
+    }
+
+    private fun buildScreenModeCard(): View {
+        val d = resources.displayMetrics.density
+        fun dp(v: Float) = (v * d).toInt()
+        val mode = layoutStore.screenMode()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(Color.parseColor("#161620")) }
+            setPadding(dp(8f), dp(6f), dp(8f), dp(6f))
+            isClickable = true; isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(dp(56f), ViewGroup.LayoutParams.WRAP_CONTENT)
+            addView(android.widget.ImageView(this@MainActivity).apply {
+                setImageBitmap(screenModeIcon(mode, dp(34f)))
+                layoutParams = LinearLayout.LayoutParams(dp(34f), dp(34f))
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.screen_label)
+                setTextColor(Color.parseColor("#6A6A76")); textSize = 8.5f
+                gravity = Gravity.CENTER; setPadding(0, dp(3f), 0, 0)
+                letterSpacing = 0.04f
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = screenModeShort(mode)
+                setTextColor(Color.WHITE); textSize = 9.5f; gravity = Gravity.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                maxLines = 1; maxWidth = dp(52f); ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            setOnClickListener { showScreenModePicker() }
+        }
+    }
+
+    private fun showScreenModePicker() {
+        val modes = availableScreenModes()
+        val labels = modes.map { screenModeLabel(it) }.toTypedArray()
+        val checked = modes.indexOf(layoutStore.screenMode()).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.screen_mode_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                layoutStore.setScreenMode(modes[which])
+                buildControllerBar()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** Draws a small device glyph for a screen mode (phone portrait/landscape, monitor, fullscreen). */
+    private fun screenModeIcon(mode: Int, px: Int): android.graphics.Bitmap {
+        val b = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val col = Color.parseColor("#DFE3EC")
+        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = col; style = android.graphics.Paint.Style.STROKE; strokeWidth = px * 0.055f
+            strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+        }
+        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = col }
+        val cx = px / 2f; val cy = px / 2f
+        fun rr(w: Float, h: Float, filled: Boolean = false, oy: Float = 0f) {
+            val r = android.graphics.RectF(cx - w / 2, cy - h / 2 + oy, cx + w / 2, cy + h / 2 + oy)
+            c.drawRoundRect(r, px * 0.08f, px * 0.08f, if (filled) fill else stroke)
+        }
+        when (mode) {
+            LayoutStore.SCREEN_INT_PORTRAIT -> {
+                rr(px * 0.46f, px * 0.70f)
+                c.drawLine(cx - px * 0.15f, cy - px * 0.13f, cx + px * 0.15f, cy - px * 0.13f, stroke)
+            }
+            LayoutStore.SCREEN_INT_LANDSCAPE -> {
+                rr(px * 0.72f, px * 0.46f)
+                c.drawLine(cx - px * 0.11f, cy - px * 0.15f, cx - px * 0.11f, cy + px * 0.15f, stroke)
+            }
+            LayoutStore.SCREEN_EXTERNAL -> {
+                val w = px * 0.72f; val h = px * 0.44f; val t = cy - h / 2 - px * 0.06f
+                c.drawRoundRect(android.graphics.RectF(cx - w / 2, t, cx + w / 2, t + h), px * 0.06f, px * 0.06f, stroke)
+                c.drawRect(android.graphics.RectF(cx - px * 0.045f, t + h, cx + px * 0.045f, t + h + px * 0.10f), fill)
+                c.drawRoundRect(android.graphics.RectF(cx - px * 0.15f, t + h + px * 0.10f, cx + px * 0.15f, t + h + px * 0.15f), px * 0.02f, px * 0.02f, fill)
+            }
+            LayoutStore.SCREEN_FULLSCREEN -> rr(px * 0.74f, px * 0.48f, filled = true)
+            else -> { // AUTO: a portrait and a landscape frame overlaid
+                rr(px * 0.64f, px * 0.42f)
+                rr(px * 0.40f, px * 0.60f)
+            }
+        }
+        return b
+    }
+
+    private fun onPlayerSlotTap(port: Int, onPort: List<Surface>) {
+        val opts = mutableListOf<String>()
+        onPort.forEach { opts.add(getString(R.string.configure_surface, it.name)) }
+        opts.add(getString(R.string.assign_to_player, port + 1))
+        AlertDialog.Builder(this)
+            .setItems(opts.toTypedArray()) { _, which ->
+                if (which < onPort.size) showSurfaceConfig(onPort[which]) else assignToPort(port)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun assignToPort(port: Int) {
+        val surfaces = availableSurfaces()
+        val labels = surfaces.map { it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.assign_to_player, port + 1))
+            .setItems(labels) { _, which ->
+                inputConfig.setPort(surfaces[which].key, port); buildControllerBar()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showSurfaceConfig(s: Surface) {
+        // The touchscreen only has a player assignment — go straight to it.
+        if (!s.isGamepad) { showPlayerPicker(s); return }
+        val opts = mutableListOf(getString(R.string.ctrl_set_player))
+        run {
+            opts += getString(if (inputConfig.leftStickAsDpad(s.key)) R.string.ctrl_stick_dpad_on else R.string.ctrl_stick_dpad_off)
+            opts += getString(R.string.ctrl_remap)
+            opts += getString(R.string.ctrl_stick_tuning)
+            opts += getString(R.string.ctrl_reset_map)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(s.name)
+            .setItems(opts.toTypedArray()) { _, which ->
+                when (opts[which]) {
+                    getString(R.string.ctrl_set_player) -> showPlayerPicker(s)
+                    getString(R.string.ctrl_remap) -> showRemap(s.key, s.name)
+                    getString(R.string.ctrl_stick_tuning) -> showStickTuning(s.key, s.name)
+                    getString(R.string.ctrl_reset_map) -> {
+                        inputConfig.clearBindings(s.key)
+                        Toast.makeText(this, R.string.ctrl_map_reset, Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        inputConfig.setLeftStickAsDpad(s.key, !inputConfig.leftStickAsDpad(s.key)); buildControllerBar()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showPlayerPicker(s: Surface) {
+        val ports = listOf(0, 1, 2, 3, InputConfig.PORT_OFF)
+        val labels = ports.map { portLabel(it) }.toTypedArray()
+        val current = ports.indexOf(portFor(s.key, s.device)).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.ctrl_set_player))
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                inputConfig.setPort(s.key, ports[which]); buildControllerBar(); dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showStickTuning(key: String, name: String) {
+        val d = resources.displayMetrics.density
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; val p = (20 * d).toInt(); setPadding(p, p, p, 0)
+        }
+        addSlider(container, 50, (inputConfig.deadzone(key) * 100f).toInt(),
+            { getString(R.string.ctrl_deadzone_value, it) }) { p -> inputConfig.setDeadzone(key, p / 100f) }
+        addSlider(container, 150, ((inputConfig.sensitivity(key) - 0.5f) * 100f).toInt(),
+            { getString(R.string.ctrl_sensitivity_value, String.format("%.2f", 0.5f + it / 100f)) }) { p -> inputConfig.setSensitivity(key, 0.5f + p / 100f) }
+        AlertDialog.Builder(this).setTitle(name).setView(container)
+            .setPositiveButton(android.R.string.ok, null).show().gamepadNavigable()
+    }
+
+    private fun showRemap(key: String, name: String) {
+        val buttons = InputConfig.RETRO_BUTTONS
+        fun labelFor(i: Int): String {
+            val (bName, retroKey) = buttons[i]
+            val phys = inputConfig.physicalFor(key, retroKey)
+            val physName = phys?.let { KeyEvent.keyCodeToString(it).removePrefix("KEYCODE_") } ?: getString(R.string.remap_default)
+            return "$bName  →  $physName"
+        }
+        val labels = buttons.indices.map { labelFor(it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.remap_title, name))
+            .setItems(labels) { _, which ->
+                val (bName, retroKey) = buttons[which]
+                val prompt = Toast.makeText(this, getString(R.string.remap_press, bName), Toast.LENGTH_LONG); prompt.show()
+                bindingCaptureDevice = key
+                bindingCapture = { physicalKey ->
+                    inputConfig.bind(key, physicalKey, retroKey)
+                    prompt.cancel()
+                    Toast.makeText(this, getString(R.string.remap_done, bName), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> bindingCapture = null; bindingCaptureDevice = null }
+            .show().gamepadNavigable()
+    }
+
+    private fun addSlider(parent: LinearLayout, maxProgress: Int, initialProgress: Int, labelFor: (Int) -> String, onChange: (Int) -> Unit) {
+        val label = TextView(this).apply { text = labelFor(initialProgress); textSize = 14f }
+        val seek = SeekBar(this).apply { max = maxProgress; progress = initialProgress.coerceIn(0, maxProgress) }
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) { label.text = labelFor(p); onChange(p) }
+            override fun onStartTrackingTouch(sb: SeekBar) {}
+            override fun onStopTrackingTouch(sb: SeekBar) {}
+        })
+        parent.addView(label); parent.addView(seek)
+    }
+
+    private val deviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = buildControllerBar()
+        override fun onInputDeviceRemoved(deviceId: Int) = buildControllerBar()
+        override fun onInputDeviceChanged(deviceId: Int) = buildControllerBar()
     }
 
     private fun showGameOptions(entry: RomEntry) {
         val path = entry.file.absolutePath
-        val favLabel = getString(
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += getString(
             if (history.isFavorite(path)) R.string.unfavorite else R.string.favorite,
-        )
-        val options = arrayOf(
-            favLabel,
-            getString(R.string.change_system),
-            getString(R.string.delete),
-        )
+        ) to { history.toggleFavorite(path); refresh() }
+        actions += getString(R.string.set_cover) to {
+            pendingCoverGame = entry
+            pickCover.launch(arrayOf("image/*"))
+        }
+        if (com.nvanloo.retroglass.model.GameCovers.has(this, path)) {
+            actions += getString(R.string.remove_cover) to {
+                com.nvanloo.retroglass.model.GameCovers.remove(this, path); refresh()
+            }
+        }
+        actions += getString(R.string.change_system) to { chooseSystem(entry) }
+        actions += getString(R.string.delete) to { confirmDelete(entry) }
+        val labels = actions.map { it.first }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(entry.displayName)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> { history.toggleFavorite(path); refresh() }
-                    1 -> chooseSystem(entry)
-                    2 -> confirmDelete(entry)
-                }
-            }
+            .setItems(labels) { _, which -> actions[which].second() }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun chooseSystem(entry: RomEntry) {
@@ -231,7 +1200,7 @@ class MainActivity : AppCompatActivity() {
                 refresh()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun showBiosStatus() {
@@ -249,7 +1218,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(text)
             .setPositiveButton(R.string.import_bios_file) { _, _ -> pickBios.launch(arrayOf("*/*")) }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun confirmDelete(entry: RomEntry) {
@@ -257,107 +1226,111 @@ class MainActivity : AppCompatActivity() {
             .setTitle(entry.displayName)
             .setMessage(R.string.delete_confirm)
             .setPositiveButton(R.string.delete) { _, _ ->
-                RomLibrary.delete(entry)
+                RomLibrary.delete(this, entry)
                 refresh()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     // ------------------------------------------------------------ adapter
 
-    sealed class Row {
-        data class Header(val title: String) : Row()
-        data class Game(val entry: RomEntry) : Row()
+    /** Horizontal console coverflow — each page is the console's photo (or a placeholder).
+     *  Reports a large virtual count so the pager loops endlessly (real console = pos mod size). */
+    private inner class ConsoleCarouselAdapter : RecyclerView.Adapter<ConsoleCarouselAdapter.VH>() {
+        private var items: List<com.nvanloo.retroglass.model.Console> = emptyList()
+        @Suppress("NotifyDataSetChanged")
+        fun submit(list: List<com.nvanloo.retroglass.model.Console>) { items = list; notifyDataSetChanged() }
+        override fun getItemCount() = if (items.size <= 1) items.size else items.size * 1000
+        inner class VH(val img: android.widget.ImageView) : RecyclerView.ViewHolder(img)
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val d = parent.resources.displayMetrics.density
+            val img = android.widget.ImageView(parent.context).apply {
+                layoutParams = RecyclerView.LayoutParams(itemW, ViewGroup.LayoutParams.MATCH_PARENT)
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                val p = (10 * d).toInt(); setPadding(p, p, p, p)
+            }
+            return VH(img)
+        }
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val console = items[position % items.size]
+            val bmp = com.nvanloo.retroglass.model.ConsoleImages.photo(holder.img.context, console)
+            if (bmp != null) {
+                holder.img.setImageBitmap(bmp); holder.img.background = null
+            } else {
+                holder.img.setImageDrawable(null)
+                holder.img.background = GradientDrawable().apply {
+                    cornerRadius = 20f; setColor(Color.parseColor("#15151C"))
+                    setStroke(2, Color.parseColor("#2A2A34"))
+                }
+            }
+        }
     }
 
-    private class RomAdapter(
+    /** Games for the selected console: monogram chip (console accent) + name + play. */
+    private inner class GamesAdapter(
         val onClick: (RomEntry) -> Unit,
         val onLongClick: (RomEntry) -> Unit,
-    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-
-        private var rows: List<Row> = emptyList()
-
+    ) : RecyclerView.Adapter<GamesAdapter.VH>() {
+        private var items: List<RomEntry> = emptyList()
+        var accent: Int = Color.parseColor("#2D8CFF")
         @Suppress("NotifyDataSetChanged")
-        fun submit(list: List<Row>) {
-            rows = list
-            notifyDataSetChanged()
-        }
-
-        override fun getItemViewType(position: Int): Int =
-            if (rows[position] is Row.Header) TYPE_HEADER else TYPE_GAME
-
-        override fun getItemCount() = rows.size
-
-        class HeaderHolder(val text: TextView) : RecyclerView.ViewHolder(text)
-        class GameHolder(val row: LinearLayout, val chip: TextView, val name: TextView) :
-            RecyclerView.ViewHolder(row)
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        fun submit(list: List<RomEntry>) { items = list; notifyDataSetChanged() }
+        override fun getItemCount() = items.size
+        inner class VH(
+            val row: LinearLayout, val chip: TextView,
+            val name: TextView, val sub: TextView,
+        ) : RecyclerView.ViewHolder(row)
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val ctx = parent.context
-            val density = ctx.resources.displayMetrics.density
-            if (viewType == TYPE_HEADER) {
-                val tv = TextView(ctx).apply {
-                    textSize = 13f
-                    setTextColor(Color.parseColor("#8F8FB0"))
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    val padH = (12 * density).toInt()
-                    setPadding(padH, (18 * density).toInt(), padH, (6 * density).toInt())
-                    layoutParams = RecyclerView.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                    )
-                }
-                return HeaderHolder(tv)
-            }
+            val d = ctx.resources.displayMetrics.density
+            fun dp(v: Float) = (v * d).toInt()
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                val pad = (12 * density).toInt()
-                setPadding(pad, pad, pad, pad)
+                setPadding(dp(16f), dp(9f), dp(12f), dp(9f))
                 layoutParams = RecyclerView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 )
+                isFocusable = true
+                setOnFocusChangeListener { v, f -> v.setBackgroundColor(if (f) Color.parseColor("#22FFFFFF") else Color.TRANSPARENT) }
             }
             val chip = TextView(ctx).apply {
-                textSize = 11f
-                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(dp(46f), dp(46f))
+                gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 14f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                val padH = (10 * density).toInt()
-                val padV = (5 * density).toInt()
-                setPadding(padH, padV, padH, padV)
             }
-            val name = TextView(ctx).apply {
-                textSize = 16f
-                setTextColor(Color.WHITE)
-                setPadding((14 * density).toInt(), 0, 0, 0)
+            val texts = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                setPadding(dp(14f), 0, dp(8f), 0)
             }
-            row.addView(chip)
-            row.addView(name)
-            return GameHolder(row, chip, name)
+            val name = TextView(ctx).apply { setTextColor(Color.WHITE); textSize = 16f; maxLines = 1 }
+            val sub = TextView(ctx).apply { setTextColor(Color.parseColor("#8A8A96")); textSize = 12f }
+            texts.addView(name); texts.addView(sub)
+            val play = TextView(ctx).apply {
+                text = "▶"; setTextColor(Color.parseColor("#6A6A76")); textSize = 14f
+                setPadding(dp(10f), dp(8f), dp(8f), dp(8f))
+            }
+            row.addView(chip); row.addView(texts); row.addView(play)
+            return VH(row, chip, name, sub)
         }
-
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            when (val r = rows[position]) {
-                is Row.Header -> (holder as HeaderHolder).text.text = r.title
-                is Row.Game -> {
-                    val h = holder as GameHolder
-                    val entry = r.entry
-                    h.name.text = entry.displayName
-                    h.chip.text = entry.console.displayName
-                    h.chip.background = GradientDrawable().apply {
-                        cornerRadius = 24f
-                        setColor(entry.console.accentColor)
-                    }
-                    h.row.setOnClickListener { onClick(entry) }
-                    h.row.setOnLongClickListener { onLongClick(entry); true }
-                }
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val e = items[position]
+            val d = holder.row.resources.displayMetrics.density
+            holder.name.text = e.displayName
+            holder.chip.text = initials(e.displayName)
+            holder.chip.background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR, intArrayOf(lighten(accent), accent),
+            ).apply { cornerRadius = 12f * d }
+            if (history.isFavorite(e.file.absolutePath)) {
+                holder.sub.visibility = View.VISIBLE
+                holder.sub.text = getString(R.string.fav_tag)
+            } else {
+                holder.sub.visibility = View.GONE
             }
-        }
-
-        companion object {
-            private const val TYPE_HEADER = 0
-            private const val TYPE_GAME = 1
+            holder.row.setOnClickListener { onClick(e) }
+            holder.row.setOnLongClickListener { onLongClick(e); true }
         }
     }
 }

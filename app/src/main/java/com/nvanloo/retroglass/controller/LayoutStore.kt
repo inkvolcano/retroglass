@@ -84,6 +84,12 @@ class LayoutStore(context: Context) {
         prefs.edit().putFloat("portrait_frac", value.coerceIn(0.25f, 0.7f)).apply()
     }
 
+    /** Where/how the game is shown, chosen in the library. See LayoutStore.SCREEN_* constants:
+     *  Auto (follow display + rotation), Internal portrait, Internal landscape, External display,
+     *  Fullscreen landscape (game fills the phone, physical gamepad drives — no touch pad). */
+    fun screenMode(): Int = prefs.getInt("screen_mode", SCREEN_AUTO)
+    fun setScreenMode(v: Int) { prefs.edit().putInt("screen_mode", v).apply() }
+
     /** Screen rotation in degrees: 0, 90, 180, 270. */
     fun videoRotation(): Int = prefs.getInt("video_rotation", 0)
 
@@ -113,4 +119,42 @@ class LayoutStore(context: Context) {
     /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
     fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)
     fun setLocalMultiplayer(v: Boolean) { prefs.edit().putBoolean("local_mp", v).apply() }
+
+    /** Show a live FPS counter over the game. */
+    fun fpsOverlay(): Boolean = prefs.getBoolean("fps_overlay", false)
+    fun setFpsOverlay(v: Boolean) { prefs.edit().putBoolean("fps_overlay", v).apply() }
+
+    /** Bezel/background behind the game: 0=None, 1=Dark, 2=Gradient, 3=Custom image. */
+    fun bezelMode(): Int = prefs.getInt("bezel_mode", 1)
+    fun setBezelMode(v: Int) { prefs.edit().putInt("bezel_mode", v).apply() }
+
+    /** Absolute path of the user's custom bezel image (used when bezelMode == 3). */
+    fun bezelImagePath(): String? = prefs.getString("bezel_image", null)
+    fun setBezelImagePath(path: String?) { prefs.edit().putString("bezel_image", path).apply() }
+
+    /** Gyro aiming: feed the phone's motion to the right analog stick. */
+    fun gyroAim(): Boolean = prefs.getBoolean("gyro_aim", false)
+    fun setGyroAim(v: Boolean) { prefs.edit().putBoolean("gyro_aim", v).apply() }
+
+    /** Gyro sensitivity multiplier, 0.2..3.0. */
+    fun gyroSensitivity(): Float = prefs.getFloat("gyro_sens", 1.0f).coerceIn(0.2f, 3.0f)
+    fun setGyroSensitivity(v: Float) { prefs.edit().putFloat("gyro_sens", v.coerceIn(0.2f, 3.0f)).apply() }
+
+    /** Control ids set to turbo/autofire, per console. */
+    fun turboButtons(console: Console): Set<String> =
+        prefs.getStringSet("turbo/${console.prefKey}", emptySet())?.toSet() ?: emptySet()
+
+    fun setTurbo(console: Console, id: String, on: Boolean) {
+        val s = turboButtons(console).toMutableSet()
+        if (on) s.add(id) else s.remove(id)
+        prefs.edit().putStringSet("turbo/${console.prefKey}", s).apply()
+    }
+
+    companion object {
+        const val SCREEN_AUTO = 0          // follow connected display + device rotation (default)
+        const val SCREEN_INT_PORTRAIT = 1  // on the phone, portrait: game on top, pad below
+        const val SCREEN_INT_LANDSCAPE = 2 // on the phone, landscape: game centred, pad frames it
+        const val SCREEN_EXTERNAL = 3      // game on an external display, phone is the pad
+        const val SCREEN_FULLSCREEN = 4    // game fills the phone (landscape), physical gamepad, no touch pad
+    }
 }

@@ -89,6 +89,10 @@ class EmulationActivity : AppCompatActivity() {
     private var menuDialog: AlertDialog? = null
     private lateinit var layoutStore: LayoutStore
     private lateinit var inputConfig: com.nvanloo.retroglass.controller.InputConfig
+    private lateinit var coreOptions: com.nvanloo.retroglass.controller.CoreOptions
+    private lateinit var cheats: com.nvanloo.retroglass.controller.Cheats
+    private val gameKey: String get() = romFile.absolutePath
+    private val consoleKey: String get() = console.name
     private var bindingCaptureDevice: String? = null
     private var bindingCapture: ((Int) -> Unit)? = null
     private var videoScale: Float = 1.0f
@@ -103,8 +107,23 @@ class EmulationActivity : AppCompatActivity() {
     private lateinit var phoneErrorText: TextView
     private lateinit var loadingText: TextView
     private lateinit var pauseOverlay: TextView
+    private lateinit var floatingMenu: TextView
+    private lateinit var fpsView: TextView
+    private lateinit var bezelView: android.widget.ImageView
     private var firstFrameSeen = false
     private var pausedByDisconnect = false
+
+    private var frameCounter = 0
+    private var gyroRegistered = false
+    private var gyroAimX = 0f
+    private var gyroAimY = 0f
+
+    /** Physical gamepad keys currently held, for detecting the menu hotkey (L1+R1+Select). */
+    private val pressedGamepadKeys = mutableSetOf<Int>()
+    private val uiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val hideFloatingMenuRunnable = Runnable {
+        if (phoneIsDisplay()) floatingMenu.visibility = View.GONE
+    }
 
     private val extendedMode: Boolean get() = presentation != null
 
@@ -137,7 +156,7 @@ class EmulationActivity : AppCompatActivity() {
 
     /** Shows the touch pad only when the phone is assigned to a player port. */
     private fun updateForGamepad(announce: Boolean) {
-        controllerView.visibility = if (phonePort() >= 0) View.VISIBLE else View.GONE
+        arrangeLayout()
         if (hasGamepad() && announce && !gamepadHintShown) {
             gamepadHintShown = true
             Toast.makeText(this, R.string.gamepad_connected, Toast.LENGTH_LONG).show()
@@ -173,6 +192,17 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun phonePort(): Int = portFor(com.nvanloo.retroglass.controller.InputConfig.PHONE, null)
 
+    /** Number of distinct player ports that have an input source assigned (phone + each pad).
+     *  Drives whether we arm multitap: >2 means a 3rd/4th controller needs it. */
+    private fun activePortCount(): Int {
+        val ports = mutableSetOf<Int>()
+        phonePort().takeIf { it >= 0 }?.let { ports.add(it) }
+        connectedGamepads().forEach { d ->
+            portFor(deviceKey(d), d).takeIf { it >= 0 }?.let { ports.add(it) }
+        }
+        return ports.size
+    }
+
     /** Android face buttons sit opposite RetroPad's; swap A/B and X/Y (as LibretroDroid does). */
     private fun androidToRetroKey(keyCode: Int): Int? = when (keyCode) {
         KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_BUTTON_B
@@ -194,6 +224,17 @@ class EmulationActivity : AppCompatActivity() {
         val v = retroView
         if (v != null && isGamepadEvent(event.source) && event.keyCode != KeyEvent.KEYCODE_BACK) {
             val key = deviceKey(event.device)
+            // Track held buttons and open the in-game menu on the L1+R1+Select hotkey. This
+            // works in every mode (touch, gamepad-on-phone, external display), so a player
+            // on a Bluetooth pad can reach the menu with no external screen or touch needed.
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> pressedGamepadKeys.add(event.keyCode)
+                KeyEvent.ACTION_UP -> pressedGamepadKeys.remove(event.keyCode)
+            }
+            if (event.action == KeyEvent.ACTION_DOWN && isMenuHotkey()) {
+                openMenuFromGamepad(key, event.device)
+                return true
+            }
             val capture = bindingCapture
             if (capture != null && bindingCaptureDevice == key && event.action == KeyEvent.ACTION_DOWN &&
                 androidToRetroKey(event.keyCode) != null
@@ -220,10 +261,12 @@ class EmulationActivity : AppCompatActivity() {
             val key = deviceKey(event.device)
             val port = portFor(key, event.device)
             if (port < 0) return true
+            val dead = inputConfig.deadzone(key)
+            val sens = inputConfig.sensitivity(key)
             val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
             val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
-            val lx = event.getAxisValue(MotionEvent.AXIS_X)
-            val ly = event.getAxisValue(MotionEvent.AXIS_Y)
+            val lx = tuneAxis(event.getAxisValue(MotionEvent.AXIS_X), dead, sens)
+            val ly = tuneAxis(event.getAxisValue(MotionEvent.AXIS_Y), dead, sens)
             if (inputConfig.leftStickAsDpad(key)) {
                 val dx = if (lx > 0.5f) 1f else if (lx < -0.5f) -1f else hatX
                 val dy = if (ly > 0.5f) 1f else if (ly < -0.5f) -1f else hatY
@@ -233,11 +276,38 @@ class EmulationActivity : AppCompatActivity() {
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, hatX, hatY, port)
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, lx, ly, port)
             }
-            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
-                event.getAxisValue(MotionEvent.AXIS_Z), event.getAxisValue(MotionEvent.AXIS_RZ), port)
+            v.sendMotionEvent(
+                GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
+                tuneAxis(event.getAxisValue(MotionEvent.AXIS_Z), dead, sens),
+                tuneAxis(event.getAxisValue(MotionEvent.AXIS_RZ), dead, sens),
+                port,
+            )
             return true
         }
         return super.onGenericMotionEvent(event)
+    }
+
+    /** Applies a dead zone (rescaled so motion starts smoothly past it) and sensitivity. */
+    private fun tuneAxis(raw: Float, deadzone: Float, sensitivity: Float): Float {
+        val mag = kotlin.math.abs(raw)
+        if (mag <= deadzone) return 0f
+        val scaled = (mag - deadzone) / (1f - deadzone) * sensitivity
+        return (if (raw < 0) -scaled else scaled).coerceIn(-1f, 1f)
+    }
+
+    /** Orientation follows the library's screen-mode choice (Auto/External follow the sensor). */
+    private fun applyScreenOrientation() {
+        requestedOrientation = when (layoutStore.screenMode()) {
+            LayoutStore.SCREEN_INT_PORTRAIT -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            LayoutStore.SCREEN_INT_LANDSCAPE,
+            LayoutStore.SCREEN_FULLSCREEN -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER
+        }
+    }
+
+    /** Whether the current screen mode is allowed to send the game to an external display. */
+    private fun modeUsesExternal(): Boolean = layoutStore.screenMode().let {
+        it == LayoutStore.SCREEN_AUTO || it == LayoutStore.SCREEN_EXTERNAL
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -261,7 +331,10 @@ class EmulationActivity : AppCompatActivity() {
         mediaRouter = getSystemService(Context.MEDIA_ROUTER_SERVICE) as android.media.MediaRouter
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         layoutStore = LayoutStore(this)
+        applyScreenOrientation()
         inputConfig = com.nvanloo.retroglass.controller.InputConfig(this)
+        coreOptions = com.nvanloo.retroglass.controller.CoreOptions(this)
+        cheats = com.nvanloo.retroglass.controller.Cheats(this)
         videoScale = layoutStore.videoScale()
         videoScaleLocal = layoutStore.localVideoScale()
 
@@ -279,6 +352,21 @@ class EmulationActivity : AppCompatActivity() {
         })
 
         applyDisplayMode("onCreate")
+        applyBezel()
+        startFpsTicker()
+    }
+
+    private val pickBezelImage = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching {
+            val dest = File(filesDir, "bezel.png")
+            contentResolver.openInputStream(uri)?.use { input -> dest.outputStream().use { input.copyTo(it) } }
+            layoutStore.setBezelImagePath(dest.absolutePath)
+            layoutStore.setBezelMode(3)
+            applyBezel()
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -301,15 +389,104 @@ class EmulationActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------- FPS overlay
+
+    private fun startFpsTicker() {
+        val tick = object : Runnable {
+            override fun run() {
+                if (layoutStore.fpsOverlay()) {
+                    fpsView.visibility = View.VISIBLE
+                    fpsView.text = getString(R.string.fps_value, frameCounter)
+                    fpsView.bringToFront()
+                } else {
+                    fpsView.visibility = View.GONE
+                }
+                frameCounter = 0
+                uiHandler.postDelayed(this, 1000)
+            }
+        }
+        uiHandler.postDelayed(tick, 1000)
+    }
+
+    // ------------------------------------------------------------- bezel
+
+    /** Paints the background behind the game: none / dark / gradient / a custom image. */
+    private fun applyBezel() {
+        when (layoutStore.bezelMode()) {
+            0 -> { // None — transparent (shows the black window behind)
+                bezelView.visibility = View.GONE
+            }
+            2 -> { // Gradient
+                bezelView.setImageDrawable(null)
+                bezelView.background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                    intArrayOf(Color.parseColor("#1B1B2E"), Color.parseColor("#05050A")),
+                )
+                bezelView.visibility = View.VISIBLE
+            }
+            3 -> { // Custom image
+                val path = layoutStore.bezelImagePath()
+                val bmp = path?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it) }.getOrNull() }
+                if (bmp != null) {
+                    bezelView.background = null
+                    bezelView.setImageBitmap(bmp)
+                    bezelView.visibility = View.VISIBLE
+                } else {
+                    bezelView.setBackgroundColor(Color.BLACK)
+                    bezelView.visibility = View.VISIBLE
+                }
+            }
+            else -> { // Dark (default)
+                bezelView.setImageDrawable(null)
+                bezelView.setBackgroundColor(Color.BLACK)
+                bezelView.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    // --------------------------------------------------------- gyro aiming
+
+    private val sensorManager by lazy { getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager }
+
+    private val gyroListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(event: android.hardware.SensorEvent) {
+            val v = retroView ?: return
+            val sens = layoutStore.gyroSensitivity()
+            // Angular velocity (rad/s): rotating the phone deflects the right stick like a
+            // rate-controlled cursor; hold still and it recenters.
+            gyroAimX = (-event.values[1] * sens).coerceIn(-1f, 1f)
+            gyroAimY = (-event.values[0] * sens).coerceIn(-1f, 1f)
+            val port = phonePort().coerceAtLeast(0)
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT, gyroAimX, gyroAimY, port)
+        }
+
+        override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+    }
+
+    private fun updateGyro() {
+        val want = layoutStore.gyroAim() && !pausedByDisconnect
+        val gyro = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE)
+        if (want && !gyroRegistered && gyro != null) {
+            sensorManager.registerListener(gyroListener, gyro, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+            gyroRegistered = true
+        } else if (!want && gyroRegistered) {
+            sensorManager.unregisterListener(gyroListener)
+            gyroRegistered = false
+        }
+    }
+
     // ------------------------------------------------------------------ UI
 
     private fun buildUi() {
         rootLayout = FrameLayout(this)
-        gameContainer = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        // Transparent so the bezel view behind it frames a shrunk picture (bezel mode
+        // "Dark" repaints the usual black letterbox).
+        gameContainer = FrameLayout(this)
         controllerView = ControllerView(this).apply {
             setConsole(console)
             listener = inputListener
             onLayoutEdited = { }
+            turboIds = layoutStore.turboButtons(console)
         }
         statusText = TextView(this).apply {
             setTextColor(Color.parseColor("#88FFFFFF"))
@@ -344,10 +521,50 @@ class EmulationActivity : AppCompatActivity() {
             visibility = View.GONE
             setOnClickListener { resumeFromPause() }
         }
+        floatingMenu = TextView(this).apply {
+            text = "≡"  // ≡
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#66000000"))
+            textSize = 24f
+            gravity = Gravity.CENTER
+            val p = (10 * resources.displayMetrics.density).toInt()
+            setPadding(p + p / 2, p, p + p / 2, p)
+            isClickable = true
+            visibility = View.GONE
+            setOnClickListener { showMenu() }
+        }
+        fpsView = TextView(this).apply {
+            setTextColor(Color.parseColor("#B6FF6A"))
+            setBackgroundColor(Color.parseColor("#66000000"))
+            textSize = 12f
+            val p = (5 * resources.displayMetrics.density).toInt()
+            setPadding(p + p, p, p + p, p)
+            visibility = View.GONE
+        }
+        bezelView = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            visibility = View.GONE
+        }
         editBar = buildEditBar()
 
+        // Bezel/background sits behind the game so it frames a shrunk picture.
+        rootLayout.addView(bezelView, matchParent())
         rootLayout.addView(gameContainer, matchParent())
         rootLayout.addView(controllerView, matchParent())
+        rootLayout.addView(
+            fpsView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply { topMargin = 8 },
+        )
+        rootLayout.addView(
+            floatingMenu,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.START,
+            ).apply { topMargin = 16; leftMargin = 16 },
+        )
         rootLayout.addView(
             statusText,
             FrameLayout.LayoutParams(
@@ -430,17 +647,36 @@ class EmulationActivity : AppCompatActivity() {
             rumbleEventsEnabled = true
             shader = shaderForIndex(layoutStore.shaderIndex())
             sramFile().takeIf { it.exists() }?.let { saveRAMState = it.readBytes() }
+            // User core-option overrides, then the system's forced variables (which win —
+            // e.g. atari800_system selects 5200 vs 8-bit computer for the shared core).
+            val merged = LinkedHashMap<String, String>()
+            coreOptions.overrides(consoleKey).forEach { (k, v) -> merged[k] = v }
+            console.forcedCoreVariables.forEach { (k, v) -> merged[k] = v }
+            // With 3+ controllers assigned, arm the core's multitap (option-based cores only;
+            // device-based multitaps are enabled in applyMultitap() after the core loads).
+            if (activePortCount() > 2) {
+                console.multitapCoreVariables.forEach { (k, v) -> merged[k] = v }
+            }
+            if (merged.isNotEmpty()) {
+                variables = merged.map { com.swordfish.libretrodroid.Variable(it.key, it.value, "") }.toTypedArray()
+            }
         }
         val view = GLRetroView(this, data)
         lifecycle.addObserver(view)
 
         view.getGLRetroEvents()
             .onEach { event ->
-                if (event is GLRetroView.GLRetroEvents.FrameRendered && !firstFrameSeen) {
-                    firstFrameSeen = true
-                    runOnUiThread {
-                        loadingText.visibility = View.GONE
-                        autoLoadState()
+                if (event is GLRetroView.GLRetroEvents.FrameRendered) {
+                    frameCounter++
+                    if (!firstFrameSeen) {
+                        firstFrameSeen = true
+                        runOnUiThread {
+                            loadingText.visibility = View.GONE
+                            autoLoadState()
+                            applyCheats()
+                            applyControllerTypes()
+                            applyMultitap()
+                        }
                     }
                 }
             }
@@ -490,7 +726,8 @@ class EmulationActivity : AppCompatActivity() {
      */
     private fun applyDisplayMode(reason: String) {
         val view = retroView ?: return
-        val external = findExternalDisplay()
+        // Internal / Fullscreen modes keep the game on the phone even if glasses are plugged in.
+        val external = if (modeUsesExternal()) findExternalDisplay() else null
         val currentPresentationDisplayId = presentation?.display?.displayId
         Log.i(
             TAG,
@@ -533,17 +770,98 @@ class EmulationActivity : AppCompatActivity() {
      *  - portrait, no glasses: game as a screen across the top, controller below it
      *  - landscape, no glasses: game centered/scaled with the controller as an overlay
      */
+    /** True when there's no external display and the phone itself is not a player
+     *  (e.g. one or two Bluetooth pads drive the game). The phone becomes the
+     *  display: the game fills the screen, no touch controller, a floating menu
+     *  button lets the user open the menu / exit. */
+    private fun phoneIsDisplay(): Boolean {
+        if (extendedMode) return false
+        if (phonePort() < 0) return true
+        // Fullscreen mode: game fills the phone and a physical gamepad drives it.
+        return layoutStore.screenMode() == LayoutStore.SCREEN_FULLSCREEN && connectedGamepads().isNotEmpty()
+    }
+
+    /** Shows the floating ≡ button, then schedules it to fade out after a few idle seconds. */
+    private fun revealFloatingMenu() {
+        if (!phoneIsDisplay()) return
+        floatingMenu.visibility = View.VISIBLE
+        floatingMenu.bringToFront()
+        uiHandler.removeCallbacks(hideFloatingMenuRunnable)
+        uiHandler.postDelayed(hideFloatingMenuRunnable, 3000)
+    }
+
+    // A tap anywhere brings the floating menu button back (phone-as-display mode only).
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && phoneIsDisplay()) revealFloatingMenu()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** Opens the in-game menu from a gamepad, releasing the hotkey buttons so nothing sticks. */
+    private fun openMenuFromGamepad(key: String, device: InputDevice?) {
+        val v = retroView ?: return
+        val port = portFor(key, device).coerceAtLeast(0)
+        // The hotkey buttons' key-ups will go to the menu dialog, not the game, so release
+        // them on the emulator now to avoid stuck inputs when the menu closes.
+        inputConfig.menuHotkey().forEach {
+            androidToRetroKey(it)?.let { rk -> v.sendKeyEvent(KeyEvent.ACTION_UP, rk, port) }
+        }
+        pressedGamepadKeys.clear()
+        showMenu()
+    }
+
+    private fun isMenuHotkey(): Boolean {
+        val combo = inputConfig.menuHotkey()
+        return combo.isNotEmpty() && pressedGamepadKeys.containsAll(combo)
+    }
+
+    /**
+     * Makes an AlertDialog fully operable from a gamepad: the D-pad already moves the
+     * selection (Android handles that for focusable lists/buttons), so we only translate
+     * the face buttons — A → confirm (D-pad centre), B → back. Select/Start are left alone
+     * so releasing the menu hotkey doesn't dismiss the dialog.
+     */
+    private fun AlertDialog.gamepadNavigable(): AlertDialog {
+        setOnKeyListener { d, keyCode, ev ->
+            val mapped = when (keyCode) {
+                KeyEvent.KEYCODE_BUTTON_A -> KeyEvent.KEYCODE_DPAD_CENTER
+                KeyEvent.KEYCODE_BUTTON_B -> KeyEvent.KEYCODE_BACK
+                else -> return@setOnKeyListener false
+            }
+            (d as? android.app.Dialog)?.window?.decorView?.dispatchKeyEvent(KeyEvent(ev.action, mapped))
+            true
+        }
+        return this
+    }
+
     private fun arrangeLayout() {
+        if (!::controllerView.isInitialized || !::gameContainer.isInitialized) return
         if (extendedMode) {
+            controllerView.visibility = View.VISIBLE
+            floatingMenu.visibility = View.GONE
             gameContainer.visibility = View.GONE
             controllerView.overlayMode = false
+            controllerView.layoutMode = ControllerView.LAYOUT_FULLPAD
             setRegion(controllerView, fraction = 1f, top = false)
             applyVideoTransform()
             return
         }
+        if (phoneIsDisplay()) {
+            // Phone is the TV: game fills the screen, touch pad hidden, floating menu
+            // that fades out when there's no touch activity.
+            controllerView.visibility = View.GONE
+            gameContainer.visibility = View.VISIBLE
+            setRegion(gameContainer, fraction = 1f, top = false)
+            revealFloatingMenu()
+            applyVideoTransform()
+            return
+        }
+        uiHandler.removeCallbacks(hideFloatingMenuRunnable)
+        controllerView.visibility = View.VISIBLE
+        floatingMenu.visibility = View.GONE
         gameContainer.visibility = View.VISIBLE
         if (isPortrait()) {
             controllerView.overlayMode = false
+            controllerView.layoutMode = ControllerView.LAYOUT_PORTRAIT
             rootLayout.post {
                 val h = rootLayout.height
                 if (h == 0) return@post
@@ -554,9 +872,26 @@ class EmulationActivity : AppCompatActivity() {
             }
         } else {
             controllerView.overlayMode = true
-            setRegion(gameContainer, fraction = 1f, top = false)
+            controllerView.layoutMode = ControllerView.LAYOUT_FRAME
             setRegion(controllerView, fraction = 1f, top = false)
-            applyVideoTransform()
+            if (layoutStore.screenMode() == LayoutStore.SCREEN_INT_LANDSCAPE) {
+                // Separate landscape: the game sits in a centred window with the pad framing it,
+                // rather than the pad overlaying a full-bleed picture.
+                rootLayout.post {
+                    val w = rootLayout.width
+                    if (w == 0) return@post
+                    val lp = (gameContainer.layoutParams as? FrameLayout.LayoutParams)
+                        ?: FrameLayout.LayoutParams(0, 0)
+                    lp.width = (w * 0.60f).toInt()
+                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    lp.gravity = Gravity.CENTER
+                    gameContainer.layoutParams = lp
+                    applyVideoTransform()
+                }
+            } else {
+                setRegion(gameContainer, fraction = 1f, top = false)
+                applyVideoTransform()
+            }
         }
     }
 
@@ -588,7 +923,10 @@ class EmulationActivity : AppCompatActivity() {
         val parent = v.parent as? FrameLayout ?: return
         val scale = when {
             extendedMode -> videoScale
+            phoneIsDisplay() -> videoScale
             isPortrait() -> 1.0f
+            // Separate landscape sizes the container itself, so the game fills it.
+            layoutStore.screenMode() == LayoutStore.SCREEN_INT_LANDSCAPE -> 1.0f
             else -> videoScaleLocal
         }
         val rot = layoutStore.videoRotation()
@@ -695,8 +1033,9 @@ class EmulationActivity : AppCompatActivity() {
         }
 
         override fun onStick(id: String, x: Float, y: Float) {
-            // "cbuttons" is the N64 C-cluster, which the core reads as the right analog.
-            val source = if (id == "stick_r" || id == "cbuttons") {
+            // "cbuttons" (N64 C-cluster) and "intvkp" (Intellivision keypad 1-9) both drive
+            // the right analog, which those cores read for the C-buttons / numeric disc.
+            val source = if (id == "stick_r" || id == "cbuttons" || id == "intvkp") {
                 GLRetroView.MOTION_SOURCE_ANALOG_RIGHT
             } else {
                 GLRetroView.MOTION_SOURCE_ANALOG_LEFT
@@ -719,15 +1058,26 @@ class EmulationActivity : AppCompatActivity() {
         ) to { toggleFastForward() }
         actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
+        actions += getString(R.string.menu_core_options) to { showCoreOptions() }
+        actions += getString(R.string.menu_cheats) to { showCheats() }
+        actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
         if ((retroView?.getAvailableDisks() ?: 0) > 1) {
             actions += getString(R.string.menu_swap_disc) to { showDiscSwap() }
         }
-        actions += getString(R.string.menu_choose_layout) to { showLayoutPicker() }
-        actions += getString(R.string.menu_edit_layout) to { setEditMode(true) }
+        // Touch-controller layout options only matter when the phone shows the pad.
+        if (controllerView.visibility == View.VISIBLE) {
+            actions += getString(R.string.menu_choose_layout) to { showLayoutPicker() }
+            actions += getString(R.string.menu_edit_layout) to { setEditMode(true) }
+            actions += getString(R.string.menu_turbo) to { showTurboConfig() }
+        }
         actions += getString(
             if (layoutStore.rumbleEnabled()) R.string.menu_rumble_on else R.string.menu_rumble_off,
         ) to { layoutStore.setRumbleEnabled(!layoutStore.rumbleEnabled()) }
         actions += getString(R.string.menu_controllers) to { showControllers() }
+        if (hasControllerTypeChoices()) {
+            actions += getString(R.string.menu_controller_type) to { showControllerTypes() }
+        }
+        actions += getString(R.string.menu_display_extras) to { showDisplayExtras() }
         actions += getString(R.string.menu_reset) to { retroView?.reset(); Unit }
         actions += getString(R.string.menu_exit) to { exitGame() }
 
@@ -737,7 +1087,7 @@ class EmulationActivity : AppCompatActivity() {
             .setTitle(romFile.nameWithoutExtension)
             .setItems(names) { _, which -> actions[which].second() }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun showDiscSwap() {
@@ -756,7 +1106,7 @@ class EmulationActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     // ------------------------------------------------------------ controllers
@@ -778,8 +1128,25 @@ class EmulationActivity : AppCompatActivity() {
                 val c = items[which]
                 showControllerOptions(c.key, c.name, c.device, c.key != PHONE)
             }
+            .setNeutralButton(R.string.menu_hotkey_title) { _, _ -> showMenuHotkeyPicker() }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
+    }
+
+    private fun showMenuHotkeyPicker() {
+        val presets = com.nvanloo.retroglass.controller.InputConfig.MENU_HOTKEY_PRESETS
+        val current = inputConfig.menuHotkey()
+        val checked = presets.indexOfFirst { it.second == current }
+        val labels = presets.map { it.first }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_hotkey_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                inputConfig.setMenuHotkey(presets[which].second)
+                Toast.makeText(this, getString(R.string.menu_hotkey_set, labels[which]), Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
     }
 
     private fun showControllerOptions(key: String, name: String, device: InputDevice?, isGamepad: Boolean) {
@@ -789,6 +1156,7 @@ class EmulationActivity : AppCompatActivity() {
             opts += getString(
                 if (inputConfig.leftStickAsDpad(key)) R.string.ctrl_stick_dpad_on else R.string.ctrl_stick_dpad_off,
             )
+            opts += getString(R.string.ctrl_stick_tuning)
             opts += getString(R.string.ctrl_reset_map)
         }
         AlertDialog.Builder(this)
@@ -797,6 +1165,7 @@ class EmulationActivity : AppCompatActivity() {
                 when (opts[which]) {
                     getString(R.string.ctrl_set_player) -> showPlayerPicker(key, name, device)
                     getString(R.string.ctrl_remap) -> showRemap(key, name)
+                    getString(R.string.ctrl_stick_tuning) -> showStickTuning(key, name)
                     getString(R.string.ctrl_reset_map) -> {
                         inputConfig.clearBindings(key)
                         Toast.makeText(this, R.string.ctrl_map_reset, Toast.LENGTH_SHORT).show()
@@ -805,7 +1174,33 @@ class EmulationActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
+    }
+
+    /** Dead-zone and sensitivity sliders for a gamepad's analog sticks. */
+    private fun showStickTuning(key: String, name: String) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (20 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, 0)
+        }
+        // Dead zone 0..0.5 → 0..50.
+        addSlider(
+            container, maxProgress = 50,
+            initialProgress = (inputConfig.deadzone(key) * 100f).toInt(),
+            labelFor = { getString(R.string.ctrl_deadzone_value, it) },
+        ) { p -> inputConfig.setDeadzone(key, p / 100f) }
+        // Sensitivity 0.5..2.0 → 0..150.
+        addSlider(
+            container, maxProgress = 150,
+            initialProgress = ((inputConfig.sensitivity(key) - 0.5f) * 100f).toInt(),
+            labelFor = { getString(R.string.ctrl_sensitivity_value, String.format("%.2f", 0.5f + it / 100f)) },
+        ) { p -> inputConfig.setSensitivity(key, 0.5f + p / 100f) }
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok, null)
+            .show().gamepadNavigable()
     }
 
     private fun showPlayerPicker(key: String, name: String, device: InputDevice?) {
@@ -820,7 +1215,7 @@ class EmulationActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun showRemap(key: String, name: String) {
@@ -848,13 +1243,16 @@ class EmulationActivity : AppCompatActivity() {
             .setNegativeButton(android.R.string.cancel) { _, _ ->
                 bindingCapture = null; bindingCaptureDevice = null
             }
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun shaderForIndex(i: Int): ShaderConfig = when (i) {
         1 -> ShaderConfig.CRT
         2 -> ShaderConfig.LCD
         3 -> ShaderConfig.Sharp
+        // CUT2 is LibretroDroid's edge-smoothing upscaler (the filter Lemuroid ships as its
+        // default) — cleans up low-res pixels on a big external display without CRT/LCD look.
+        4 -> ShaderConfig.CUT2()
         else -> ShaderConfig.Default
     }
 
@@ -864,6 +1262,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_crt),
             getString(R.string.filter_lcd),
             getString(R.string.filter_sharp),
+            getString(R.string.filter_upscale),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)
@@ -873,7 +1272,392 @@ class EmulationActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
+    }
+
+    // ---------------------------------------------------------- core options
+
+    /** Lists the core's live options (real keys/values from the core), each editable. */
+    private fun showCoreOptions() {
+        val view = retroView ?: return
+        val vars = view.getVariables()
+        if (vars.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.core_options_title, console.displayName))
+                .setMessage(R.string.core_options_none)
+                .setPositiveButton(android.R.string.ok, null)
+                .show().gamepadNavigable()
+            return
+        }
+        // Show the stored override if any, else the core's current value.
+        val stored = coreOptions.overrides(consoleKey)
+        val labels = vars.map { v ->
+            val key = v.key ?: ""
+            val cur = stored[key] ?: (v.value ?: "")
+            val desc = (v.description ?: "").ifBlank { key }
+            "$desc\n  = ${valueLabel(key, cur)}"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.core_options_title, console.displayName))
+            .setItems(labels) { _, which -> editCoreOption(vars[which].key ?: "", vars[which].description ?: "") }
+            .setNeutralButton(R.string.core_option_reset_all) { _, _ ->
+                coreOptions.clear(consoleKey)
+                Toast.makeText(this, R.string.core_options_note, Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    /** Human label for a stored value (uses the curated list when the value is known). */
+    private fun valueLabel(key: String, value: String): String =
+        com.nvanloo.retroglass.controller.CoreOptions.KNOWN_VALUES[key]
+            ?.firstOrNull { it.second == value }?.first ?: value
+
+    private fun editCoreOption(key: String, description: String) {
+        val known = com.nvanloo.retroglass.controller.CoreOptions.KNOWN_VALUES[key]
+        if (known != null) {
+            val labels = known.map { it.first }.toTypedArray()
+            val current = coreOptions.override(consoleKey, key)
+            val checked = known.indexOfFirst { it.second == current }
+            AlertDialog.Builder(this)
+                .setTitle(description.ifBlank { key })
+                .setSingleChoiceItems(labels, checked) { dialog, which ->
+                    applyCoreOption(key, known[which].second)
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show().gamepadNavigable()
+        } else {
+            val input = android.widget.EditText(this).apply {
+                setText(coreOptions.override(consoleKey, key) ?: "")
+                hint = getString(R.string.core_option_enter, key)
+            }
+            AlertDialog.Builder(this)
+                .setTitle(description.ifBlank { key })
+                .setView(input)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val v = input.text.toString().trim()
+                    if (v.isNotEmpty()) applyCoreOption(key, v)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show().gamepadNavigable()
+        }
+    }
+
+    private fun applyCoreOption(key: String, value: String) {
+        coreOptions.setOverride(consoleKey, key, value)
+        retroView?.updateVariables(com.swordfish.libretrodroid.Variable(key, value, ""))
+        Toast.makeText(this, R.string.core_options_note, Toast.LENGTH_LONG).show()
+    }
+
+    // ---------------------------------------------------------- cheats
+
+    private fun applyCheats() {
+        val view = retroView ?: return
+        cheats.list(gameKey).forEachIndexed { i, c ->
+            runCatching { view.setCheat(i, c.enabled, c.code) }
+        }
+    }
+
+    // ---------------------------------------------------------- controller type
+
+    /** Re-applies any saved controller-type choices (e.g. PS1 analog) to their ports. */
+    private fun applyControllerTypes() {
+        val view = retroView ?: return
+        val ports = view.getControllers()
+        for (port in ports.indices) {
+            val typeId = inputConfig.controllerType(consoleKey, port) ?: continue
+            if (ports[port].any { it.id == typeId }) {
+                runCatching { view.setControllerType(port, typeId) }
+            }
+        }
+    }
+
+    private val multitapKeywords = listOf(
+        "multitap", "multi tap", "multi-tap", "four score", "fourscore",
+        "4-way", "4 way", "teamplayer", "team player", "j-cart", "jcart", "5-player", "multi5",
+    )
+
+    /** When 3+ controllers are assigned, arm the console's multitap so ports 3/4 reach the game.
+     *  Cores that expose the multitap as a port device (SNES/NES/Genesis/Saturn/PC Engine) list
+     *  it in getControllers(); we match it by description and select it. Option-based cores
+     *  (PS1's pcsx_rearmed) were already handled via forced variables at load. */
+    private fun applyMultitap() {
+        val view = retroView ?: return
+        val count = activePortCount()
+        if (count <= 2) return
+        var armed = console.multitapCoreVariables.isNotEmpty()
+        val ports = view.getControllers()
+        for (port in ports.indices) {
+            val tap = ports[port].firstOrNull { t ->
+                val d = (t.description ?: "").lowercase()
+                multitapKeywords.any { d.contains(it) }
+            } ?: continue
+            if (runCatching { view.setControllerType(port, tap.id) }.isSuccess) armed = true
+        }
+        if (armed) {
+            Toast.makeText(this, getString(R.string.multitap_armed, count), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** True when at least one port offers more than one controller type worth choosing. */
+    private fun hasControllerTypeChoices(): Boolean =
+        retroView?.getControllers()?.any { it.size > 1 } == true
+
+    private fun showControllerTypes() {
+        val view = retroView ?: return
+        val ports = view.getControllers()
+        val selectablePorts = ports.indices.filter { ports[it].size > 1 }
+        if (selectablePorts.isEmpty()) {
+            Toast.makeText(this, R.string.ctype_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (selectablePorts.size == 1) {
+            showControllerTypeForPort(selectablePorts.first())
+            return
+        }
+        val labels = selectablePorts.map { getString(R.string.player_n, it + 1) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.ctype_title)
+            .setItems(labels) { _, which -> showControllerTypeForPort(selectablePorts[which]) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showControllerTypeForPort(port: Int) {
+        val view = retroView ?: return
+        val types = view.getControllers().getOrNull(port) ?: return
+        val labels = types.map { it.description ?: "Type ${it.id}" }.toTypedArray()
+        val currentId = inputConfig.controllerType(consoleKey, port)
+        val checked = types.indexOfFirst { it.id == currentId }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.ctype_port_title, port + 1))
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                val id = types[which].id
+                inputConfig.setControllerType(consoleKey, port, id)
+                runCatching { view.setControllerType(port, id) }
+                Toast.makeText(this, getString(R.string.ctype_set, labels[which]), Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    // -------------------------------------------------- display & extras
+
+    private fun showDisplayExtras() {
+        val actions = mutableListOf<Pair<String, () -> Unit>>()
+        actions += getString(
+            if (layoutStore.fpsOverlay()) R.string.menu_fps_on else R.string.menu_fps_off,
+        ) to { layoutStore.setFpsOverlay(!layoutStore.fpsOverlay()) }
+        actions += getString(R.string.menu_bezel) to { showBezelPicker() }
+        actions += getString(
+            if (layoutStore.gyroAim()) R.string.menu_gyro_on else R.string.menu_gyro_off,
+        ) to { toggleGyro() }
+        if (layoutStore.gyroAim()) {
+            actions += getString(R.string.menu_gyro_sensitivity) to { showGyroSensitivity() }
+        }
+        val names = actions.map { it.first }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_display_extras)
+            .setItems(names) { _, which -> actions[which].second() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun toggleGyro() {
+        val enabling = !layoutStore.gyroAim()
+        layoutStore.setGyroAim(enabling)
+        updateGyro()
+        if (enabling && sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE) == null) {
+            Toast.makeText(this, R.string.gyro_unavailable, Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(
+                this,
+                if (enabling) R.string.gyro_enabled else R.string.gyro_disabled,
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun showGyroSensitivity() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = (20 * resources.displayMetrics.density).toInt()
+            setPadding(p, p, p, 0)
+        }
+        // Map 0.2..3.0 onto 0..280.
+        addSlider(
+            container, maxProgress = 280,
+            initialProgress = ((layoutStore.gyroSensitivity() - 0.2f) * 100f).toInt(),
+            labelFor = { getString(R.string.gyro_sensitivity_value, String.format("%.1f", 0.2f + it / 100f)) },
+        ) { p -> layoutStore.setGyroSensitivity(0.2f + p / 100f) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_gyro_sensitivity)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showBezelPicker() {
+        val labels = arrayOf(
+            getString(R.string.bezel_none),
+            getString(R.string.bezel_dark),
+            getString(R.string.bezel_gradient),
+            getString(R.string.bezel_custom),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_bezel)
+            .setSingleChoiceItems(labels, layoutStore.bezelMode()) { dialog, which ->
+                if (which == 3) {
+                    dialog.dismiss()
+                    pickBezelImage.launch(arrayOf("image/*"))
+                } else {
+                    layoutStore.setBezelMode(which)
+                    applyBezel()
+                    dialog.dismiss()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun showCheats() {
+        val list = cheats.list(gameKey)
+        val labels = list.map { (if (it.enabled) "☑ " else "☐ ") + it.name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.cheats_title, console.displayName))
+            .apply {
+                if (list.isEmpty()) setMessage(R.string.cheats_none)
+                else setItems(labels) { _, which -> toggleCheat(which) }
+            }
+            .setPositiveButton(R.string.cheat_add) { _, _ -> showAddCheat() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun toggleCheat(index: Int) {
+        val list = cheats.list(gameKey)
+        val c = list.getOrNull(index) ?: return
+        AlertDialog.Builder(this)
+            .setTitle(c.name)
+            .setMessage(c.code)
+            .setPositiveButton(if (c.enabled) "Disable" else "Enable") { _, _ ->
+                cheats.setEnabled(gameKey, index, !c.enabled)
+                reapplyCheats()
+                showCheats()
+            }
+            .setNeutralButton(R.string.cheat_delete) { _, _ ->
+                cheats.removeAt(gameKey, index)
+                reapplyCheats()
+                showCheats()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> showCheats() }
+            .show().gamepadNavigable()
+    }
+
+    /** Cheats can't be individually cleared, so reset and re-apply the whole enabled set. */
+    private fun reapplyCheats() {
+        val view = retroView ?: return
+        // setCheat with empty code + disabled clears a slot; clear a generous range then re-add.
+        for (i in 0 until 64) runCatching { view.setCheat(i, false, "") }
+        applyCheats()
+    }
+
+    private fun showAddCheat() {
+        val density = resources.displayMetrics.density
+        val pad = (18 * density).toInt()
+        val name = android.widget.EditText(this).apply { hint = getString(R.string.cheat_name) }
+        val code = android.widget.EditText(this).apply {
+            hint = getString(R.string.cheat_code)
+            minLines = 2
+            setHorizontallyScrolling(false)
+        }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(name)
+            addView(code)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.cheat_add)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val codeText = code.text.toString().trim()
+                if (codeText.isEmpty()) {
+                    Toast.makeText(this, R.string.cheat_need_code, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val nameText = name.text.toString().trim().ifEmpty { "Cheat ${cheats.list(gameKey).size + 1}" }
+                cheats.add(gameKey, com.nvanloo.retroglass.controller.Cheat(nameText, codeText, true))
+                reapplyCheats()
+                showCheats()
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> showCheats() }
+            .show().gamepadNavigable()
+    }
+
+    // ---------------------------------------------------------- screenshot
+
+    private fun takeScreenshot() {
+        val view = retroView ?: return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
+            Toast.makeText(this, R.string.screenshot_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            view.width.coerceAtLeast(1), view.height.coerceAtLeast(1),
+            android.graphics.Bitmap.Config.ARGB_8888,
+        )
+        android.view.PixelCopy.request(view, bitmap, { result ->
+            if (result == android.view.PixelCopy.SUCCESS && saveBitmapToPictures(bitmap)) {
+                runOnUiThread { Toast.makeText(this, R.string.screenshot_saved, Toast.LENGTH_SHORT).show() }
+            } else {
+                runOnUiThread { Toast.makeText(this, R.string.screenshot_failed, Toast.LENGTH_SHORT).show() }
+            }
+        }, android.os.Handler(android.os.Looper.getMainLooper()))
+    }
+
+    private fun saveBitmapToPictures(bitmap: android.graphics.Bitmap): Boolean = runCatching {
+        val name = romFile.nameWithoutExtension + "-" + System.currentTimeMillis() + ".png"
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(
+                    android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_PICTURES + "/RetroGlass",
+                )
+            }
+        }
+        val uri = contentResolver.insert(
+            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values,
+        ) ?: return false
+        contentResolver.openOutputStream(uri)?.use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        true
+    }.getOrDefault(false)
+
+    /** Lets the user mark buttons as turbo/autofire (held = rapid repeat). */
+    private fun showTurboConfig() {
+        val buttons = controllerView.toggleableButtons()
+        if (buttons.isEmpty()) {
+            Toast.makeText(this, R.string.turbo_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = buttons.map { it.second }.toTypedArray()
+        val checked = buttons.map { it.first in layoutStore.turboButtons(console) }.toBooleanArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_turbo)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                layoutStore.setTurbo(console, buttons[which].first, isChecked)
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                controllerView.turboIds = layoutStore.turboButtons(console)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
     }
 
     private fun toggleFastForward() {
@@ -888,17 +1672,68 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun showLayoutPicker() {
         val presets = controllerView.availablePresets()
-        val names = presets.map { it.name }.toTypedArray()
         val current = presets.indexOfFirst { it.id == controllerView.currentPresetId() }
             .coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_choose_layout)
-            .setSingleChoiceItems(names, current) { dialog, which ->
-                controllerView.setPreset(presets[which].id)
-                dialog.dismiss()
+
+        val density = resources.displayMetrics.density
+        fun dp(v: Float) = (v * density).toInt()
+        val previewW = dp(76f)
+        val previewH = (previewW * com.nvanloo.retroglass.controller.LayoutPreview.ASPECT).toInt()
+
+        val list = android.widget.ListView(this).apply {
+            choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
+            divider = null
+            dividerHeight = 0
+            setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+        }
+        val adapter = object : android.widget.BaseAdapter() {
+            override fun getCount() = presets.size
+            override fun getItem(position: Int) = presets[position]
+            override fun getItemId(position: Int) = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                val row = (convertView as? LinearLayout) ?: LinearLayout(this@EmulationActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(6f), dp(6f), dp(6f), dp(6f))
+                    addView(android.widget.ImageView(this@EmulationActivity).apply {
+                        id = android.R.id.icon
+                        layoutParams = LinearLayout.LayoutParams(previewW, previewH)
+                        setBackgroundColor(Color.parseColor("#11000000"))
+                    })
+                    addView(TextView(this@EmulationActivity).apply {
+                        id = android.R.id.text1
+                        textSize = 17f
+                        setPadding(dp(16f), 0, 0, 0)
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                }
+                val preset = presets[position]
+                val img = row.findViewById<android.widget.ImageView>(android.R.id.icon)
+                img.setImageBitmap(
+                    com.nvanloo.retroglass.controller.LayoutPreview.render(
+                        console, preset.controls, previewW, previewH,
+                    )
+                )
+                val label = row.findViewById<TextView>(android.R.id.text1)
+                label.text = if (position == current) "${preset.name}  ✓" else preset.name
+                return row
             }
+        }
+        list.adapter = adapter
+        list.setItemChecked(current, true)
+        list.setSelection(current)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.menu_choose_layout)
+            .setView(list)
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .create()
+        list.setOnItemClickListener { _, _, which, _ ->
+            controllerView.setPreset(presets[which].id)
+            dialog.dismiss()
+        }
+        dialog.show()
+        dialog.gamepadNavigable()
     }
 
     /** Adds a labelled slider to [parent]; [onChange] receives the raw progress. */
@@ -934,8 +1769,10 @@ class EmulationActivity : AppCompatActivity() {
             setPadding(pad, pad, pad, 0)
         }
 
-        val portrait = isPortrait() && !extendedMode
-        val editingExternal = extendedMode
+        // When the phone is the display (BT pads, no touch controller) treat it like
+        // the external screen: one fill-scale slider, no top/bottom split.
+        val portrait = isPortrait() && !extendedMode && !phoneIsDisplay()
+        val editingExternal = extendedMode || phoneIsDisplay()
 
         // --- Size ---
         if (portrait) {
@@ -1001,7 +1838,7 @@ class EmulationActivity : AppCompatActivity() {
                 layoutStore.setVideoOffset(0f, 0f)
                 arrangeLayout()
             }
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun setEditMode(enabled: Boolean) {
@@ -1030,7 +1867,7 @@ class EmulationActivity : AppCompatActivity() {
             .setTitle(R.string.menu_save_state)
             .setItems(names) { _, which -> doSaveState(manualSlots[which]) }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun doSaveState(slot: Int) {
@@ -1059,7 +1896,7 @@ class EmulationActivity : AppCompatActivity() {
             .setTitle(R.string.menu_load_state)
             .setItems(names) { _, which -> doLoadState(slots[which]) }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .show().gamepadNavigable()
     }
 
     private fun doLoadState(slot: Int) {
@@ -1106,12 +1943,17 @@ class EmulationActivity : AppCompatActivity() {
         applyDisplayMode("onResume")
         // Keep a disconnect-pause in effect even after the lifecycle auto-resumed the view.
         if (pausedByDisconnect) retroView?.onPause()
+        updateGyro()
     }
 
     override fun onPause() {
         displayManager.unregisterDisplayListener(displayListener)
         mediaRouter.removeCallback(mediaRouterCallback)
         inputManager.unregisterInputDeviceListener(inputDeviceListener)
+        if (gyroRegistered) {
+            sensorManager.unregisterListener(gyroListener)
+            gyroRegistered = false
+        }
         persistSram()
         autoSaveState()
         super.onPause()
@@ -1120,6 +1962,7 @@ class EmulationActivity : AppCompatActivity() {
     override fun onDestroy() {
         menuDialog?.dismiss()
         menuDialog = null
+        uiHandler.removeCallbacksAndMessages(null)
         presentation?.let { runCatching { it.dismiss() } }
         presentation = null
         super.onDestroy()

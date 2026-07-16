@@ -38,7 +38,8 @@ enum class Console(
     MEGADRIVE(
         displayName = "Mega Drive",
         coreLibName = "libgenesis_plus_gx.so",
-        romExtensions = setOf("md", "gen", "smd", "sms", "gg", "sg", "68k", "sgd"),
+        // .sms/.gg now belong to the dedicated Master System / Game Gear systems below.
+        romExtensions = setOf("md", "gen", "smd", "sg", "68k", "sgd"),
         bodyColor = Color.parseColor("#1A1A1D"),
         accentColor = Color.parseColor("#C62828"),
     ),
@@ -247,9 +248,143 @@ enum class Console(
         romExtensions = setOf("zip"),
         bodyColor = Color.parseColor("#101014"),
         accentColor = Color.parseColor("#E74C3C"),
+    ),
+    MASTERSYSTEM(
+        displayName = "Master System",
+        coreLibName = "libgenesis_plus_gx.so",
+        romExtensions = setOf("sms"),
+        bodyColor = Color.parseColor("#141416"),
+        accentColor = Color.parseColor("#2E86C1"),
+    ),
+    GAMEGEAR(
+        displayName = "Game Gear",
+        coreLibName = "libgenesis_plus_gx.so",
+        romExtensions = setOf("gg"),
+        bodyColor = Color.parseColor("#232327"),
+        accentColor = Color.parseColor("#16A085"),
+    ),
+    ATARI8BIT(
+        displayName = "Atari 8-bit",
+        coreLibName = "libatari800.so",
+        romExtensions = setOf("atr", "xex", "atx", "cas"),
+        bodyColor = Color.parseColor("#7A5C3A"),
+        accentColor = Color.parseColor("#C8102E"),
+    ),
+    SEGACD(
+        displayName = "Sega CD",
+        coreLibName = "libgenesis_plus_gx.so",
+        romExtensions = setOf("cue", "chd", "iso"),
+        bodyColor = Color.parseColor("#0E0E10"),
+        accentColor = Color.parseColor("#D64541"),
+    ),
+    PCECD(
+        displayName = "PC Engine CD",
+        coreLibName = "libmednafen_pce_fast.so",
+        romExtensions = setOf("cue", "chd", "iso"),
+        bodyColor = Color.parseColor("#26262A"),
+        accentColor = Color.parseColor("#E67E22"),
+    ),
+    NEOGEOCD(
+        displayName = "Neo Geo CD",
+        coreLibName = "libneocd.so",
+        romExtensions = setOf("cue", "chd"),
+        bodyColor = Color.parseColor("#161616"),
+        accentColor = Color.parseColor("#E4C000"),
+    ),
+    NAOMI(
+        displayName = "Sega NAOMI",
+        coreLibName = "libflycast.so",
+        romExtensions = setOf("zip"),
+        bodyColor = Color.parseColor("#14161B"),
+        accentColor = Color.parseColor("#2E86C1"),
+    ),
+    ATOMISWAVE(
+        displayName = "Atomiswave",
+        coreLibName = "libflycast.so",
+        romExtensions = setOf("zip"),
+        bodyColor = Color.parseColor("#1A1420"),
+        accentColor = Color.parseColor("#8E44AD"),
     );
 
     val prefKey: String get() = name.lowercase()
+
+    /** Core options that MUST be forced for this system (applied at load). Used where one
+     *  core serves several machines — e.g. atari800 runs both the 5200 console and the 8-bit
+     *  computers, selected by the atari800_system option. */
+    val forcedCoreVariables: List<Pair<String, String>> get() = when (this) {
+        ATARI5200 -> listOf("atari800_system" to "5200")
+        ATARI8BIT -> listOf("atari800_system" to "800XL (64K)")
+        else -> emptyList()
+    }
+
+    /** Extra core options to force when 3+ controllers are assigned, for cores that gate their
+     *  multitap behind an option rather than a port device. Device-based multitaps (SNES/NES/
+     *  Genesis/Saturn/PC Engine) need no option — they're enabled by scanning getControllers()
+     *  for the multitap device type at load. Unknown keys are ignored by the core, so listing
+     *  both option names keeps this working across core versions. */
+    val multitapCoreVariables: List<Pair<String, String>> get() = when (this) {
+        PSX, PS2 -> listOf(
+            "pcsx_rearmed_multitap" to "port 1",   // players 1–4 share the port-1 multitap
+            "pcsx_rearmed_multitap1" to "enabled", // older option name; harmless if unknown
+        )
+        else -> emptyList()
+    }
+
+    /** Approximate hardware release year, for sorting the library by release date. */
+    val year: Int get() = when (this) {
+        ATARI2600 -> 1977
+        INTELLIVISION, ATARI8BIT -> 1979
+        ATARI5200, COLECO, VECTREX, C64, SPECTRUM -> 1982
+        NES, MSX -> 1983
+        AMSTRAD -> 1984
+        MASTERSYSTEM, AMIGA -> 1985
+        ATARI7800 -> 1986
+        PCENGINE -> 1987
+        MEGADRIVE, PCECD -> 1988
+        GAMEBOY, LYNX -> 1989
+        SNES, GAMEGEAR, ARCADE -> 1990
+        SEGACD -> 1991
+        THREEDO -> 1993
+        SATURN, SEGA32X, PSX, NEOGEOCD -> 1994
+        VIRTUALBOY -> 1995
+        N64 -> 1996
+        DREAMCAST, NGP, NAOMI -> 1998
+        WONDERSWAN -> 1999
+        PS2 -> 2000
+        GBA, POKEMONMINI -> 2001
+        ATOMISWAVE -> 2003
+        PSP, NDS -> 2004
+    }
+
+    /** How many player ports this system exposes. Handhelds are single-player; systems with 4
+     *  native controller ports (N64, Dreamcast) or a common multitap adapter (SNES, NES/Famicom,
+     *  Genesis, PS1/PS2, Saturn, PC Engine, 3DO, arcade 4-player cabs) support 4; the rest 2. */
+    val maxPlayers: Int get() = when (this) {
+        N64, DREAMCAST, SNES, NES, MEGADRIVE, SEGA32X, SEGACD, PSX, PS2, SATURN,
+        PCENGINE, PCECD, THREEDO, ARCADE, NAOMI, ATOMISWAVE -> 4
+        GAMEBOY, GBA, NGP, WONDERSWAN, LYNX, GAMEGEAR, POKEMONMINI, VIRTUALBOY, NDS -> 1
+        else -> 2
+    }
+
+    /** The hardware's maker, for grouping the library by creator. */
+    val maker: String get() = when (this) {
+        NES, SNES, N64, GAMEBOY, GBA, NDS, VIRTUALBOY, POKEMONMINI -> "Nintendo"
+        MEGADRIVE, SEGA32X, DREAMCAST, SATURN, MASTERSYSTEM, GAMEGEAR, SEGACD, NAOMI, ATOMISWAVE -> "Sega"
+        PSX, PS2, PSP -> "Sony"
+        PCENGINE, PCECD -> "NEC"
+        NGP, NEOGEOCD -> "SNK"
+        LYNX, ATARI2600, ATARI5200, ATARI7800, ATARI8BIT -> "Atari"
+        WONDERSWAN -> "Bandai"
+        THREEDO -> "3DO / Panasonic"
+        COLECO -> "Coleco"
+        INTELLIVISION -> "Mattel"
+        VECTREX -> "GCE"
+        MSX -> "MSX"
+        C64, AMIGA -> "Commodore"
+        SPECTRUM -> "Sinclair"
+        AMSTRAD -> "Amstrad"
+        ARCADE -> "Arcade"
+    }
 
     companion object {
         val AMBIGUOUS_BIN = "bin"
@@ -282,7 +417,7 @@ object ControllerDefs {
     /** All layouts available for a console. First entry is the default. */
     fun presetsFor(console: Console): List<LayoutPreset> {
         val base = baseControls(console)
-        return listOf(
+        val presets = mutableListOf(
             LayoutPreset("default", "Default", base),
             LayoutPreset("large", "Large buttons", scaled(base, 1.28f)),
             LayoutPreset("compact", "Compact", scaled(base, 0.82f)),
@@ -291,6 +426,29 @@ object ControllerDefs {
             LayoutPreset("lefty", "Left-handed", mirrored(base)),
             LayoutPreset("fullscreen", "Full-screen", fullscreen(console)),
         )
+        // N64-specific: a big D-pad with Z at its centre so one thumb can hold a
+        // direction and Z together.
+        if (console == Console.N64) {
+            presets.add(1, LayoutPreset("n64zdpad", "Z in D-pad", n64ZDpad()))
+        }
+        return presets
+    }
+
+    /** Alt N64 layout: enlarge the D-pad and drop Z into its exact centre (co-centred so a
+     *  single finger can press a direction and Z at once — see ControllerView.findControls). */
+    private fun n64ZDpad(): List<ControlDef> {
+        val cx = 0.26f
+        val cy = 0.48f
+        val mapped = n64().map {
+            when (it.id) {
+                "dpad" -> it.copy(x = cx, y = cy, size = 0.44f)
+                "z" -> it.copy(x = cx, y = cy, size = 0.20f)
+                else -> it
+            }
+        }
+        // Draw Z on top of the D-pad (move it after the dpad in the list).
+        val z = mapped.first { it.id == "z" }
+        return mapped.filter { it.id != "z" } + z
     }
 
     fun defaultPresetId(console: Console): String = presetsFor(console).first().id
@@ -303,10 +461,61 @@ object ControllerDefs {
     /** Convenience for callers that only need the factory default arrangement. */
     fun controlsFor(console: Console): List<ControlDef> = baseControls(console)
 
+    /** Debug: serialize every console's default layout to JSON (ground truth for doc previews). */
+    fun dumpLayoutsJson(): String {
+        fun hex(c: Int): String =
+            if (Color.alpha(c) == 0) "transparent" else String.format("#%06X", 0xFFFFFF and c)
+        val sb = StringBuilder("[\n")
+        val consoles = Console.entries
+        consoles.forEachIndexed { ci, console ->
+            sb.append("  {\"console\":\"").append(console.name).append("\",")
+            sb.append("\"display\":\"").append(console.displayName.replace("\"", "'")).append("\",")
+            sb.append("\"maker\":\"").append(console.maker).append("\",")
+            sb.append("\"year\":").append(console.year).append(",")
+            sb.append("\"body\":\"").append(hex(console.bodyColor)).append("\",")
+            sb.append("\"controls\":[")
+            val cs = baseControls(console)
+            cs.forEachIndexed { i, d ->
+                sb.append("{\"id\":\"").append(d.id).append("\",")
+                sb.append("\"type\":\"").append(d.type.name).append("\",")
+                sb.append("\"label\":\"").append(d.label.replace("\\", "\\\\").replace("\"", "\\\"")).append("\",")
+                sb.append("\"x\":").append(d.x).append(",\"y\":").append(d.y).append(",\"size\":").append(d.size).append(",")
+                sb.append("\"shape\":\"").append(d.shape.name).append("\",")
+                sb.append("\"fill\":\"").append(hex(d.fillColor)).append("\",")
+                sb.append("\"labelColor\":\"").append(hex(d.labelColor)).append("\",")
+                sb.append("\"stroke\":\"").append(hex(d.strokeColor)).append("\",")
+                sb.append("\"plate\":\"").append(hex(d.plateColor)).append("\"}")
+                if (i < cs.size - 1) sb.append(",")
+            }
+            sb.append("]}")
+            if (ci < consoles.size - 1) sb.append(",")
+            sb.append("\n")
+        }
+        sb.append("]\n")
+        return sb.toString()
+    }
+
     // -------------------------------------------------------- transforms
 
-    private fun scaled(controls: List<ControlDef>, factor: Float): List<ControlDef> =
-        controls.map { it.copy(size = it.size * factor) }
+    /** Scales button sizes by [factor] and spreads positions out from the layout centre by a
+     *  coupled amount, so enlarging buttons keeps clusters (face diamond, twin sticks) from
+     *  colliding — and shrinking them tightens the layout. clampCenter keeps everything on-screen. */
+    private fun scaled(controls: List<ControlDef>, factor: Float): List<ControlDef> {
+        val spread = 1f + (factor - 1f) * 0.9f
+        return controls.map {
+            // BAR shoulders are already wide; spreading them outward only shoves their
+            // ends (and labels) off the edge, so scale their size but keep their position.
+            if (it.shape == ControlShape.BAR) {
+                it.copy(size = it.size * factor)
+            } else {
+                it.copy(
+                    size = it.size * factor,
+                    x = 0.5f + (it.x - 0.5f) * spread,
+                    y = 0.5f + (it.y - 0.5f) * spread,
+                )
+            }
+        }
+    }
 
     private fun mirrored(controls: List<ControlDef>): List<ControlDef> =
         controls.map { it.copy(x = 1f - it.x) }
@@ -351,6 +560,12 @@ object ControllerDefs {
         Console.MSX, Console.C64, Console.AMIGA, Console.SPECTRUM, Console.AMSTRAD ->
             computerJoystick(console.accentColor)
         Console.ARCADE -> arcade()
+        Console.MASTERSYSTEM, Console.GAMEGEAR -> sms()
+        Console.ATARI8BIT -> computerJoystick(console.accentColor)
+        Console.SEGACD -> megadrive()
+        Console.PCECD -> pcengine()
+        Console.NEOGEOCD -> neogeo()
+        Console.NAOMI, Console.ATOMISWAVE -> arcade()
     }
 
     private fun fullscreen(console: Console): List<ControlDef> = when (console) {
@@ -370,54 +585,56 @@ object ControllerDefs {
     // ------------------------------------------------------------- NES
 
     private fun nes(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.52f, size = 0.55f,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.52f, size = 0.50f,
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.80f, size = 0.13f, shape = ControlShape.PILL,
+            x = 0.38f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = Color.parseColor("#B02525")),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.80f, size = 0.13f, shape = ControlShape.PILL,
+            x = 0.62f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = Color.parseColor("#B02525")),
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.74f, y = 0.60f, size = 0.26f, shape = ControlShape.CIRCLE,
+            x = 0.625f, y = 0.52f, size = 0.19f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#B02525"), labelColor = LIGHT_TEXT, plateColor = DARK),
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.90f, y = 0.52f, size = 0.26f, shape = ControlShape.CIRCLE,
+            x = 0.872f, y = 0.52f, size = 0.19f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#B02525"), labelColor = LIGHT_TEXT, plateColor = DARK),
     )
 
     // ------------------------------------------------------------- SNES
 
     private fun snes(): List<ControlDef> {
-        val face = 0.21f
+        val face = 0.18f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.56f, size = 0.52f,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.50f, size = 0.47f,
                 shape = ControlShape.CROSS,
                 fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.13f, y = 0.10f, size = 0.15f, shape = ControlShape.BAR,
+                x = 0.15f, y = 0.09f, size = 0.18f, shape = ControlShape.BAR,
                 fillColor = Color.parseColor("#8D8A92"), labelColor = DARK),
             ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.87f, y = 0.10f, size = 0.15f, shape = ControlShape.BAR,
+                x = 0.85f, y = 0.09f, size = 0.18f, shape = ControlShape.BAR,
                 fillColor = Color.parseColor("#8D8A92"), labelColor = DARK),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.42f, y = 0.82f, size = 0.115f, shape = ControlShape.PILL,
+                x = 0.38f, y = 0.855f, size = 0.115f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.58f, y = 0.82f, size = 0.115f, shape = ControlShape.PILL,
+                x = 0.62f, y = 0.835f, size = 0.115f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
+            // Symmetric diamond: X top / B bottom on the centre line, Y left / A right on
+            // the vertical mid-point (0.50) so all four are equidistant from the centre.
             ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.845f, y = 0.30f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.75f, y = 0.40f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#3F51B5"), labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.945f, y = 0.54f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.89f, y = 0.50f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#D32F2F"), labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.845f, y = 0.78f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.75f, y = 0.60f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#F9A825"), labelColor = DARK),
             ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.745f, y = 0.54f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.61f, y = 0.50f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#388E3C"), labelColor = LIGHT_TEXT),
         )
     }
@@ -425,20 +642,21 @@ object ControllerDefs {
     // ------------------------------------------------------------- Mega Drive
 
     private fun megadrive(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.56f, size = 0.55f,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.55f, size = 0.48f,
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#0E0E10"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.82f, size = 0.13f, shape = ControlShape.PILL,
+            x = 0.50f, y = 0.86f, size = 0.13f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
+        // A/B/C arc — spaced so the circles clear each other and C stays on-screen.
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_Y,
-            x = 0.72f, y = 0.66f, size = 0.22f, shape = ControlShape.CIRCLE,
+            x = 0.59f, y = 0.68f, size = 0.17f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.83f, y = 0.55f, size = 0.22f, shape = ControlShape.CIRCLE,
+            x = 0.70f, y = 0.57f, size = 0.17f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
         ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.94f, y = 0.44f, size = 0.22f, shape = ControlShape.CIRCLE,
+            x = 0.83f, y = 0.47f, size = 0.17f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
     )
 
@@ -446,45 +664,48 @@ object ControllerDefs {
 
     /** Compact PS1 layout. Face cluster sits clear of the shoulder row. */
     private fun psx(): List<ControlDef> {
-        val face = 0.175f
+        val face = 0.16f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.14f, y = 0.46f, size = 0.46f,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.42f, size = 0.44f,
                 shape = ControlShape.PSX_CROSS,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
+            // Shoulder bars pushed out to the screen edges.
             ControlDef("l1", ControlType.BUTTON, "L1", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.13f, y = 0.09f, size = 0.16f, shape = ControlShape.BAR,
+                x = 0.15f, y = 0.055f, size = 0.20f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("l2", ControlType.BUTTON, "L2", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.13f, y = 0.21f, size = 0.16f, shape = ControlShape.BAR,
+                x = 0.15f, y = 0.175f, size = 0.20f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("r1", ControlType.BUTTON, "R1", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.87f, y = 0.09f, size = 0.16f, shape = ControlShape.BAR,
+                x = 0.85f, y = 0.055f, size = 0.20f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("r2", ControlType.BUTTON, "R2", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.87f, y = 0.21f, size = 0.16f, shape = ControlShape.BAR,
+                x = 0.85f, y = 0.175f, size = 0.20f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.44f, y = 0.86f, size = 0.10f, shape = ControlShape.PILL,
+                x = 0.39f, y = 0.11f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = SYMBOL, labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.56f, y = 0.86f, size = 0.10f, shape = ControlShape.PILL,
+                x = 0.61f, y = 0.11f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = SYMBOL, labelColor = LIGHT_TEXT),
+            // Shape diamond, widened so the buttons don't touch.
             ControlDef("triangle", ControlType.BUTTON, "△", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.86f, y = 0.40f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.73f, y = 0.325f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = SYMBOL, labelColor = Color.parseColor("#26B57A")),
             ControlDef("circle", ControlType.BUTTON, "○", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.955f, y = 0.57f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.87f, y = 0.42f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = SYMBOL, labelColor = Color.parseColor("#E4574C")),
             ControlDef("cross", ControlType.BUTTON, "✕", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.86f, y = 0.74f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.73f, y = 0.515f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = SYMBOL, labelColor = Color.parseColor("#7BA4D9")),
             ControlDef("square", ControlType.BUTTON, "□", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.765f, y = 0.57f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.59f, y = 0.42f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = SYMBOL, labelColor = Color.parseColor("#D992BC")),
-            ControlDef("stick_l", ControlType.STICK, "L", x = 0.37f, y = 0.62f, size = 0.30f,
+            // Twin sticks, moved apart and a little lower.
+            ControlDef("stick_l", ControlType.STICK, "L", x = 0.33f, y = 0.82f, size = 0.26f,
                 shape = ControlShape.STICK,
                 fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-            ControlDef("stick_r", ControlType.STICK, "R", x = 0.63f, y = 0.62f, size = 0.30f,
+            ControlDef("stick_r", ControlType.STICK, "R", x = 0.67f, y = 0.82f, size = 0.26f,
                 shape = ControlShape.STICK,
                 fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
         )
@@ -512,10 +733,10 @@ object ControllerDefs {
                 x = 0.755f, y = 0.185f, size = 0.46f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.44f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
+                x = 0.38f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
                 fillColor = SYMBOL, labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.56f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
+                x = 0.62f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
                 fillColor = SYMBOL, labelColor = LIGHT_TEXT),
             // Big D-pad bottom-left.
             ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.66f, size = 0.66f,
@@ -549,20 +770,20 @@ object ControllerDefs {
     private fun gameboy(): List<ControlDef> {
         val body = Color.parseColor("#5A3A7A")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.29f, y = 0.50f, size = 0.50f,
                 shape = ControlShape.CROSS,
                 fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.42f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
+                x = 0.38f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
                 fillColor = body, labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.58f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
+                x = 0.62f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
                 fillColor = body, labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.76f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE,
+                x = 0.68f, y = 0.58f, size = 0.24f, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#7B3F97"), labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE,
+                x = 0.87f, y = 0.46f, size = 0.24f, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#7B3F97"), labelColor = LIGHT_TEXT),
         )
     }
@@ -570,86 +791,100 @@ object ControllerDefs {
     // ------------------------------------------------------------- Game Boy Advance
 
     private fun gba(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.56f, size = 0.52f,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.28f, y = 0.56f, size = 0.50f,
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#26243A"), labelColor = LIGHT_TEXT),
         ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-            x = 0.14f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
+            x = 0.20f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
             fillColor = Color.parseColor("#4A3E82"), labelColor = LIGHT_TEXT),
         ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-            x = 0.86f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
+            x = 0.80f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
             fillColor = Color.parseColor("#4A3E82"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2E2C45"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2E2C45"), labelColor = LIGHT_TEXT),
+        // Real GBA A/B sit on a gentle upward slant (A higher-right than B).
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.78f, y = 0.62f, size = 0.23f, shape = ControlShape.CIRCLE,
+            x = 0.66f, y = 0.545f, size = 0.20f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#8B7FD4"), labelColor = DARK),
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.92f, y = 0.50f, size = 0.23f, shape = ControlShape.CIRCLE,
+            x = 0.87f, y = 0.455f, size = 0.20f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#8B7FD4"), labelColor = DARK),
     )
 
     // ------------------------------------------------------------- PC Engine
 
     private fun pcengine(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.27f, y = 0.47f, size = 0.48f,
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SEL", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
+            x = 0.38f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("run", ControlType.BUTTON, "RUN", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
+            x = 0.62f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        // PC Engine: II = RetroPad A, I = RetroPad B (I is the primary right button).
         ControlDef("two", ControlType.BUTTON, "II", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.76f, y = 0.62f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.63f, y = 0.47f, size = 0.20f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#E67E22"), labelColor = DARK),
         ControlDef("one", ControlType.BUTTON, "I", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.91f, y = 0.52f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.85f, y = 0.47f, size = 0.20f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#E67E22"), labelColor = DARK),
     )
 
     // ------------------------------------------------------------- Nintendo 64
 
     /**
-     * N64 mapping (mupen64plus_next default RetroPad): A=A, B=B, Start=Start,
-     * L=L, R=R, Z=L2, analog stick = left analog, C-buttons = right analog.
+     * N64 mapping (mupen64plus_next default RetroPad): A=A, B=B, Start=Start, L=L, R=R,
+     * Z=L2, the single analog stick = left analog, and the four discrete yellow C-buttons
+     * (ids "c_*") = the right analog (handled in ControllerView.sendCButtons). This mirrors
+     * the physical pad: one centred stick, D-pad upper-left, big A + B, small C diamond.
      */
-    private fun n64(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.13f, y = 0.34f, size = 0.34f,
-            shape = ControlShape.CROSS,
-            fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
-        ControlDef("stick_l", ControlType.STICK, "", x = 0.30f, y = 0.66f, size = 0.40f,
-            shape = ControlShape.STICK,
-            fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-        ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-            x = 0.14f, y = 0.07f, size = 0.16f, shape = ControlShape.BAR,
-            fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-        ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-            x = 0.86f, y = 0.07f, size = 0.16f, shape = ControlShape.BAR,
-            fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-        ControlDef("z", ControlType.BUTTON, "Z", KeyEvent.KEYCODE_BUTTON_L2,
-            x = 0.50f, y = 0.30f, size = 0.14f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-        // C-buttons cluster = right analog.
-        ControlDef("cbuttons", ControlType.STICK, "C", x = 0.70f, y = 0.66f, size = 0.34f,
-            shape = ControlShape.STICK,
-            fillColor = Color.parseColor("#B8860B"), labelColor = DARK),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.86f, y = 0.44f, size = 0.19f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E7D32"), labelColor = LIGHT_TEXT),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.95f, y = 0.58f, size = 0.21f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#1565C0"), labelColor = LIGHT_TEXT),
-    )
+    private fun n64(): List<ControlDef> {
+        val yellow = Color.parseColor("#E8B800")
+        val cSize = 0.115f
+        return listOf(
+            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
+                x = 0.13f, y = 0.06f, size = 0.18f, shape = ControlShape.BAR,
+                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
+            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
+                x = 0.87f, y = 0.06f, size = 0.18f, shape = ControlShape.BAR,
+                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
+            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+                x = 0.50f, y = 0.06f, size = 0.12f, shape = ControlShape.PILL,
+                fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            ControlDef("z", ControlType.BUTTON, "Z", KeyEvent.KEYCODE_BUTTON_L2,
+                x = 0.50f, y = 0.20f, size = 0.13f, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
+            // D-pad upper-left.
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.16f, y = 0.33f, size = 0.32f,
+                shape = ControlShape.CROSS,
+                fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
+            // Big B / A on the right.
+            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
+                x = 0.58f, y = 0.54f, size = 0.17f, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#2E7D32"), labelColor = LIGHT_TEXT),
+            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
+                x = 0.78f, y = 0.62f, size = 0.20f, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#1565C0"), labelColor = LIGHT_TEXT),
+            // Four small yellow C-buttons in a diamond (drive the right analog).
+            ControlDef("c_up", ControlType.BUTTON, "C", x = 0.80f, y = 0.30f, size = cSize,
+                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
+            ControlDef("c_left", ControlType.BUTTON, "C", x = 0.70f, y = 0.38f, size = cSize,
+                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
+            ControlDef("c_right", ControlType.BUTTON, "C", x = 0.90f, y = 0.38f, size = cSize,
+                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
+            ControlDef("c_down", ControlType.BUTTON, "C", x = 0.80f, y = 0.46f, size = cSize,
+                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
+            // The one analog stick, centred at the bottom.
+            ControlDef("stick_l", ControlType.STICK, "", x = 0.50f, y = 0.81f, size = 0.34f,
+                shape = ControlShape.STICK,
+                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
+        )
+    }
 
     private fun n64Fullscreen(): List<ControlDef> = scaled(spreadToEdges(n64()), 1.15f)
 
@@ -672,10 +907,10 @@ object ControllerDefs {
                 x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.77f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE,
+                x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = DARK),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE,
+                x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = DARK),
         )
     }
@@ -688,10 +923,10 @@ object ControllerDefs {
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("reset", ControlType.BUTTON, "RESET", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
             x = 0.85f, y = 0.56f, size = 0.30f, shape = ControlShape.CIRCLE,
@@ -706,16 +941,16 @@ object ControllerDefs {
             shape = ControlShape.CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
+            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("b", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.77f, y = 0.62f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
         ControlDef("a", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.91f, y = 0.52f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
     )
 
@@ -730,10 +965,10 @@ object ControllerDefs {
             x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.77f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE,
+            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE,
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
     )
 
@@ -753,16 +988,16 @@ object ControllerDefs {
                 x = 0.86f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
                 fillColor = Color.parseColor("#7A2020"), labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.42f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
+                x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.58f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
+                x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.78f, y = 0.62f, size = 0.22f, shape = ControlShape.CIRCLE,
+                x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
                 fillColor = red, labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.92f, y = 0.52f, size = 0.22f, shape = ControlShape.CIRCLE,
+                x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
                 fillColor = red, labelColor = LIGHT_TEXT),
         )
     }
@@ -779,15 +1014,15 @@ object ControllerDefs {
             ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
                 x = 0.86f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("p", ControlType.BUTTON, "P", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.42f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.58f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.74f, y = 0.66f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.69f, y = 0.66f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.85f, y = 0.55f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.81f, y = 0.55f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.96f, y = 0.44f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.94f, y = 0.44f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
         )
     }
 
@@ -807,17 +1042,17 @@ object ControllerDefs {
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
                 x = 0.50f, y = 0.88f, size = 0.11f, shape = ControlShape.PILL, fillColor = bot, labelColor = LIGHT_TEXT),
             ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.70f, y = 0.42f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
+                x = 0.65f, y = 0.40f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
             ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.83f, y = 0.36f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
+                x = 0.79f, y = 0.35f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
             ControlDef("z", ControlType.BUTTON, "Z", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.96f, y = 0.32f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
+                x = 0.93f, y = 0.31f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.70f, y = 0.66f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
+                x = 0.65f, y = 0.62f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.83f, y = 0.60f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
+                x = 0.79f, y = 0.57f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
             ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.96f, y = 0.56f, size = 0.155f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
+                x = 0.93f, y = 0.53f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
         )
     }
 
@@ -829,47 +1064,73 @@ object ControllerDefs {
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("k1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_X,
-            x = 0.66f, y = 0.75f, size = 0.15f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
+            x = 0.60f, y = 0.68f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
         ControlDef("k2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_Y,
-            x = 0.66f, y = 0.50f, size = 0.15f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
+            x = 0.60f, y = 0.45f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
         ControlDef("lfire", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.82f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            x = 0.78f, y = 0.62f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
         ControlDef("rfire", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.94f, y = 0.50f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            x = 0.92f, y = 0.48f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
     )
 
     // ------------------------------------------------------------- Intellivision
 
-    private fun intellivision(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("top", ControlType.BUTTON, "TOP", KeyEvent.KEYCODE_BUTTON_X,
-            x = 0.85f, y = 0.36f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#B8860B"), labelColor = DARK),
-        ControlDef("bl", ControlType.BUTTON, "◣", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.77f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#B8860B"), labelColor = DARK),
-        ControlDef("br", ControlType.BUTTON, "◢", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.93f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#B8860B"), labelColor = DARK),
-    )
+    /**
+     * Intellivision hand controller: 16-way disc + three side action buttons (Top/Left/Right)
+     * + a 12-key numeric keypad (games overlaid printed cards on it). FreeIntv mapping:
+     * Y=Top, B=Left, A=Right; keypad 1-4/6-9 -> right analog (a 3x3 disc, handled by
+     * ControllerView.sendKeypad), 5=R3, 0=L3, Clear=L2, Enter=R2.
+     */
+    private fun intellivision(): List<ControlDef> {
+        val gold = Color.parseColor("#B8860B")
+        val key = Color.parseColor("#3A3A40")
+        val ksz = 0.115f
+        return listOf(
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.21f, y = 0.30f, size = 0.40f,
+                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            // Three side action buttons (Top=Y, Left=B, Right=A per FreeIntv).
+            ControlDef("act_left", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
+                x = 0.09f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
+            ControlDef("act_top", ControlType.BUTTON, "T", KeyEvent.KEYCODE_BUTTON_Y,
+                x = 0.235f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
+            ControlDef("act_right", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
+                x = 0.38f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
+            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+                x = 0.235f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
+                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            // 12-key numeric keypad. 1-4/6-9 drive the right analog (isKeypadDir); 5/0/Clear/Enter are buttons.
+            ControlDef("kp_1", ControlType.BUTTON, "1", x = 0.62f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_2", ControlType.BUTTON, "2", x = 0.76f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_3", ControlType.BUTTON, "3", x = 0.90f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_4", ControlType.BUTTON, "4", x = 0.62f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_5", ControlType.BUTTON, "5", KeyEvent.KEYCODE_BUTTON_THUMBR, x = 0.76f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_6", ControlType.BUTTON, "6", x = 0.90f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_7", ControlType.BUTTON, "7", x = 0.62f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_8", ControlType.BUTTON, "8", x = 0.76f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_9", ControlType.BUTTON, "9", x = 0.90f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_clear", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_L2, x = 0.62f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#7A2A2A"), labelColor = LIGHT_TEXT),
+            ControlDef("kp_0", ControlType.BUTTON, "0", KeyEvent.KEYCODE_BUTTON_THUMBL, x = 0.76f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_enter", ControlType.BUTTON, "E", KeyEvent.KEYCODE_BUTTON_R2, x = 0.90f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2A6A2A"), labelColor = LIGHT_TEXT),
+        )
+    }
 
     // ------------------------------------------------------------- Vectrex
 
     private fun vectrex(): List<ControlDef> {
         val btn = Color.parseColor("#2E7D5A")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.55f, size = 0.55f,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.55f, size = 0.50f,
                 shape = ControlShape.CROSS, fillColor = Color.parseColor("#141414"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#222"), labelColor = LIGHT_TEXT),
+                x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#222222"), labelColor = LIGHT_TEXT),
             ControlDef("b1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.66f, y = 0.60f, size = 0.16f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.59f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("b2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.78f, y = 0.60f, size = 0.16f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.735f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("b3", ControlType.BUTTON, "3", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.90f, y = 0.60f, size = 0.16f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.88f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("b4", ControlType.BUTTON, "4", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.78f, y = 0.40f, size = 0.16f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+                x = 0.735f, y = 0.42f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
         )
     }
 
@@ -883,9 +1144,9 @@ object ControllerDefs {
         ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_R1,
             x = 0.86f, y = 0.10f, size = 0.16f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.77f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
+            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
     )
 
     // ------------------------------------------------------------- Atari 5200
@@ -894,13 +1155,13 @@ object ControllerDefs {
         ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
             shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.42f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            x = 0.37f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.58f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            x = 0.63f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("fire2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.77f, y = 0.62f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
+            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
         ControlDef("fire1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
     )
 
     // ------------------------------------------------------------- Arcade / Neo Geo
@@ -909,30 +1170,77 @@ object ControllerDefs {
     private fun arcade(): List<ControlDef> {
         val punch = Color.parseColor("#2E86C1")
         val kick = Color.parseColor("#E67E22")
-        val face = 0.155f
+        val face = 0.13f
         return listOf(
             ControlDef("dpad", ControlType.DPAD, "", x = 0.14f, y = 0.55f, size = 0.52f,
                 shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("coin", ControlType.BUTTON, "COIN", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.42f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
+                x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.56f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
+                x = 0.62f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
             // Top row: light/medium/heavy punch
             ControlDef("lp", ControlType.BUTTON, "LP", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.66f, y = 0.42f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
+                x = 0.62f, y = 0.42f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
             ControlDef("mp", ControlType.BUTTON, "MP", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.80f, y = 0.36f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
+                x = 0.77f, y = 0.37f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
             ControlDef("hp", ControlType.BUTTON, "HP", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.94f, y = 0.34f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
+                x = 0.92f, y = 0.34f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
             // Bottom row: light/medium/heavy kick
             ControlDef("lk", ControlType.BUTTON, "LK", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.66f, y = 0.64f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
+                x = 0.62f, y = 0.64f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
             ControlDef("mk", ControlType.BUTTON, "MK", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.80f, y = 0.58f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
+                x = 0.77f, y = 0.59f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
             ControlDef("hk", ControlType.BUTTON, "HK", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.94f, y = 0.56f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
+                x = 0.92f, y = 0.56f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
+        )
+    }
+
+    // ---------------------------------------------- Master System / Game Gear
+
+    /** Two-button pad (1 / 2) + Start/Pause. genesis_plus_gx maps SMS "1"→B, "2"→A. */
+    private fun sms(): List<ControlDef> {
+        val btn = Color.parseColor("#B02525")
+        return listOf(
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.26f, y = 0.54f, size = 0.50f,
+                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+                x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL,
+                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            ControlDef("b1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
+                x = 0.65f, y = 0.55f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+            ControlDef("b2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
+                x = 0.87f, y = 0.55f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
+        )
+    }
+
+    // ---------------------------------------------- Neo Geo (CD)
+
+    /** Neo Geo four-button pad A/B/C/D in the classic arc. neocd maps A→B, B→A, C→Y, D→X. */
+    private fun neogeo(): List<ControlDef> {
+        val sz = 0.155f
+        return listOf(
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.22f, y = 0.55f, size = 0.46f,
+                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
+                x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
+                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+                x = 0.62f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
+                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            ControlDef("ng_a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_B,
+                x = 0.55f, y = 0.66f, size = sz, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            ControlDef("ng_b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_A,
+                x = 0.67f, y = 0.58f, size = sz, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#E4C000"), labelColor = DARK),
+            ControlDef("ng_c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_Y,
+                x = 0.79f, y = 0.50f, size = sz, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#27AE60"), labelColor = LIGHT_TEXT),
+            ControlDef("ng_d", ControlType.BUTTON, "D", KeyEvent.KEYCODE_BUTTON_X,
+                x = 0.91f, y = 0.42f, size = sz, shape = ControlShape.CIRCLE,
+                fillColor = Color.parseColor("#2980B9"), labelColor = LIGHT_TEXT),
         )
     }
 
@@ -947,13 +1255,13 @@ object ControllerDefs {
         ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
             shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.42f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.58f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("jump", ControlType.BUTTON, "▲", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.77f, y = 0.62f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
+            x = 0.70f, y = 0.60f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
         ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.91f, y = 0.52f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
+            x = 0.87f, y = 0.47f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
     )
 
     // ------------------------------------------------------------- Dreamcast
@@ -964,35 +1272,37 @@ object ControllerDefs {
      * the triggers as L2/R2.
      */
     private fun dreamcast(): List<ControlDef> {
-        val face = 0.185f
+        val face = 0.14f
         val btn = Color.parseColor("#3A3A40")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.13f, y = 0.36f, size = 0.36f,
+            // START moved up top so the D-pad + analog can grow.
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.22f, y = 0.38f, size = 0.44f,
                 shape = ControlShape.CROSS,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("stick_l", ControlType.STICK, "", x = 0.28f, y = 0.68f, size = 0.38f,
+            ControlDef("stick_l", ControlType.STICK, "", x = 0.29f, y = 0.78f, size = 0.44f,
                 shape = ControlShape.STICK,
                 fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.15f, y = 0.07f, size = 0.17f, shape = ControlShape.BAR,
+                x = 0.15f, y = 0.06f, size = 0.17f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.85f, y = 0.07f, size = 0.17f, shape = ControlShape.BAR,
+                x = 0.85f, y = 0.06f, size = 0.17f, shape = ControlShape.BAR,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.88f, size = 0.12f, shape = ControlShape.PILL,
+                x = 0.50f, y = 0.11f, size = 0.12f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#F17022"), labelColor = DARK),
+            // Even diamond: equal spacing top/bottom and left/right.
             ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.84f, y = 0.34f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.81f, y = 0.44f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.75f, y = 0.54f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.70f, y = 0.52f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.945f, y = 0.54f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.92f, y = 0.52f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = LIGHT_TEXT),
             ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.845f, y = 0.74f, size = face, shape = ControlShape.CIRCLE,
+                x = 0.81f, y = 0.60f, size = face, shape = ControlShape.CIRCLE,
                 fillColor = btn, labelColor = LIGHT_TEXT),
         )
     }
@@ -1008,10 +1318,10 @@ object ControllerDefs {
             x = 0.50f, y = 0.84f, size = 0.12f, shape = ControlShape.PILL,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.77f, y = 0.62f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#D24726"), labelColor = LIGHT_TEXT),
         ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.91f, y = 0.52f, size = 0.25f, shape = ControlShape.CIRCLE,
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
             fillColor = Color.parseColor("#D24726"), labelColor = LIGHT_TEXT),
     )
 }

@@ -16,6 +16,27 @@ class InputConfig(context: Context) {
         const val PHONE = "phone"
         const val PORT_OFF = -1
 
+        /** Default in-game menu hotkey combo: L1 + R1 + Select. */
+        val DEFAULT_MENU_HOTKEY = listOf(
+            KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_BUTTON_SELECT,
+        )
+
+        /** Selectable hotkey combos (label -> physical keycodes). */
+        val MENU_HOTKEY_PRESETS: List<Pair<String, List<Int>>> = listOf(
+            "L1 + R1 + Select" to listOf(
+                KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_BUTTON_SELECT,
+            ),
+            "L1 + R1 + Start" to listOf(
+                KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_BUTTON_START,
+            ),
+            "Select + Start" to listOf(
+                KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_START,
+            ),
+            "L3 + R3 (stick clicks)" to listOf(
+                KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR,
+            ),
+        )
+
         /** RetroPad buttons offered for remapping (label -> Android keycode used as the retro id). */
         val RETRO_BUTTONS: List<Pair<String, Int>> = listOf(
             "A" to KeyEvent.KEYCODE_BUTTON_A,
@@ -80,5 +101,43 @@ class InputConfig(context: Context) {
     fun leftStickAsDpad(deviceKey: String): Boolean = prefs.getBoolean("stickdpad/$deviceKey", false)
     fun setLeftStickAsDpad(deviceKey: String, v: Boolean) {
         prefs.edit().putBoolean("stickdpad/$deviceKey", v).apply()
+    }
+
+    // ---------------------------------------------- controller (device) type
+
+    /** Chosen libretro controller type id for a port on a console (e.g. PS1 analog). */
+    fun controllerType(consoleKey: String, port: Int): Int? {
+        val k = "ctype/$consoleKey/$port"
+        return if (prefs.contains(k)) prefs.getInt(k, 0) else null
+    }
+
+    fun setControllerType(consoleKey: String, port: Int, typeId: Int) {
+        prefs.edit().putInt("ctype/$consoleKey/$port", typeId).apply()
+    }
+
+    // ------------------------------------------------ analog stick tuning
+
+    /** Dead zone (0..0.5) below which stick motion is ignored, per controller. */
+    fun deadzone(deviceKey: String): Float = prefs.getFloat("deadzone/$deviceKey", 0.15f)
+    fun setDeadzone(deviceKey: String, v: Float) {
+        prefs.edit().putFloat("deadzone/$deviceKey", v).apply()
+    }
+
+    /** Stick sensitivity multiplier (0.5..2.0), per controller. */
+    fun sensitivity(deviceKey: String): Float = prefs.getFloat("sensitivity/$deviceKey", 1.0f)
+    fun setSensitivity(deviceKey: String, v: Float) {
+        prefs.edit().putFloat("sensitivity/$deviceKey", v).apply()
+    }
+
+    // ---------------------------------------------------- menu hotkey
+
+    /** Physical keycodes that, held together, open the in-game menu. Default L1+R1+Select. */
+    fun menuHotkey(): List<Int> {
+        val raw = prefs.getString("menu_hotkey", null) ?: return DEFAULT_MENU_HOTKEY
+        return raw.split(',').mapNotNull { it.toIntOrNull() }.ifEmpty { DEFAULT_MENU_HOTKEY }
+    }
+
+    fun setMenuHotkey(keys: List<Int>) {
+        prefs.edit().putString("menu_hotkey", keys.joinToString(",")).apply()
     }
 }
