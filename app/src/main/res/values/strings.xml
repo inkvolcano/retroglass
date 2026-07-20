@@ -207,4 +207,10 @@
     <string name="companion_action_shot">Screenshot</string>
     <string name="companion_action_menu">Menu</string>
     <string name="companion_action_remap">Remap…</string>
+    <!-- External display hotplug prompt -->
+    <string name="external_connected_title">External display connected</string>
+    <string name="external_connected_msg">%1$s is connected. Play the game there? The phone becomes the controller.</string>
+    <string name="external_move">Play on external</string>
+    <string name="external_stay">Keep on phone</string>
+    <string name="external_unavailable_hint">An external display was detected but isn\'t available for the game. If Samsung DeX started, close it (or set the connection to screen mirroring) and reconnect.</string>
 </resources>

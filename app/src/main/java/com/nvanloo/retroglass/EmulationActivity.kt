@@ -132,10 +132,18 @@ class EmulationActivity : AppCompatActivity() {
     private val extendedMode: Boolean get() = presentation != null
 
     private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) = applyDisplayMode("displayAdded $displayId")
+        override fun onDisplayAdded(displayId: Int) {
+            applyDisplayMode("displayAdded $displayId")
+            maybeHintUnavailableExternal(displayId)
+        }
         override fun onDisplayRemoved(displayId: Int) = applyDisplayMode("displayRemoved $displayId")
         override fun onDisplayChanged(displayId: Int) = applyDisplayMode("displayChanged $displayId")
     }
+
+    /** External displays the user chose "Keep on phone" for (cleared when they unplug). */
+    private val declinedDisplays = mutableSetOf<Int>()
+    private var externalPromptDialog: AlertDialog? = null
+    private var hintedUnavailableExternal = false
 
     private val mediaRouterCallback = object : android.media.MediaRouter.SimpleCallback() {
         override fun onRoutePresentationDisplayChanged(
@@ -752,17 +760,18 @@ class EmulationActivity : AppCompatActivity() {
      */
     private fun applyDisplayMode(reason: String) {
         val view = retroView ?: return
+        val candidate = findExternalDisplay()
         // Internal / Fullscreen modes keep the game on the phone even if glasses are plugged in.
-        val external = if (modeUsesExternal()) findExternalDisplay() else null
+        val external = if (modeUsesExternal()) candidate else null
         val currentPresentationDisplayId = presentation?.display?.displayId
         Log.i(
             TAG,
-            "applyDisplayMode($reason): external=${external?.displayId} " +
-                "presentationOn=$currentPresentationDisplayId",
+            "applyDisplayMode($reason): candidate=${candidate?.displayId} " +
+                "external=${external?.displayId} presentationOn=$currentPresentationDisplayId",
         )
 
         when {
-            // Nothing external: game belongs on the phone.
+            // Nothing external usable: game belongs on the phone.
             external == null -> {
                 // Coming off the glasses: bring the game back and auto-pause so it
                 // doesn't keep running unwatched.
@@ -770,11 +779,26 @@ class EmulationActivity : AppCompatActivity() {
                     moveGameToPhone(view)
                     pauseForDisconnect()
                 }
+                if (candidate == null) {
+                    // Truly unplugged: forget declines and drop a stale prompt.
+                    declinedDisplays.clear()
+                    externalPromptDialog?.dismiss()
+                } else if (!isStartingUp()) {
+                    // A display is there but the screen mode is set to internal:
+                    // still offer the move (accepting switches the mode to Auto).
+                    promptMoveToExternal(candidate, switchModeOnAccept = true)
+                }
             }
-            // External present and game not yet on it: move it there.
+            // External present and game not yet on it: move it there. Automatic while
+            // the activity is starting up (glasses already attached at launch); a
+            // mid-game hotplug asks the user first instead of yanking the game away.
             presentation == null -> {
-                moveGameToPresentation(view, external)
-                resumeFromPause()
+                if (isStartingUp()) {
+                    moveGameToPresentation(view, external)
+                    resumeFromPause()
+                } else {
+                    promptMoveToExternal(external, switchModeOnAccept = false)
+                }
             }
             // External changed identity (e.g. unplug/replug enumerates a new id):
             // rehome onto the new display.
@@ -785,6 +809,50 @@ class EmulationActivity : AppCompatActivity() {
             // Already on the right external display: nothing to do.
         }
         arrangeLayout()
+    }
+
+    /** Launch window in which an already-attached display is adopted without asking. */
+    private fun isStartingUp(): Boolean =
+        android.os.SystemClock.elapsedRealtime() - playStartMs < 4000
+
+    /** Asks whether to move the running game onto [display] (mid-game hotplug). */
+    private fun promptMoveToExternal(display: Display, switchModeOnAccept: Boolean) {
+        val view = retroView ?: return
+        if (display.displayId in declinedDisplays) return
+        if (externalPromptDialog?.isShowing == true) return
+        externalPromptDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.external_connected_title)
+            .setMessage(getString(R.string.external_connected_msg, display.name ?: ""))
+            .setPositiveButton(R.string.external_move) { _, _ ->
+                if (switchModeOnAccept) {
+                    layoutStore.setScreenMode(LayoutStore.SCREEN_AUTO)
+                    applyScreenOrientation()
+                }
+                // Re-resolve: the display id can change between prompt and accept.
+                val target = findExternalDisplay() ?: display
+                if (presentation == null) {
+                    moveGameToPresentation(view, target)
+                    resumeFromPause()
+                }
+                applyDisplayMode("userAcceptedExternal")
+            }
+            .setNegativeButton(R.string.external_stay) { _, _ ->
+                declinedDisplays.add(display.displayId)
+            }
+            .setOnCancelListener { declinedDisplays.add(display.displayId) }
+            .show().gamepadNavigable()
+    }
+
+    /** One-time hint when a non-internal display appeared but can't be used for output
+     *  (typically Samsung DeX or mirroring holding it). */
+    private fun maybeHintUnavailableExternal(displayId: Int) {
+        if (hintedUnavailableExternal) return
+        val display = displayManager.getDisplay(displayId) ?: return
+        if (isInternalDisplay(display)) return
+        if (findExternalDisplay() == null) {
+            hintedUnavailableExternal = true
+            Toast.makeText(this, R.string.external_unavailable_hint, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun isPortrait(): Boolean =
@@ -890,7 +958,10 @@ class EmulationActivity : AppCompatActivity() {
             }
             controllerView.visibility = View.VISIBLE
             controllerView.overlayMode = false
-            controllerView.layoutMode = ControllerView.LAYOUT_FULLPAD
+            // The landscape full-pad rearrangement only fits a landscape-held phone; in
+            // portrait keep the portrait-authored layout spread over the full screen.
+            controllerView.layoutMode =
+                if (isPortrait()) ControllerView.LAYOUT_PORTRAIT else ControllerView.LAYOUT_FULLPAD
             setRegion(controllerView, fraction = 1f, top = false)
             applyVideoTransform()
             return
@@ -1126,11 +1197,15 @@ class EmulationActivity : AppCompatActivity() {
             .firstOrNull { !isInternalDisplay(it) }
     }
 
-    /** Display.getType() is not public API; on failure assume internal (safer). */
+    /** Display.getType() is not public API. If reflection is blocked (non-SDK policy),
+     *  fall back to a heuristic rather than "everything is internal" — that default
+     *  silently disabled external-display detection altogether. Built-in panels
+     *  enumerate first at boot (0 = main, 1 = the Flip's cover screen); hotplugged
+     *  displays get higher ids. */
     private fun isInternalDisplay(display: Display): Boolean = runCatching {
         val type = Display::class.java.getMethod("getType").invoke(display) as Int
         type == 1 // Display.TYPE_INTERNAL
-    }.getOrDefault(true)
+    }.getOrElse { display.displayId <= 1 }
 
     // ------------------------------------------------------------ input
 
@@ -2086,6 +2161,8 @@ class EmulationActivity : AppCompatActivity() {
     override fun onDestroy() {
         menuDialog?.dismiss()
         menuDialog = null
+        externalPromptDialog?.dismiss()
+        externalPromptDialog = null
         uiHandler.removeCallbacksAndMessages(null)
         presentation?.let { runCatching { it.dismiss() } }
         presentation = null
