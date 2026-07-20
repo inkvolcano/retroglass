@@ -34,6 +34,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.nvanloo.retroglass.controller.CompanionView
 import com.nvanloo.retroglass.controller.ControllerView
 import com.nvanloo.retroglass.controller.LayoutStore
 import com.nvanloo.retroglass.model.Console
@@ -102,6 +103,7 @@ class EmulationActivity : AppCompatActivity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var gameContainer: FrameLayout
     private lateinit var controllerView: ControllerView
+    private lateinit var companionView: CompanionView
     private lateinit var editBar: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var phoneErrorText: TextView
@@ -114,6 +116,8 @@ class EmulationActivity : AppCompatActivity() {
     private var pausedByDisconnect = false
 
     private var frameCounter = 0
+    private var lastFps = 0
+    private val playStartMs = android.os.SystemClock.elapsedRealtime()
     private var gyroRegistered = false
     private var gyroAimX = 0f
     private var gyroAimY = 0f
@@ -242,6 +246,7 @@ class EmulationActivity : AppCompatActivity() {
                 bindingCapture = null
                 bindingCaptureDevice = null
                 capture(event.keyCode)
+                if (dashboardActive()) refreshCompanion()
                 return true
             }
             val port = portFor(key, event.device)
@@ -249,6 +254,7 @@ class EmulationActivity : AppCompatActivity() {
             val retroKey = inputConfig.bindings(key)[event.keyCode] ?: androidToRetroKey(event.keyCode)
             if (retroKey != null && event.action != KeyEvent.ACTION_MULTIPLE) {
                 v.sendKeyEvent(event.action, retroKey, port)
+                if (dashboardActive()) companionView.inputButton(retroKey, event.action == KeyEvent.ACTION_DOWN)
                 return true
             }
         }
@@ -267,21 +273,22 @@ class EmulationActivity : AppCompatActivity() {
             val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
             val lx = tuneAxis(event.getAxisValue(MotionEvent.AXIS_X), dead, sens)
             val ly = tuneAxis(event.getAxisValue(MotionEvent.AXIS_Y), dead, sens)
+            val rx = tuneAxis(event.getAxisValue(MotionEvent.AXIS_Z), dead, sens)
+            val ry = tuneAxis(event.getAxisValue(MotionEvent.AXIS_RZ), dead, sens)
+            val dash = dashboardActive()
             if (inputConfig.leftStickAsDpad(key)) {
                 val dx = if (lx > 0.5f) 1f else if (lx < -0.5f) -1f else hatX
                 val dy = if (ly > 0.5f) 1f else if (ly < -0.5f) -1f else hatY
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, dx, dy, port)
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, 0f, 0f, port)
+                if (dash) { companionView.inputHat(dx, dy); companionView.inputStick("stick_l", 0f, 0f) }
             } else {
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, hatX, hatY, port)
                 v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, lx, ly, port)
+                if (dash) { companionView.inputHat(hatX, hatY); companionView.inputStick("stick_l", lx, ly) }
             }
-            v.sendMotionEvent(
-                GLRetroView.MOTION_SOURCE_ANALOG_RIGHT,
-                tuneAxis(event.getAxisValue(MotionEvent.AXIS_Z), dead, sens),
-                tuneAxis(event.getAxisValue(MotionEvent.AXIS_RZ), dead, sens),
-                port,
-            )
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT, rx, ry, port)
+            if (dash) companionView.inputStick("stick_r", rx, ry)
             return true
         }
         return super.onGenericMotionEvent(event)
@@ -394,13 +401,17 @@ class EmulationActivity : AppCompatActivity() {
     private fun startFpsTicker() {
         val tick = object : Runnable {
             override fun run() {
-                if (layoutStore.fpsOverlay()) {
+                lastFps = frameCounter
+                // The counter also feeds the companion dashboard's stats; keep the game overlay
+                // hidden while the dashboard is up (it would draw over the empty game container).
+                if (layoutStore.fpsOverlay() && !dashboardActive()) {
                     fpsView.visibility = View.VISIBLE
                     fpsView.text = getString(R.string.fps_value, frameCounter)
                     fpsView.bringToFront()
                 } else {
                     fpsView.visibility = View.GONE
                 }
+                if (dashboardActive()) pushCompanionStats()
                 frameCounter = 0
                 uiHandler.postDelayed(this, 1000)
             }
@@ -545,12 +556,27 @@ class EmulationActivity : AppCompatActivity() {
             scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
             visibility = View.GONE
         }
+        companionView = CompanionView(this).apply {
+            visibility = View.GONE
+            bindConsole(console)
+            onSaveState = { saveState() }
+            onLoadState = { loadState() }
+            onFastForward = { toggleFastForward(); pushCompanionStats() }
+            onScreenshot = { takeScreenshot() }
+            onOpenMenu = { showMenu() }
+            onRemap = { remapActivePad() }
+            onUseTouchPad = {
+                layoutStore.setPhonePanelMode(LayoutStore.PHONE_PANEL_CONTROLLER)
+                arrangeLayout()
+            }
+        }
         editBar = buildEditBar()
 
         // Bezel/background sits behind the game so it frames a shrunk picture.
         rootLayout.addView(bezelView, matchParent())
         rootLayout.addView(gameContainer, matchParent())
         rootLayout.addView(controllerView, matchParent())
+        rootLayout.addView(companionView, matchParent())
         rootLayout.addView(
             fpsView,
             FrameLayout.LayoutParams(
@@ -833,12 +859,36 @@ class EmulationActivity : AppCompatActivity() {
         return this
     }
 
+    /** In external-display mode, whether the phone shows the companion dashboard instead of the
+     *  touch pad. Auto = there's a physical pad and the phone isn't a player (so the pad is P1). */
+    private fun dashboardActive(): Boolean {
+        if (!extendedMode) return false
+        return when (layoutStore.phonePanelMode()) {
+            LayoutStore.PHONE_PANEL_DASHBOARD -> true
+            LayoutStore.PHONE_PANEL_CONTROLLER -> false
+            else -> hasGamepad() && phonePort() < 0
+        }
+    }
+
     private fun arrangeLayout() {
-        if (!::controllerView.isInitialized || !::gameContainer.isInitialized) return
+        if (!::controllerView.isInitialized || !::gameContainer.isInitialized ||
+            !::companionView.isInitialized
+        ) {
+            return
+        }
+        if (!dashboardActive()) companionView.visibility = View.GONE
         if (extendedMode) {
-            controllerView.visibility = View.VISIBLE
             floatingMenu.visibility = View.GONE
             gameContainer.visibility = View.GONE
+            if (dashboardActive()) {
+                controllerView.visibility = View.GONE
+                companionView.visibility = View.VISIBLE
+                companionView.bringToFront()
+                refreshCompanion()
+                applyVideoTransform()
+                return
+            }
+            controllerView.visibility = View.VISIBLE
             controllerView.overlayMode = false
             controllerView.layoutMode = ControllerView.LAYOUT_FULLPAD
             setRegion(controllerView, fraction = 1f, top = false)
@@ -952,6 +1002,71 @@ class EmulationActivity : AppCompatActivity() {
             v.translationX = offX * pw
             v.translationY = offY * ph
         }
+    }
+
+    // ------------------------------------------------- companion dashboard
+
+    /** The physical pad the dashboard mirrors: the first connected pad assigned to a real port,
+     *  else just the first connected pad. */
+    private fun activePad(): InputDevice? =
+        connectedGamepads().firstOrNull { portFor(deviceKey(it), it) >= 0 }
+            ?: connectedGamepads().firstOrNull()
+
+    /** Refreshes the dashboard's static content (title, pad name, button mapping, stats). */
+    private fun refreshCompanion() {
+        if (!::companionView.isInitialized) return
+        val pad = activePad()
+        companionView.setHeader(
+            "${romFile.nameWithoutExtension}  ·  ${console.displayName}",
+            pad?.name,
+        )
+        companionView.setMapping(companionMappingRows(pad))
+        pushCompanionStats()
+    }
+
+    /** RetroPad button -> the physical key bound to it (or "(default)"), for the shown pad. */
+    private fun companionMappingRows(pad: InputDevice?): List<Pair<String, String>> {
+        val key = pad?.let { deviceKey(it) } ?: return emptyList()
+        return com.nvanloo.retroglass.controller.InputConfig.RETRO_BUTTONS.map { (name, retroKey) ->
+            val phys = inputConfig.physicalFor(key, retroKey)
+            val physName = phys?.let {
+                KeyEvent.keyCodeToString(it).removePrefix("KEYCODE_").removePrefix("BUTTON_")
+            } ?: getString(R.string.remap_default)
+            name to physName
+        }
+    }
+
+    private fun pushCompanionStats() {
+        if (!dashboardActive()) return
+        val secs = (android.os.SystemClock.elapsedRealtime() - playStartMs) / 1000
+        val frameMs = if (lastFps > 0) 1000f / lastFps else 0f
+        companionView.updateStats(lastFps, frameMs, secs, fastForward)
+    }
+
+    private fun remapActivePad() {
+        val pad = activePad()
+        if (pad == null) {
+            Toast.makeText(this, R.string.companion_no_pad, Toast.LENGTH_SHORT).show()
+            return
+        }
+        showRemap(deviceKey(pad), pad.name)
+    }
+
+    private fun showPhonePanelPicker() {
+        val labels = arrayOf(
+            getString(R.string.phone_panel_auto),
+            getString(R.string.phone_panel_controller),
+            getString(R.string.phone_panel_dashboard),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_phone_panel)
+            .setSingleChoiceItems(labels, layoutStore.phonePanelMode()) { dialog, which ->
+                layoutStore.setPhonePanelMode(which)
+                arrangeLayout()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
     }
 
     private fun moveGameToPresentation(view: GLRetroView, display: Display) {
@@ -1069,6 +1184,10 @@ class EmulationActivity : AppCompatActivity() {
             actions += getString(R.string.menu_choose_layout) to { showLayoutPicker() }
             actions += getString(R.string.menu_edit_layout) to { setEditMode(true) }
             actions += getString(R.string.menu_turbo) to { showTurboConfig() }
+        }
+        // On an external display the phone can be the touch pad or a stats + mapping dashboard.
+        if (extendedMode) {
+            actions += getString(R.string.menu_phone_panel) to { showPhonePanelPicker() }
         }
         actions += getString(
             if (layoutStore.rumbleEnabled()) R.string.menu_rumble_on else R.string.menu_rumble_off,
@@ -1253,6 +1372,9 @@ class EmulationActivity : AppCompatActivity() {
         // CUT2 is LibretroDroid's edge-smoothing upscaler (the filter Lemuroid ships as its
         // default) — cleans up low-res pixels on a big external display without CRT/LCD look.
         4 -> ShaderConfig.CUT2()
+        // Our fork's custom end-phase chains (work on every system, 2D and 3D).
+        5 -> com.nvanloo.retroglass.video.Anime4KShaders.upscaleCnnX2S()
+        6 -> com.nvanloo.retroglass.video.RetroShaders.casSharpen()
         else -> ShaderConfig.Default
     }
 
@@ -1263,6 +1385,8 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_lcd),
             getString(R.string.filter_sharp),
             getString(R.string.filter_upscale),
+            getString(R.string.filter_anime4k),
+            getString(R.string.filter_cas),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)

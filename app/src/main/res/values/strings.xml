@@ -172,6 +172,8 @@
     <string name="filter_lcd">LCD (handheld grid)</string>
     <string name="filter_sharp">Sharp bilinear</string>
     <string name="filter_upscale">Upscale (smooth edges)</string>
+    <string name="filter_anime4k">AI upscale 2× (Anime4K CNN)</string>
+    <string name="filter_cas">Adaptive sharpen (CAS)</string>
     <string name="edit_done">Done</string>
     <string name="edit_reset">Reset</string>
     <string name="edit_cancel">Cancel</string>
@@ -184,4 +186,25 @@
     <string name="slot_used">(used)</string>
     <string name="slot_empty">(empty)</string>
     <string name="slot_auto">Auto (last session)</string>
+    <!-- Companion dashboard (external display, physical controller) -->
+    <string name="menu_phone_panel">Phone panel (external display)…</string>
+    <string name="phone_panel_auto">Auto — dashboard with a gamepad</string>
+    <string name="phone_panel_controller">Touch controller</string>
+    <string name="phone_panel_dashboard">Dashboard (stats + mapping)</string>
+    <string name="companion_stat_fps">FPS</string>
+    <string name="companion_stat_frame">FRAME ms</string>
+    <string name="companion_stat_time">PLAY TIME</string>
+    <string name="companion_stat_speed">SPEED</string>
+    <string name="companion_speed_normal">1×</string>
+    <string name="companion_speed_ff">2×</string>
+    <string name="companion_input_title">LIVE INPUT</string>
+    <string name="companion_mapping_title">BUTTON MAPPING</string>
+    <string name="companion_no_pad">No controller connected</string>
+    <string name="companion_use_pad">Use touch pad</string>
+    <string name="companion_action_save">Save</string>
+    <string name="companion_action_load">Load</string>
+    <string name="companion_action_ff">Fast-fwd</string>
+    <string name="companion_action_shot">Screenshot</string>
+    <string name="companion_action_menu">Menu</string>
+    <string name="companion_action_remap">Remap…</string>
 </resources>

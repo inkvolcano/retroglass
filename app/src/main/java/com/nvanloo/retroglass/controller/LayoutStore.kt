@@ -124,6 +124,12 @@ class LayoutStore(context: Context) {
     fun fpsOverlay(): Boolean = prefs.getBoolean("fps_overlay", false)
     fun setFpsOverlay(v: Boolean) { prefs.edit().putBoolean("fps_overlay", v).apply() }
 
+    /** What the phone shows while the game is on an external display. See PHONE_PANEL_* constants:
+     *  Auto (dashboard when a physical gamepad drives and the phone isn't a player, else touch pad),
+     *  Controller (always the touch pad), Dashboard (always the stats + mapping companion). */
+    fun phonePanelMode(): Int = prefs.getInt("phone_panel", PHONE_PANEL_AUTO)
+    fun setPhonePanelMode(v: Int) { prefs.edit().putInt("phone_panel", v).apply() }
+
     /** Bezel/background behind the game: 0=None, 1=Dark, 2=Gradient, 3=Custom image. */
     fun bezelMode(): Int = prefs.getInt("bezel_mode", 1)
     fun setBezelMode(v: Int) { prefs.edit().putInt("bezel_mode", v).apply() }
@@ -156,5 +162,9 @@ class LayoutStore(context: Context) {
         const val SCREEN_INT_LANDSCAPE = 2 // on the phone, landscape: game centred, pad frames it
         const val SCREEN_EXTERNAL = 3      // game on an external display, phone is the pad
         const val SCREEN_FULLSCREEN = 4    // game fills the phone (landscape), physical gamepad, no touch pad
+
+        const val PHONE_PANEL_AUTO = 0        // dashboard when a gamepad drives and the phone isn't a player
+        const val PHONE_PANEL_CONTROLLER = 1  // always the touch pad
+        const val PHONE_PANEL_DASHBOARD = 2   // always the stats + mapping companion
     }
 }

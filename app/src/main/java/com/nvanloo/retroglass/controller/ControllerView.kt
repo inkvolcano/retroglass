@@ -90,6 +90,16 @@ class ControllerView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** Read-only live-input display: ignores touch and drops the menu button. The pressed/stick
+     *  state is driven from the physical gamepad via [monitorButton]/[monitorDpad]/[monitorStick]
+     *  so the diagram lights up as the player presses their pad (companion-dashboard mode). */
+    var monitorMode: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            reloadControls()
+        }
+
     private var selected: ControlState? = null
 
     /** Control ids set to autofire (turbo) while held. Set by EmulationActivity. */
@@ -190,7 +200,7 @@ class ControllerView @JvmOverloads constructor(
             base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
                 w = width.toFloat(), h = height.toFloat())
         }
-        val defs = base + menuControl()
+        val defs = if (monitorMode) base else base + menuControl()
         controls = defs.map { def ->
             // Landscape layouts are computed, not user-tweaked, so ignore the per-preset portrait overrides.
             val p = if (landscape) ControlPlacement(def.x, def.y, 1f)
@@ -312,8 +322,50 @@ class ControllerView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (monitorMode) return false
         if (editMode) return handleEditTouch(event)
         return handlePlayTouch(event)
+    }
+
+    // ------------------------------------------------------- monitor (live display)
+
+    /** Light every button bound to [retroKeyCode] (RetroPad = Android keycode, same space as the
+     *  emulator receives). No-op unless it changes something, so it's cheap to call per key event. */
+    fun monitorButton(retroKeyCode: Int, pressed: Boolean) {
+        var changed = false
+        for (c in controls) {
+            if (c.def.type == ControlType.BUTTON && c.def.id != "_menu" && c.def.keyCode == retroKeyCode) {
+                if (c.pressed != pressed) { c.pressed = pressed; changed = true }
+            }
+        }
+        if (changed) invalidate()
+    }
+
+    /** Deflect the D-pad diagram to a direction (-1/0/1 on each axis). */
+    fun monitorDpad(x: Float, y: Float) {
+        val c = controls.firstOrNull { it.def.type == ControlType.DPAD } ?: return
+        if (c.valueX == x && c.valueY == y) return
+        c.valueX = x; c.valueY = y; c.pressed = x != 0f || y != 0f
+        invalidate()
+    }
+
+    /** Deflect a named analog stick ("stick_l"/"stick_r") in the diagram. */
+    fun monitorStick(id: String, x: Float, y: Float) {
+        val c = controls.firstOrNull { it.def.type == ControlType.STICK && it.def.id == id } ?: return
+        if (c.valueX == x && c.valueY == y) return
+        c.valueX = x; c.valueY = y; c.pressed = x != 0f || y != 0f
+        invalidate()
+    }
+
+    /** Reset every control to its resting state (e.g. when the driving pad disconnects). */
+    fun monitorClear() {
+        var changed = false
+        for (c in controls) {
+            if (c.pressed || c.valueX != 0f || c.valueY != 0f) {
+                c.pressed = false; c.valueX = 0f; c.valueY = 0f; changed = true
+            }
+        }
+        if (changed) invalidate()
     }
 
     private fun handlePlayTouch(event: MotionEvent): Boolean {
