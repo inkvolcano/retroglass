@@ -585,8 +585,8 @@ object ControllerDefs {
     // ------------------------------------------------------------- NES
 
     private fun nes(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.52f, size = 0.50f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.52f, size = 0.46f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
             x = 0.38f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
@@ -607,8 +607,8 @@ object ControllerDefs {
     private fun snes(): List<ControlDef> {
         val face = 0.18f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.50f, size = 0.47f,
-                shape = ControlShape.CROSS,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.262f, y = 0.50f, size = 0.47f,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
                 x = 0.15f, y = 0.09f, size = 0.18f, shape = ControlShape.BAR,
@@ -642,8 +642,8 @@ object ControllerDefs {
     // ------------------------------------------------------------- Mega Drive
 
     private fun megadrive(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.55f, size = 0.48f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.282f, y = 0.55f, size = 0.51f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#0E0E10"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.86f, size = 0.13f, shape = ControlShape.PILL,
@@ -666,7 +666,7 @@ object ControllerDefs {
     private fun psx(): List<ControlDef> {
         val face = 0.16f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.25f, y = 0.42f, size = 0.44f,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.42f, size = 0.46f,
                 shape = ControlShape.PSX_CROSS,
                 fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             // Shoulder bars pushed out to the screen edges.
@@ -771,7 +771,7 @@ object ControllerDefs {
         val body = Color.parseColor("#5A3A7A")
         return listOf(
             ControlDef("dpad", ControlType.DPAD, "", x = 0.29f, y = 0.50f, size = 0.50f,
-                shape = ControlShape.CROSS,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
                 x = 0.38f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
@@ -792,7 +792,7 @@ object ControllerDefs {
 
     private fun gba(): List<ControlDef> = listOf(
         ControlDef("dpad", ControlType.DPAD, "", x = 0.28f, y = 0.56f, size = 0.50f,
-            shape = ControlShape.CROSS,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#26243A"), labelColor = LIGHT_TEXT),
         ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
             x = 0.20f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
@@ -819,7 +819,7 @@ object ControllerDefs {
 
     private fun pcengine(): List<ControlDef> = listOf(
         ControlDef("dpad", ControlType.DPAD, "", x = 0.27f, y = 0.47f, size = 0.48f,
-            shape = ControlShape.CROSS,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SEL", KeyEvent.KEYCODE_BUTTON_SELECT,
             x = 0.38f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
@@ -860,8 +860,8 @@ object ControllerDefs {
                 x = 0.50f, y = 0.20f, size = 0.13f, shape = ControlShape.CIRCLE,
                 fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
             // D-pad upper-left.
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.16f, y = 0.33f, size = 0.32f,
-                shape = ControlShape.CROSS,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.227f, y = 0.33f, size = 0.40f,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
             // Big B / A on the right.
             ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
@@ -894,8 +894,8 @@ object ControllerDefs {
     private fun lynx(): List<ControlDef> {
         val btn = Color.parseColor("#E8A020")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.55f, size = 0.55f,
-                shape = ControlShape.CROSS,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.55f, size = 0.55f,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("opt1", ControlType.BUTTON, "OPT 1", KeyEvent.KEYCODE_BUTTON_L1,
                 x = 0.15f, y = 0.10f, size = 0.18f, shape = ControlShape.BAR,
@@ -919,8 +919,8 @@ object ControllerDefs {
 
     /** 2600: one joystick, one Fire button, plus console Select and Reset (=Start). */
     private fun atari2600(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
             x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
@@ -937,8 +937,8 @@ object ControllerDefs {
 
     /** 7800: D-pad, two fire buttons, Select, Pause (=Start). */
     private fun atari7800(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
             x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
@@ -958,8 +958,8 @@ object ControllerDefs {
 
     /** WonderSwan: D-pad (X-pad), A, B, Start. */
     private fun wonderswan(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#22222A"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
@@ -978,8 +978,8 @@ object ControllerDefs {
     private fun virtualboy(): List<ControlDef> {
         val red = Color.parseColor("#E03A3A")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.56f, size = 0.52f,
-                shape = ControlShape.CROSS,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.56f, size = 0.52f,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
                 x = 0.14f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
@@ -1007,8 +1007,8 @@ object ControllerDefs {
     private fun threedo(): List<ControlDef> {
         val btn = Color.parseColor("#3A3A3E")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.55f, size = 0.52f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.55f, size = 0.52f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
                 x = 0.14f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
@@ -1033,8 +1033,8 @@ object ControllerDefs {
         val top = Color.parseColor("#37414F")
         val bot = Color.parseColor("#2E2E34")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.56f, size = 0.50f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#22262E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.56f, size = 0.50f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#22262E"), labelColor = LIGHT_TEXT),
             ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
                 x = 0.14f, y = 0.09f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
             ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
@@ -1059,8 +1059,8 @@ object ControllerDefs {
     // ------------------------------------------------------------- ColecoVision
 
     private fun coleco(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.52f,
-            shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.274f, y = 0.54f, size = 0.49f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("k1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_X,
@@ -1086,8 +1086,8 @@ object ControllerDefs {
         val key = Color.parseColor("#3A3A40")
         val ksz = 0.115f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.21f, y = 0.30f, size = 0.40f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.252f, y = 0.30f, size = 0.45f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             // Three side action buttons (Top=Y, Left=B, Right=A per FreeIntv).
             ControlDef("act_left", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
                 x = 0.09f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
@@ -1119,8 +1119,8 @@ object ControllerDefs {
     private fun vectrex(): List<ControlDef> {
         val btn = Color.parseColor("#2E7D5A")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.55f, size = 0.50f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#141414"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.55f, size = 0.50f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#141414"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
                 x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#222222"), labelColor = LIGHT_TEXT),
             ControlDef("b1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_Y,
@@ -1137,8 +1137,8 @@ object ControllerDefs {
     // ------------------------------------------------------------- Pokémon Mini
 
     private fun pokemonMini(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS, fillColor = Color.parseColor("#241E33"), labelColor = LIGHT_TEXT),
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#241E33"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "POWER", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2438"), labelColor = LIGHT_TEXT),
         ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_R1,
@@ -1152,8 +1152,8 @@ object ControllerDefs {
     // ------------------------------------------------------------- Atari 5200
 
     private fun atari5200(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.37f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_SELECT,
@@ -1172,8 +1172,8 @@ object ControllerDefs {
         val kick = Color.parseColor("#E67E22")
         val face = 0.13f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.14f, y = 0.55f, size = 0.52f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.55f, size = 0.52f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("coin", ControlType.BUTTON, "COIN", KeyEvent.KEYCODE_BUTTON_SELECT,
                 x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
@@ -1203,8 +1203,8 @@ object ControllerDefs {
     private fun sms(): List<ControlDef> {
         val btn = Color.parseColor("#B02525")
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.26f, y = 0.54f, size = 0.50f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.54f, size = 0.50f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
                 x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
@@ -1221,8 +1221,8 @@ object ControllerDefs {
     private fun neogeo(): List<ControlDef> {
         val sz = 0.155f
         return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.22f, y = 0.55f, size = 0.46f,
-                shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.55f, size = 0.46f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
             ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
                 x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
@@ -1252,8 +1252,8 @@ object ControllerDefs {
      * separate feature still to come.
      */
     private fun computerJoystick(accent: Int): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
             x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
         ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
@@ -1276,8 +1276,8 @@ object ControllerDefs {
         val btn = Color.parseColor("#3A3A40")
         return listOf(
             // START moved up top so the D-pad + analog can grow.
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.22f, y = 0.38f, size = 0.44f,
-                shape = ControlShape.CROSS,
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.38f, size = 0.52f,
+                shape = ControlShape.PSX_CROSS,
                 fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
             ControlDef("stick_l", ControlType.STICK, "", x = 0.29f, y = 0.78f, size = 0.44f,
                 shape = ControlShape.STICK,
@@ -1311,8 +1311,8 @@ object ControllerDefs {
 
     /** NGP: D-pad plus A, B, and Option (mapped to Start). */
     private fun ngp(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.155f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.CROSS,
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS,
             fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
         ControlDef("option", ControlType.BUTTON, "OPTION", KeyEvent.KEYCODE_BUTTON_START,
             x = 0.50f, y = 0.84f, size = 0.12f, shape = ControlShape.PILL,
