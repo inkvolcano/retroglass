@@ -43,7 +43,8 @@ android {
 }
 
 dependencies {
-    implementation("com.github.Swordfish90:LibretroDroid:0.14.0")
+    // Local fork (vendored at 0.14.0) — extends the shader pipeline with custom passes.
+    implementation(project(":libretrodroid"))
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
