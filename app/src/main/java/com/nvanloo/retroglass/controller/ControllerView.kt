@@ -38,6 +38,15 @@ class ControllerView @JvmOverloads constructor(
     companion object {
         /** Bezel thickness as a fraction of the control's radius. */
         const val BEZEL_WIDTH = 0.15f
+        /**
+         * The D-pad wears a thinner rim. Its arms are only ~0.62r wide, so a rim scaled off the
+         * full radius eats most of an arm and the cross reads as outlined rather than moulded.
+         */
+        const val BEZEL_WIDTH_CROSS = 0.075f
+        /** How far the body is pushed off the glass, as a fraction of radius. */
+        const val EXTRUDE_DEPTH = 0.10f
+        /** Contact shadow on the screen underneath. */
+        const val CONTACT_ALPHA = 80
         /** How far off "straight up" the lit edge sits in the resting pose. */
         const val BEZEL_BASE = 0.6f
         const val BEZEL_HIGHLIGHT = 120
@@ -152,6 +161,7 @@ class ControllerView @JvmOverloads constructor(
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val extrudePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     // ---- tilt-driven bezel ---------------------------------------------------------------
     // A virtual light fixed in the world. Each control carries a bevelled rim: bright on the
@@ -658,10 +668,14 @@ class ControllerView @JvmOverloads constructor(
         }
 
         val alpha = if (overlayMode) 165 else 255
+        // Three passes make a control read as sitting on the glass rather than printed on it:
+        // its shadow and side wall underneath, then the face, then the lit rim on top.
+        if (tiltBezel && !editMode) {
+            for (c in controls) drawExtrusion(canvas, c, alpha)
+        }
         for (c in controls) {
             drawControl(canvas, c, alpha)
         }
-        // The rim goes on top of its own control's fill, so it is a second pass.
         if (tiltBezel && !editMode) {
             for (c in controls) drawBezel(canvas, c, alpha)
         }
@@ -681,6 +695,28 @@ class ControllerView @JvmOverloads constructor(
     }
 
     /**
+     * The part that sells "on top of the screen": a contact shadow on the glass, then the
+     * body's side wall. Both sit on the side away from the light, so they swing with the phone
+     * and the control looks like it is standing off the surface rather than drawn onto it.
+     */
+    private fun drawExtrusion(canvas: Canvas, c: ControlState, alpha: Int) {
+        val r = controlRadius(c)
+        val cx = centerX(c)
+        val cy = centerY(c)
+        val (hx, hy) = lightDir()
+        val depth = r * EXTRUDE_DEPTH
+
+        // Contact shadow, thrown a little further than the body it belongs to.
+        extrudePaint.color = Color.argb(CONTACT_ALPHA * alpha / 255, 0, 0, 0)
+        canvas.drawPath(controlPath(c, cx - hx * depth * 1.9f, cy - hy * depth * 1.9f, r), extrudePaint)
+
+        // Side wall: the same silhouette in a darker tone, offset by the extrusion depth. Drawn
+        // under the face, so only the sliver away from the light stays visible.
+        extrudePaint.color = withAlpha(darken(darken(c.def.fillColor)), alpha)
+        canvas.drawPath(controlPath(c, cx - hx * depth, cy - hy * depth, r), extrudePaint)
+    }
+
+    /**
      * The bevelled rim. A three-stop gradient (highlight → clear → shade) laid along the light
      * axis and stroked just inside the control's edge, so one side catches the light and the
      * opposite side falls away.
@@ -689,10 +725,11 @@ class ControllerView @JvmOverloads constructor(
         val r = controlRadius(c)
         val cx = centerX(c)
         val cy = centerY(c)
-        val w = r * BEZEL_WIDTH
+        val w = r * bezelWidth(c)
         applyBezelShader(cx, cy, r, alpha)
         bezelPaint.strokeWidth = w
-        strokeOutline(canvas, c, cx, cy, r - w / 2f)
+        bezelPaint.style = Paint.Style.STROKE
+        canvas.drawPath(controlPath(c, cx, cy, r - w / 2f), bezelPaint)
 
         // The stick's knob is its own raised part and reads flat without a rim of its own.
         if (c.def.shape == ControlShape.STICK) {
@@ -704,6 +741,11 @@ class ControllerView @JvmOverloads constructor(
             bezelPaint.strokeWidth = kw
             canvas.drawCircle(kx, ky, knobR - kw / 2f, bezelPaint)
         }
+    }
+
+    private fun bezelWidth(c: ControlState): Float = when (c.def.shape) {
+        ControlShape.CROSS, ControlShape.PSX_CROSS -> BEZEL_WIDTH_CROSS
+        else -> BEZEL_WIDTH
     }
 
     private fun applyBezelShader(cx: Float, cy: Float, r: Float, alpha: Int) {
@@ -721,39 +763,48 @@ class ControllerView @JvmOverloads constructor(
         )
     }
 
-    /** The control's outer edge as a stroked path. */
-    private fun strokeOutline(canvas: Canvas, c: ControlState, cx: Float, cy: Float, r: Float) {
+    /** A control's outer silhouette, for filling (extrusion) or stroking (rim). */
+    private fun controlPath(
+        c: ControlState,
+        cx: Float,
+        cy: Float,
+        r: Float,
+    ): android.graphics.Path = android.graphics.Path().apply {
         when (c.def.shape) {
-            ControlShape.CIRCLE, ControlShape.STICK -> canvas.drawCircle(cx, cy, r, bezelPaint)
+            ControlShape.CIRCLE, ControlShape.STICK ->
+                addCircle(cx, cy, r, android.graphics.Path.Direction.CW)
             ControlShape.PILL -> {
                 val w = r * 1.85f
-                canvas.drawRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, bezelPaint)
+                addRoundRect(
+                    RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f),
+                    r, r, android.graphics.Path.Direction.CW,
+                )
             }
             ControlShape.BAR -> {
                 val hl = barHalfLen(c)
                 val ht = barHalfThick(c)
-                canvas.drawRoundRect(RectF(cx - hl, cy - ht, cx + hl, cy + ht), ht, ht, bezelPaint)
+                addRoundRect(
+                    RectF(cx - hl, cy - ht, cx + hl, cy + ht),
+                    ht, ht, android.graphics.Path.Direction.CW,
+                )
             }
             ControlShape.CROSS, ControlShape.PSX_CROSS -> {
-                // Union of the two arms, so the rim follows the cross outline instead of
-                // drawing two rectangles straight through the middle of it.
+                // Union of the two arms, so the outline follows the cross instead of cutting
+                // two rectangles straight through the middle of it.
                 val armW = r * 0.62f
                 val half = armW / 2f
                 val corner = armW * 0.28f
-                val path = android.graphics.Path().apply {
-                    addRoundRect(
-                        RectF(cx - r, cy - half, cx + r, cy + half),
-                        corner, corner, android.graphics.Path.Direction.CW,
-                    )
-                }
+                addRoundRect(
+                    RectF(cx - r, cy - half, cx + r, cy + half),
+                    corner, corner, android.graphics.Path.Direction.CW,
+                )
                 val vertical = android.graphics.Path().apply {
                     addRoundRect(
                         RectF(cx - half, cy - r, cx + half, cy + r),
                         corner, corner, android.graphics.Path.Direction.CW,
                     )
                 }
-                path.op(vertical, android.graphics.Path.Op.UNION)
-                canvas.drawPath(path, bezelPaint)
+                op(vertical, android.graphics.Path.Op.UNION)
             }
         }
     }

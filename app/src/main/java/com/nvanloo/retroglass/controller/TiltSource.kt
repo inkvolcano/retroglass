@@ -30,8 +30,19 @@ class TiltSource(
 ) : SensorEventListener {
 
     companion object {
-        /** The resting pose: leaned back this far from upright counts as level. */
-        const val NEUTRAL_PITCH_DEG = 20f
+        /**
+         * The resting pose, measured **from flat**: 0° is the phone face-up on a table, 90° is
+         * bolt upright. 80° is how a phone actually sits in the hands while playing — a little
+         * off vertical, tipped toward you.
+         *
+         * Stated from flat on purpose. The first cut of this used "20° from vertical", which is
+         * the same pose from the opposite reference, and the ambiguity is exactly how it ended
+         * up neutral at the wrong end of the range.
+         */
+        const val NEUTRAL_FROM_FLAT_DEG = 80f
+
+        /** Same angle in the sensor's terms, where 0° is upright and 90° is flat. */
+        private const val NEUTRAL_PITCH_DEG = 90f - NEUTRAL_FROM_FLAT_DEG
 
         /**
          * Tilt this far from neutral drives the light to its limit.
