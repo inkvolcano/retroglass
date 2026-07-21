@@ -187,25 +187,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun showAddSource() {
-        val options = arrayOf(
-            getString(R.string.scan_all),
-            getString(R.string.add_files),
-            getString(R.string.add_folder),
-        )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.add_roms)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> startStorageScan()
-                    1 -> pickRoms.launch(arrayOf("*/*"))
-                    else -> pickFolder.launch(null)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
     // ---- All-storage auto-scan (internal + SD + USB) --------------------------------
 
     private var pendingScan: (() -> Unit)? = null
@@ -800,6 +781,14 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    /** Opens the library overlay at its root when a screen is reached from outside the gear. */
+    private fun openLibraryMenuIfNeeded() {
+        if (libraryMenu.isOpen) return
+        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.rootStatus = null
+        libraryMenu.open { libraryMenuScreen() }
+    }
+
     private fun showTopMenu() {
         // No console here, and green means "focused / live" - so the identity rule falls back
         // to the app's own colorPrimary rather than borrowing the focus colour.
@@ -1029,19 +1018,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Where to play: Auto / phone portrait / phone landscape / external / fullscreen. */
     private fun showScreenModePicker() {
         val modes = availableScreenModes()
-        val labels = modes.map { screenModeLabel(it) }.toTypedArray()
-        val checked = modes.indexOf(layoutStore.screenMode()).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.screen_mode_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                layoutStore.setScreenMode(modes[which])
-                buildControllerBar()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        openLibraryMenuIfNeeded()
+        libraryMenu.pushSelect(
+            getString(R.string.screen_mode_title),
+            modes.map { screenModeLabel(it) },
+            modes.indexOf(layoutStore.screenMode()).coerceAtLeast(0),
+        ) { which ->
+            layoutStore.setScreenMode(modes[which])
+            buildControllerBar()
+        }
     }
 
     /** Draws a small device glyph for a screen mode (phone portrait/landscape, monitor, fullscreen). */
@@ -1222,12 +1210,22 @@ class MainActivity : AppCompatActivity() {
         }
         actions += getString(R.string.change_system) to { chooseSystem(entry) }
         actions += getString(R.string.delete) to { confirmDelete(entry) }
-        val labels = actions.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(entry.displayName)
-            .setItems(labels) { _, which -> actions[which].second() }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.rootStatus = null
+        libraryMenu.open {
+            with(libraryMenu) {
+                body {
+                    addView(group(entry.displayName))
+                    for ((text, action) in actions.dropLast(1)) {
+                        addView(navRow(null, text) { libraryMenu.close(); action() })
+                    }
+                    addView(spacer())
+                    addView(bigButton(getString(R.string.delete), danger = true) {
+                        libraryMenu.close(); confirmDelete(entry)
+                    })
+                }
+            }
+        }
     }
 
     private fun chooseSystem(entry: RomEntry) {
@@ -1247,20 +1245,33 @@ class MainActivity : AppCompatActivity() {
 
     private fun showBiosStatus() {
         val statuses = BiosCatalog.status(this)
-        val text = buildString {
-            for (s in statuses) {
-                append(if (s.present) "✓  " else "✗  ")
-                append(s.system)
-                append('\n')
-                if (!s.present) append("      needs ${s.filenames} — ${s.note}\n")
+        openLibraryMenuIfNeeded()
+        libraryMenu.push(getString(R.string.bios_status_title)) {
+            with(libraryMenu) {
+                body {
+                    val missing = statuses.count { !it.present }
+                    addView(group(
+                        getString(R.string.bios_status_title),
+                        if (missing == 0) getString(R.string.bios_all_present)
+                        else getString(R.string.bios_missing_count, missing),
+                        trailingLive = missing == 0,
+                    ))
+                    // One row per system, so a missing BIOS is scannable instead of buried in
+                    // a wall of text inside a message box.
+                    for (st in statuses) {
+                        addView(infoRow(
+                            st.system,
+                            if (st.present) getString(R.string.bios_present)
+                            else getString(R.string.bios_needs, st.filenames),
+                            ok = st.present,
+                        ))
+                    }
+                    addView(bigButton(getString(R.string.import_bios_file), tint = true) {
+                        libraryMenu.close(); pickBios.launch(arrayOf("image/*", "*/*"))
+                    })
+                }
             }
-        }.trim()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.bios_status_title)
-            .setMessage(text)
-            .setPositiveButton(R.string.import_bios_file) { _, _ -> pickBios.launch(arrayOf("*/*")) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun confirmDelete(entry: RomEntry) {

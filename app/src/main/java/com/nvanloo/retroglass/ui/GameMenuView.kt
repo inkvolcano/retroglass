@@ -591,6 +591,30 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             })
         }
 
+    /**
+     * Push a single-select list — the shape most of the old `setSingleChoiceItems` /
+     * `setItems` dialogs actually were. Picking pops back to the caller, which rebuilds and so
+     * re-reads the value it displays.
+     */
+    fun pushSelect(title: String, labels: List<String>, checked: Int, onPick: (Int) -> Unit) {
+        push(title) {
+            body {
+                labels.forEachIndexed { i, text ->
+                    addView(selectRow(text, i == checked) { onPick(i); pop() })
+                }
+            }
+        }
+    }
+
+    /** Push a list of plain actions (no current-value semantics). */
+    fun pushActions(title: String, items: List<Pair<String, () -> Unit>>) {
+        push(title) {
+            body {
+                for ((text, action) in items) addView(navRow(null, text) { action() })
+            }
+        }
+    }
+
     /** Eats the leftover height so a trailing row sits at the bottom (the design's margin-top:auto). */
     fun spacer(): View = View(context).apply {
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)

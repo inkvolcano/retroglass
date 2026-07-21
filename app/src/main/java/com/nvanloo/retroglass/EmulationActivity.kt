@@ -1166,20 +1166,16 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun showPhonePanelPicker() {
-        val labels = arrayOf(
-            getString(R.string.phone_panel_auto),
-            getString(R.string.phone_panel_controller),
-            getString(R.string.phone_panel_dashboard),
-        )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_phone_panel)
-            .setSingleChoiceItems(labels, layoutStore.phonePanelMode()) { dialog, which ->
-                layoutStore.setPhonePanelMode(which)
-                arrangeLayout()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        ensureMenu()
+        gameMenu.pushSelect(
+            getString(R.string.menu_phone_panel),
+            listOf(
+                getString(R.string.phone_panel_auto),
+                getString(R.string.phone_panel_controller),
+                getString(R.string.phone_panel_dashboard),
+            ),
+            layoutStore.phonePanelMode(),
+        ) { layoutStore.setPhonePanelMode(it); arrangeLayout() }
     }
 
     private fun moveGameToPresentation(view: GLRetroView, display: Display) {
@@ -1476,18 +1472,12 @@ class EmulationActivity : AppCompatActivity() {
         val count = v.getAvailableDisks()
         if (count <= 1) return
         val current = v.getCurrentDisk()
-        val names = (0 until count).map {
-            getString(R.string.disc_n, it + 1) + if (it == current) " ✓" else ""
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_swap_disc)
-            .setSingleChoiceItems(names, current) { dialog, which ->
-                v.changeDisk(which)
-                Toast.makeText(this, getString(R.string.disc_switched, which + 1), Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        val names = (0 until count).map { getString(R.string.disc_n, it + 1) }.toTypedArray()
+        ensureMenu()
+        gameMenu.pushSelect(getString(R.string.menu_swap_disc), names.toList(), current) { which ->
+            v.changeDisk(which)
+            Toast.makeText(this, getString(R.string.disc_switched, which + 1), Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ------------------------------------------------------------ controllers
@@ -1502,16 +1492,24 @@ class EmulationActivity : AppCompatActivity() {
         val items = mutableListOf(Ctrl(PHONE, getString(R.string.ctrl_phone), null))
         connectedGamepads().forEach { items.add(Ctrl(deviceKey(it), it.name, it)) }
 
-        val labels = items.map { "${it.name}  —  ${portLabel(portFor(it.key, it.device))}" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_controllers)
-            .setItems(labels) { _, which ->
-                val c = items[which]
-                showControllerOptions(c.key, c.name, c.device, c.key != PHONE)
+        ensureMenu()
+        gameMenu.push(getString(R.string.menu_controllers)) {
+            with(gameMenu) {
+                body {
+                    for (c in items) {
+                        addView(navRow(null, c.name, portLabel(portFor(c.key, c.device)), valueIsLive = false) {
+                            showControllerOptions(c.key, c.name, c.device, c.key != PHONE)
+                        })
+                    }
+                    addView(group(getString(R.string.menu_hotkey_title)))
+                    addView(navRow(null, getString(R.string.menu_hotkey_title),
+                        com.nvanloo.retroglass.controller.InputConfig.MENU_HOTKEY_PRESETS
+                            .firstOrNull { it.second == inputConfig.menuHotkey() }?.first) {
+                        showMenuHotkeyPicker()
+                    })
+                }
             }
-            .setNeutralButton(R.string.menu_hotkey_title) { _, _ -> showMenuHotkeyPicker() }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun showMenuHotkeyPicker() {
@@ -1519,15 +1517,11 @@ class EmulationActivity : AppCompatActivity() {
         val current = inputConfig.menuHotkey()
         val checked = presets.indexOfFirst { it.second == current }
         val labels = presets.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_hotkey_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                inputConfig.setMenuHotkey(presets[which].second)
-                Toast.makeText(this, getString(R.string.menu_hotkey_set, labels[which]), Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        ensureMenu()
+        gameMenu.pushSelect(getString(R.string.menu_hotkey_title), labels.toList(), checked) { which ->
+            inputConfig.setMenuHotkey(presets[which].second)
+            Toast.makeText(this, getString(R.string.menu_hotkey_set, labels[which]), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showControllerOptions(key: String, name: String, device: InputDevice?, isGamepad: Boolean) {
@@ -1747,37 +1741,6 @@ class EmulationActivity : AppCompatActivity() {
         else -> 1
     }
 
-    private fun showComboFilterPicker() {
-        val tokens = comboOrder
-        val labels = tokens.map { comboLabel(it) }.toTypedArray()
-        val current = layoutStore.comboFilters(console).toMutableSet()
-        val checked = tokens.map { it in current }.toBooleanArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_combine_filters)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                if (isChecked) current.add(tokens[which]) else current.remove(tokens[which])
-            }
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val chosen = tokens.filter { it in current }
-                layoutStore.setComboFilters(console, chosen)
-                retroView?.shader = currentShaderConfig()
-                nagAboutAnime4kOrder(chosen)
-                // Cost scales with rendered area, so a 4x factor is 4x the fill-rate of 2x —
-                // a chain that was comfortable at 2x can miss 60fps at 4x.
-                val f = upscale()
-                val cost = (chosen.sumOf { comboCost(it) } * (f * f) / 4f).toInt()
-                if (cost >= 10) {
-                    Toast.makeText(this, R.string.combo_heavy, Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNeutralButton(R.string.combo_clear) { _, _ ->
-                layoutStore.setComboFilters(console, emptyList())
-                retroView?.shader = currentShaderConfig()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
-    }
-
     /** Display name of a single-filter index (see [shaderForIndex]). */
     private fun filterName(i: Int): String = getString(
         when (i) {
@@ -1817,15 +1780,11 @@ class EmulationActivity : AppCompatActivity() {
 
     /** Second level: the filters inside one category. */
     private fun showFilterCategory(titleRes: Int, indices: List<Int>) {
-        val names = indices.map { filterName(it) }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(titleRes)
-            .setSingleChoiceItems(names, indices.indexOf(layoutStore.shaderIndex(console))) { dialog, which ->
-                applySingleFilter(indices[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        gameMenu.pushSelect(
+            getString(titleRes),
+            indices.map { filterName(it) },
+            indices.indexOf(layoutStore.shaderIndex(console)),
+        ) { applySingleFilter(indices[it]) }
     }
 
     // Tunable look-filter parameters. The UI keeps everything on a 0..1 slider and each
@@ -1867,88 +1826,21 @@ class EmulationActivity : AppCompatActivity() {
     private fun lcdGridDepth() = param("lcdgrid") * 0.6f
     private fun curveAmount() = param("curve") * 2.0f
 
-    /** One labelled 0..100 slider bound to a filter parameter. */
-    private fun paramSlider(
-        parent: LinearLayout,
-        labelRes: Int,
-        value: Float,
-        onChange: (Float) -> Unit,
-    ) {
-        val label = TextView(this).apply {
-            text = getString(labelRes, (value * 100).toInt())
-            setPadding(56, 28, 56, 0)
-        }
-        val seek = SeekBar(this).apply {
-            max = 100
-            progress = (value * 100).toInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
-                    label.text = getString(labelRes, p)
-                    onChange(p / 100f)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    retroView?.shader = currentShaderConfig()
-                }
-            })
-        }
-        parent.addView(label)
-        parent.addView(seek, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(56, 4, 56, 12) })
-    }
-
     /** How far the scalers render before the final blit. Higher = sharper, costs fill-rate. */
     private fun showUpscaleFactorPicker() {
-        val labels = arrayOf(
-            getString(R.string.upscale_auto, autoUpscale(), console.displayName),
-            getString(R.string.upscale_2x), getString(R.string.upscale_3x), getString(R.string.upscale_4x),
-        )
+        ensureMenu()
         val stored = layoutStore.upscaleFactor()
-        val checked = if (stored == LayoutStore.UPSCALE_AUTO) 0 else stored - 1
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_upscale_factor)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                layoutStore.setUpscaleFactor(if (which == 0) LayoutStore.UPSCALE_AUTO else which + 1)
-                retroView?.shader = currentShaderConfig()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
-    }
-
-    /** Live tuning for every filter that has a knob, in one place. */
-    private fun showFilterSettings() {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        paramSlider(box, R.string.param_sharpness, layoutStore.filterSharpness()) {
-            layoutStore.setFilterSharpness(it)
+        gameMenu.pushSelect(
+            getString(R.string.menu_upscale_factor),
+            listOf(
+                getString(R.string.upscale_auto, autoUpscale(), console.displayName),
+                getString(R.string.upscale_2x), getString(R.string.upscale_3x), getString(R.string.upscale_4x),
+            ),
+            if (stored == LayoutStore.UPSCALE_AUTO) 0 else stored - 1,
+        ) { which ->
+            layoutStore.setUpscaleFactor(if (which == 0) LayoutStore.UPSCALE_AUTO else which + 1)
+            retroView?.shader = currentShaderConfig()
         }
-        paramSlider(box, R.string.param_bloom, param("bloom")) {
-            layoutStore.setFilterParam("bloom", it)
-        }
-        paramSlider(box, R.string.param_scanline, param("scanline")) {
-            layoutStore.setFilterParam("scanline", it)
-        }
-        paramSlider(box, R.string.param_ntsc, param("ntsc")) {
-            layoutStore.setFilterParam("ntsc", it)
-        }
-        paramSlider(box, R.string.param_lcdgrid, param("lcdgrid")) {
-            layoutStore.setFilterParam("lcdgrid", it)
-        }
-        paramSlider(box, R.string.param_curve, param("curve")) {
-            layoutStore.setFilterParam("curve", it)
-        }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_filter_settings)
-            .setView(android.widget.ScrollView(this).apply { addView(box) })
-            .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
-            .setNeutralButton(R.string.param_reset) { _, _ ->
-                layoutStore.setFilterSharpness(0.5f)
-                paramDefaults.forEach { (k, v) -> layoutStore.setFilterParam(k, v) }
-                retroView?.shader = currentShaderConfig()
-                Toast.makeText(this, R.string.param_reset_done, Toast.LENGTH_SHORT).show()
-            }
-            .show().gamepadNavigable()
     }
 
     // ------------------------------------------------------------ filter presets
@@ -2013,47 +1905,60 @@ class EmulationActivity : AppCompatActivity() {
     /** Saved looks: apply one, save the current state, or delete. */
     private fun showFilterPresets() {
         val names = layoutStore.presetNames()
-        val rows = names.toMutableList()
-        rows += getString(R.string.preset_save)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_filter_presets)
-            .setItems(rows.toTypedArray()) { _, which ->
-                if (which < names.size) {
-                    layoutStore.loadPreset(names[which])?.let {
-                        applyLookBlob(it)
-                        Toast.makeText(this, getString(R.string.preset_applied, names[which]),
-                            Toast.LENGTH_SHORT).show()
+        ensureMenu()
+        gameMenu.push(getString(R.string.menu_filter_presets)) {
+            with(gameMenu) {
+                body {
+                    for (name in names) {
+                        addView(navRow(null, name) {
+                            layoutStore.loadPreset(name)?.let {
+                                applyLookBlob(it)
+                                Toast.makeText(this@EmulationActivity,
+                                    getString(R.string.preset_applied, name), Toast.LENGTH_SHORT).show()
+                            }
+                            pop()
+                        })
                     }
-                } else {
-                    promptSavePreset()
+                    addView(bigButton(getString(R.string.preset_save), tint = true) { promptSavePreset() })
+                    if (names.isNotEmpty()) {
+                        addView(bigButton(getString(R.string.preset_delete), danger = true) { promptDeletePreset() })
+                    }
                 }
             }
-            .apply { if (names.isNotEmpty()) setNeutralButton(R.string.preset_delete) { _, _ -> promptDeletePreset() } }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
+    /** Opens the menu first when a picker is reached from a hotkey rather than the menu. */
+    private fun ensureMenu() { if (!gameMenu.isOpen) showMenu() }
+
     private fun showVideoFilterPicker() {
-        val rows = mutableListOf<String>()
-        rows += filterName(0)                                   // Off
-        filterCategories.forEach { rows += getString(it.first) + "  ▸" }
-        rows += getString(R.string.menu_combine_filters)        // chain several
-        rows += getString(R.string.filter_recommended, console.displayName)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_video_filter)
-            .setItems(rows.toTypedArray()) { _, which ->
-                when {
-                    which == 0 -> applySingleFilter(0)
-                    which <= filterCategories.size -> {
-                        val (title, idx) = filterCategories[which - 1]
-                        showFilterCategory(title, idx)
-                    }
-                    which == filterCategories.size + 1 -> showComboFilterPicker()
-                    else -> applyRecommended()
-                }
+        ensureMenu()
+        gameMenu.push(getString(R.string.menu_video_filter)) { menuFilterPickerScreen() }
+    }
+
+    private fun menuFilterPickerScreen(): View = with(gameMenu) {
+        val active = layoutStore.shaderIndex(console)
+        val chained = layoutStore.comboFilters(console).isNotEmpty()
+        body {
+            addView(selectRow(filterName(0), !chained && active == 0) {
+                applySingleFilter(0); pop()
+            })
+            for ((titleRes, indices) in filterCategories) {
+                // Show which filter inside a category is the live one, so you can see where
+                // the current look came from without opening every category.
+                val here = !chained && active in indices
+                addView(navRow(null, getString(titleRes), if (here) filterName(active) else null) {
+                    showFilterCategory(titleRes, indices)
+                })
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+            addView(navRow(null, getString(R.string.menu_combine_filters),
+                if (chained) getString(R.string.menu_combo_count, layoutStore.comboFilters(console).size) else null) {
+                push(getString(R.string.menu_combine_filters)) { menuChainScreen() }
+            })
+            addView(bigButton(getString(R.string.filter_recommended, console.displayName), tint = true) {
+                applyRecommended(); pop()
+            })
+        }
     }
 
     /** One-tap best chain for this system (de-dither+FSR1 / FSR1 / SABR). */
@@ -2318,12 +2223,13 @@ class EmulationActivity : AppCompatActivity() {
             showControllerTypeForPort(selectablePorts.first())
             return
         }
-        val labels = selectablePorts.map { getString(R.string.player_n, it + 1) }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.ctype_title)
-            .setItems(labels) { _, which -> showControllerTypeForPort(selectablePorts[which]) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        ensureMenu()
+        gameMenu.pushActions(
+            getString(R.string.ctype_title),
+            selectablePorts.map { port ->
+                getString(R.string.player_n, port + 1) to { showControllerTypeForPort(port) }
+            },
+        )
     }
 
     private fun showControllerTypeForPort(port: Int) {
@@ -2332,40 +2238,47 @@ class EmulationActivity : AppCompatActivity() {
         val labels = types.map { it.description ?: "Type ${it.id}" }.toTypedArray()
         val currentId = inputConfig.controllerType(consoleKey, port)
         val checked = types.indexOfFirst { it.id == currentId }
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.ctype_port_title, port + 1))
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                val id = types[which].id
-                inputConfig.setControllerType(consoleKey, port, id)
-                runCatching { view.setControllerType(port, id) }
-                Toast.makeText(this, getString(R.string.ctype_set, labels[which]), Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        ensureMenu()
+        gameMenu.pushSelect(getString(R.string.ctype_port_title, port + 1), labels.toList(), checked) { which ->
+            val id = types[which].id
+            inputConfig.setControllerType(consoleKey, port, id)
+            runCatching { view.setControllerType(port, id) }
+            Toast.makeText(this, getString(R.string.ctype_set, labels[which]), Toast.LENGTH_SHORT).show()
+        }
     }
 
     // -------------------------------------------------- display & extras
 
     private fun showDisplayExtras() {
-        val actions = mutableListOf<Pair<String, () -> Unit>>()
-        actions += getString(
-            if (layoutStore.fpsOverlay()) R.string.menu_fps_on else R.string.menu_fps_off,
-        ) to { layoutStore.setFpsOverlay(!layoutStore.fpsOverlay()) }
-        actions += getString(R.string.menu_bezel) to { showBezelPicker() }
-        actions += getString(
-            if (layoutStore.gyroAim()) R.string.menu_gyro_on else R.string.menu_gyro_off,
-        ) to { toggleGyro() }
-        if (layoutStore.gyroAim()) {
-            actions += getString(R.string.menu_gyro_sensitivity) to { showGyroSensitivity() }
+        ensureMenu()
+        gameMenu.push(getString(R.string.menu_display_extras)) {
+            with(gameMenu) {
+                body {
+                    addView(toggleRow(getString(R.string.menu_fps_label), layoutStore.fpsOverlay()) {
+                        layoutStore.setFpsOverlay(it)
+                    })
+                    addView(toggleRow(getString(R.string.menu_gyro_label), layoutStore.gyroAim()) {
+                        toggleGyro(); gameMenu.refresh()
+                    })
+                    if (layoutStore.gyroAim()) {
+                        addView(slider(
+                            getString(R.string.menu_gyro_sensitivity),
+                            // 0.2..3.0 mapped onto the slider's 0..1
+                            ((layoutStore.gyroSensitivity() - 0.2f) / 2.8f).coerceIn(0f, 1f),
+                        ) { layoutStore.setGyroSensitivity(0.2f + it * 2.8f) })
+                    }
+                    addView(navRow(null, getString(R.string.menu_bezel), bezelLabel()) { showBezelPicker() })
+                }
+            }
         }
-        val names = actions.map { it.first }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_display_extras)
-            .setItems(names) { _, which -> actions[which].second() }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
     }
+
+    private fun bezelLabel(): String = getString(when (layoutStore.bezelMode()) {
+        1 -> R.string.bezel_dark
+        2 -> R.string.bezel_gradient
+        3 -> R.string.bezel_custom
+        else -> R.string.bezel_none
+    })
 
     private fun toggleGyro() {
         val enabling = !layoutStore.gyroAim()
@@ -2382,46 +2295,23 @@ class EmulationActivity : AppCompatActivity() {
         }
     }
 
-    private fun showGyroSensitivity() {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val p = (20 * resources.displayMetrics.density).toInt()
-            setPadding(p, p, p, 0)
-        }
-        // Map 0.2..3.0 onto 0..280.
-        addSlider(
-            container, maxProgress = 280,
-            initialProgress = ((layoutStore.gyroSensitivity() - 0.2f) * 100f).toInt(),
-            labelFor = { getString(R.string.gyro_sensitivity_value, String.format("%.1f", 0.2f + it / 100f)) },
-        ) { p -> layoutStore.setGyroSensitivity(0.2f + p / 100f) }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_gyro_sensitivity)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok, null)
-            .show().gamepadNavigable()
-    }
-
     private fun showBezelPicker() {
+        ensureMenu()
         val labels = arrayOf(
             getString(R.string.bezel_none),
             getString(R.string.bezel_dark),
             getString(R.string.bezel_gradient),
             getString(R.string.bezel_custom),
         )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_bezel)
-            .setSingleChoiceItems(labels, layoutStore.bezelMode()) { dialog, which ->
-                if (which == 3) {
-                    dialog.dismiss()
-                    pickBezelImage.launch(arrayOf("image/*"))
-                } else {
-                    layoutStore.setBezelMode(which)
-                    applyBezel()
-                    dialog.dismiss()
-                }
+        gameMenu.pushSelect(getString(R.string.menu_bezel), labels.toList(), layoutStore.bezelMode()) { which ->
+            if (which == 3) {
+                gameMenu.close()
+                pickBezelImage.launch(arrayOf("image/*"))
+            } else {
+                layoutStore.setBezelMode(which)
+                applyBezel()
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun showCheats() {
@@ -2548,18 +2438,21 @@ class EmulationActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.turbo_none, Toast.LENGTH_SHORT).show()
             return
         }
-        val labels = buttons.map { it.second }.toTypedArray()
-        val checked = buttons.map { it.first in layoutStore.turboButtons(console) }.toBooleanArray()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_turbo)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                layoutStore.setTurbo(console, buttons[which].first, isChecked)
+        ensureMenu()
+        gameMenu.push(getString(R.string.menu_turbo)) {
+            with(gameMenu) {
+                body {
+                    for ((id, label) in buttons) {
+                        addView(toggleRow(label, id in layoutStore.turboButtons(console)) { on ->
+                            layoutStore.setTurbo(console, id, on)
+                            // Applied immediately - the old dialog only committed on OK, so a
+                            // back-gesture silently dropped the change.
+                            controllerView.turboIds = layoutStore.turboButtons(console)
+                        })
+                    }
+                }
             }
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                controllerView.turboIds = layoutStore.turboButtons(console)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun toggleFastForward() {
