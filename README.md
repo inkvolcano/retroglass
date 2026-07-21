@@ -48,6 +48,16 @@ bash scripts/fetch_cores.sh        # or: pwsh scripts/fetch_cores.ps1
 
 CI (`.github/workflows/build.yml`) fetches the cores and builds a debug APK on every push.
 
+Keep the cores reasonably fresh. A core negotiates its GL context with the frontend, and an
+old build can ask for one we do not supply: a July 2026 `mupen64plus_next` requested
+`RETRO_HW_CONTEXT_OPENGLES2` while the app hands every core the GLSurfaceView's ES 3.x
+context, so GLideN64 assembled a `#version 300 es` header over its GLES2 shader parts (which
+`#define IN varying`) and every N64 shader failed to compile — the core ran at a full 60 fps
+and rendered a black screen. Re-running `fetch_cores.sh` fixed it; the newer nightly requests
+`RETRO_HW_CONTEXT_OPENGLES3`. The app logs each core's request as
+`SET_HW_RENDER: context_type=…`, so `adb logcat | grep SET_HW_RENDER` diagnoses this class of
+"full speed, no picture" bug directly.
+
 **arm64-v8a only.** Install `app/build/outputs/apk/debug/app-debug.apk` on any modern (arm64) Android phone with USB-C DisplayPort output.
 
 ## Using it

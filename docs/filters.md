@@ -87,6 +87,14 @@ curvature warps the composed picture; colour grade is last.
 * **Cost warning.** Each block has a rough GPU weight, scaled by factor² since cost follows
   rendered area; a heavy chain warns to watch the FPS counter.
 
+  Measured on the dev phone (Snapdragon/Adreno, 1080p portrait), reading the in-app counter:
+  Auto resolves to 4× on SNES, PS1 and N64, and *nothing tested drops a frame there* — SABR
+  on Super Mario World, FSR1 on Final Fantasy VIII, and even a five-stage
+  `dedither → fsr1 → crt → bloom → curve` chain at 4× all hold full speed. The factor² cost
+  model is honest about relative weight, but on this class of hardware the ceiling was not
+  reachable with the filters that exist today; treat the warning as guidance for slower
+  devices, not as a limit anyone here will hit.
+
 ## Adding a filter
 
 1. Write the fragment as a `FilterStack.Builder` that reads `ctx.inputSampler` and bakes
