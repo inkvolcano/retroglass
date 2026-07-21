@@ -492,7 +492,7 @@ class EmulationActivity : AppCompatActivity() {
             !controllerView.editMode &&
             !pausedByDisconnect &&
             tiltSource.isAvailable
-        controllerView.tiltShadows = want
+        controllerView.tiltBezel = want
         if (want) tiltSource.start() else tiltSource.stop()
     }
 

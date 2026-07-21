@@ -33,8 +33,15 @@ class TiltSource(
         /** The resting pose: leaned back this far from upright counts as level. */
         const val NEUTRAL_PITCH_DEG = 20f
 
-        /** Tilt this far from neutral drives the light to its limit. */
-        private const val RANGE_DEG = 30f
+        /**
+         * Tilt this far from neutral drives the light to its limit.
+         *
+         * Generous on purpose. At ±30° the pitch axis pinned to the clamp as soon as you
+         * actually held the phone to play — a relaxed pose is 40–60° back, already outside
+         * neutral±30 — so up/down looked frozen while left/right, which is naturally centred
+         * on zero, worked fine.
+         */
+        private const val RANGE_DEG = 45f
 
         /** Exponential smoothing per sample — low enough that hand tremor does not shimmer. */
         private const val SMOOTHING = 0.12f

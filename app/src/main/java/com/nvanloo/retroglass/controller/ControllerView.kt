@@ -36,12 +36,12 @@ class ControllerView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     companion object {
-        /** Shadow length at full tilt, as a fraction of the control's radius. */
-        const val SHADOW_DEPTH = 0.22f
-        /** Drop in the resting pose, so controls still look raised when held level. */
-        const val NEUTRAL_DROP = 0.5f
-        const val SHADOW_STEPS = 3
-        const val SHADOW_ALPHA = 30
+        /** Bezel thickness as a fraction of the control's radius. */
+        const val BEZEL_WIDTH = 0.15f
+        /** How far off "straight up" the lit edge sits in the resting pose. */
+        const val BEZEL_BASE = 0.6f
+        const val BEZEL_HIGHLIGHT = 120
+        const val BEZEL_SHADE = 130
         const val LAYOUT_PORTRAIT = 0   // as authored (game above, pad below / handheld)
         const val LAYOUT_FRAME = 1      // landscape, game on the phone: pad frames a centred screen
         const val LAYOUT_FULLPAD = 2    // landscape, external display: full-screen pad
@@ -151,18 +151,20 @@ class ControllerView @JvmOverloads constructor(
     private var dragOffsetY = 0f
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
-    // ---- tilt-driven shadows -------------------------------------------------------------
-    // A virtual light fixed in the world: as the phone turns under it the shadows swing, which
-    // reads as the controls standing proud of the glass. Driven by TiltSource (gravity).
+    // ---- tilt-driven bezel ---------------------------------------------------------------
+    // A virtual light fixed in the world. Each control carries a bevelled rim: bright on the
+    // edge facing the light, dark on the far edge. Turning the phone rolls the lit edge around
+    // the shape, which is what makes the controls read as moulded rather than printed on.
+    // Driven by TiltSource (gravity, not the gyro — see that class).
 
     /** Light direction projected onto the screen, -1..1 per axis. 0,0 is the resting pose. */
     private var lightX = 0f
     private var lightY = 0f
 
     /** Off by default until the activity says the sensor is running. */
-    var tiltShadows = false
+    var tiltBezel = false
         set(v) { if (field != v) { field = v; invalidate() } }
 
     /** Called from the sensor; only repaints when the light actually moved. */
@@ -170,7 +172,19 @@ class ControllerView @JvmOverloads constructor(
         if (x == lightX && y == lightY) return
         lightX = x
         lightY = y
-        if (tiltShadows) invalidate()
+        if (tiltBezel) invalidate()
+    }
+
+    /**
+     * Unit vector to the lit edge, in screen space. Resting pose points up, so a control looks
+     * lit from above the way a physical button on a handheld does; rolling the phone right
+     * swings the highlight left, leaning it back walks the highlight down across the face.
+     */
+    private fun lightDir(): Pair<Float, Float> {
+        val hx = -lightX
+        val hy = -BEZEL_BASE + lightY
+        val len = hypot(hx.toDouble(), hy.toDouble()).toFloat()
+        return if (len < 1e-4f) 0f to -1f else (hx / len) to (hy / len)
     }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -644,12 +658,12 @@ class ControllerView @JvmOverloads constructor(
         }
 
         val alpha = if (overlayMode) 165 else 255
-        // Shadows for every control first, so no control casts onto a neighbour drawn earlier.
-        if (tiltShadows && !editMode) {
-            for (c in controls) drawControlShadow(canvas, c, alpha)
-        }
         for (c in controls) {
             drawControl(canvas, c, alpha)
+        }
+        // The rim goes on top of its own control's fill, so it is a second pass.
+        if (tiltBezel && !editMode) {
+            for (c in controls) drawBezel(canvas, c, alpha)
         }
 
         if (editMode) {
@@ -667,55 +681,79 @@ class ControllerView @JvmOverloads constructor(
     }
 
     /**
-     * Stacked silhouettes at decreasing offset fake a soft edge. A real blur would mean a
-     * BlurMaskFilter, which forces the whole overlay into software rendering — far too
-     * expensive to sit on top of a running emulator.
+     * The bevelled rim. A three-stop gradient (highlight → clear → shade) laid along the light
+     * axis and stroked just inside the control's edge, so one side catches the light and the
+     * opposite side falls away.
      */
-    private fun drawControlShadow(canvas: Canvas, c: ControlState, alpha: Int) {
+    private fun drawBezel(canvas: Canvas, c: ControlState, alpha: Int) {
         val r = controlRadius(c)
-        val depth = r * SHADOW_DEPTH
-        val dx = -lightX * depth
-        // Leaning the phone back turns the screen toward the light, which shortens the drop;
-        // NEUTRAL_DROP is the length in the resting pose.
-        val dy = ((NEUTRAL_DROP - lightY) * depth).coerceAtLeast(depth * 0.06f)
         val cx = centerX(c)
         val cy = centerY(c)
-        for (step in SHADOW_STEPS downTo 1) {
-            val f = step.toFloat() / SHADOW_STEPS
-            shadowPaint.color = Color.argb(SHADOW_ALPHA * alpha / 255, 0, 0, 0)
-            drawSilhouette(canvas, c, cx + dx * f, cy + dy * f, r)
+        val w = r * BEZEL_WIDTH
+        applyBezelShader(cx, cy, r, alpha)
+        bezelPaint.strokeWidth = w
+        strokeOutline(canvas, c, cx, cy, r - w / 2f)
+
+        // The stick's knob is its own raised part and reads flat without a rim of its own.
+        if (c.def.shape == ControlShape.STICK) {
+            val knobR = r * 0.52f
+            val kx = cx + c.valueX * r * 0.48f
+            val ky = cy + c.valueY * r * 0.48f
+            val kw = knobR * BEZEL_WIDTH * 1.4f
+            applyBezelShader(kx, ky, knobR, alpha)
+            bezelPaint.strokeWidth = kw
+            canvas.drawCircle(kx, ky, knobR - kw / 2f, bezelPaint)
         }
     }
 
-    /** The outer form of a control, used only for its shadow. */
-    private fun drawSilhouette(canvas: Canvas, c: ControlState, cx: Float, cy: Float, r: Float) {
+    private fun applyBezelShader(cx: Float, cy: Float, r: Float, alpha: Int) {
+        val (hx, hy) = lightDir()
+        bezelPaint.shader = android.graphics.LinearGradient(
+            cx + hx * r, cy + hy * r,
+            cx - hx * r, cy - hy * r,
+            intArrayOf(
+                Color.argb(BEZEL_HIGHLIGHT * alpha / 255, 255, 255, 255),
+                Color.TRANSPARENT,
+                Color.argb(BEZEL_SHADE * alpha / 255, 0, 0, 0),
+            ),
+            floatArrayOf(0f, 0.5f, 1f),
+            android.graphics.Shader.TileMode.CLAMP,
+        )
+    }
+
+    /** The control's outer edge as a stroked path. */
+    private fun strokeOutline(canvas: Canvas, c: ControlState, cx: Float, cy: Float, r: Float) {
         when (c.def.shape) {
-            ControlShape.CIRCLE -> {
-                if (c.def.plateColor != Color.TRANSPARENT) {
-                    val pr = r * 1.28f
-                    canvas.drawRoundRect(
-                        RectF(cx - pr, cy - pr, cx + pr, cy + pr), pr * 0.25f, pr * 0.25f, shadowPaint,
-                    )
-                } else {
-                    canvas.drawCircle(cx, cy, r, shadowPaint)
-                }
-            }
-            ControlShape.STICK -> canvas.drawCircle(cx, cy, r, shadowPaint)
+            ControlShape.CIRCLE, ControlShape.STICK -> canvas.drawCircle(cx, cy, r, bezelPaint)
             ControlShape.PILL -> {
                 val w = r * 1.85f
-                canvas.drawRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, shadowPaint)
+                canvas.drawRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, bezelPaint)
             }
             ControlShape.BAR -> {
                 val hl = barHalfLen(c)
                 val ht = barHalfThick(c)
-                canvas.drawRoundRect(RectF(cx - hl, cy - ht, cx + hl, cy + ht), ht, ht, shadowPaint)
+                canvas.drawRoundRect(RectF(cx - hl, cy - ht, cx + hl, cy + ht), ht, ht, bezelPaint)
             }
             ControlShape.CROSS, ControlShape.PSX_CROSS -> {
+                // Union of the two arms, so the rim follows the cross outline instead of
+                // drawing two rectangles straight through the middle of it.
                 val armW = r * 0.62f
                 val half = armW / 2f
                 val corner = armW * 0.28f
-                canvas.drawRoundRect(RectF(cx - r, cy - half, cx + r, cy + half), corner, corner, shadowPaint)
-                canvas.drawRoundRect(RectF(cx - half, cy - r, cx + half, cy + r), corner, corner, shadowPaint)
+                val path = android.graphics.Path().apply {
+                    addRoundRect(
+                        RectF(cx - r, cy - half, cx + r, cy + half),
+                        corner, corner, android.graphics.Path.Direction.CW,
+                    )
+                }
+                val vertical = android.graphics.Path().apply {
+                    addRoundRect(
+                        RectF(cx - half, cy - r, cx + half, cy + r),
+                        corner, corner, android.graphics.Path.Direction.CW,
+                    )
+                }
+                path.op(vertical, android.graphics.Path.Op.UNION)
+                canvas.drawPath(path, bezelPaint)
             }
         }
     }
