@@ -219,7 +219,8 @@ class LayoutStore(context: Context) {
     fun setPhonePanelMode(v: Int) { prefs.edit().putInt("phone_panel", v).apply() }
 
     /** Bezel/background behind the game: 0=None, 1=Dark, 2=Gradient, 3=Custom image. */
-    fun bezelMode(): Int = prefs.getInt("bezel_mode", 1)
+    /** Default: the console shell, so the whole front reads as one piece of plastic. */
+    fun bezelMode(): Int = prefs.getInt("bezel_mode", BEZEL_BODY)
     fun setBezelMode(v: Int) { prefs.edit().putInt("bezel_mode", v).apply() }
 
     /** Absolute path of the user's custom bezel image (used when bezelMode == 3). */
@@ -245,6 +246,9 @@ class LayoutStore(context: Context) {
     }
 
     companion object {
+        /** Background painted in the console's body colour, screen cut into it. */
+        const val BEZEL_BODY = 4
+
         /** Upscale factor is derived from panel height / the system's native height. */
         const val UPSCALE_AUTO = 0
 

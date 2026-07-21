@@ -105,6 +105,7 @@ class EmulationActivity : AppCompatActivity() {
 
     private lateinit var rootLayout: FrameLayout
     private lateinit var gameContainer: FrameLayout
+    private lateinit var screenBezel: com.nvanloo.retroglass.controller.ScreenBezelView
     private lateinit var controllerView: ControllerView
     private lateinit var companionView: CompanionView
     private lateinit var editBar: LinearLayout
@@ -465,12 +466,19 @@ class EmulationActivity : AppCompatActivity() {
                     bezelView.visibility = View.VISIBLE
                 }
             }
-            else -> { // Dark (default)
+            1 -> { // Dark
                 bezelView.setImageDrawable(null)
                 bezelView.setBackgroundColor(Color.BLACK)
                 bezelView.visibility = View.VISIBLE
             }
+            else -> { // Console body (default) — the shell colour, screen cut into it
+                bezelView.visibility = View.GONE
+            }
         }
+        // The shell owns the background in body mode; the other modes paint their own.
+        screenBezel.bodyColor = console.bodyColor
+        screenBezel.visibility =
+            if (layoutStore.bezelMode() == LayoutStore.BEZEL_BODY) View.VISIBLE else View.GONE
     }
 
     // --------------------------------------------------------- gyro aiming
@@ -483,7 +491,11 @@ class EmulationActivity : AppCompatActivity() {
      * there is nothing to light and no reason to spend the samples or the battery.
      */
     private val tiltSource by lazy {
-        com.nvanloo.retroglass.controller.TiltSource(this) { x, y -> controllerView.setLight(x, y) }
+        com.nvanloo.retroglass.controller.TiltSource(this) { x, y ->
+            controllerView.setLight(x, y)
+            val (lx, ly, strength) = controllerView.currentLight()
+            screenBezel.setLight(lx, ly, strength)
+        }
     }
 
     private fun updateTiltShadows() {
@@ -616,6 +628,19 @@ class EmulationActivity : AppCompatActivity() {
 
         // Bezel/background sits behind the game so it frames a shrunk picture.
         rootLayout.addView(bezelView, matchParent())
+        // The console shell: body colour everywhere, with the screen cut into it. Above the
+        // bezel image so it can replace it, below the game so the rim never covers the picture.
+        screenBezel = com.nvanloo.retroglass.controller.ScreenBezelView(this).apply {
+            visibility = View.GONE
+            bodyColor = console.bodyColor
+        }
+        rootLayout.addView(screenBezel, matchParent())
+        // Keep the cut-out on the game wherever the layout puts it.
+        gameContainer.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            screenBezel.setScreenRect(
+                v.x, v.y, v.x + v.width, v.y + v.height,
+            )
+        }
         rootLayout.addView(gameContainer, matchParent())
         rootLayout.addView(controllerView, matchParent())
         rootLayout.addView(companionView, matchParent())
@@ -2315,10 +2340,11 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun bezelLabel(): String = getString(when (layoutStore.bezelMode()) {
+        0 -> R.string.bezel_none
         1 -> R.string.bezel_dark
         2 -> R.string.bezel_gradient
         3 -> R.string.bezel_custom
-        else -> R.string.bezel_none
+        else -> R.string.bezel_body
     })
 
     private fun toggleGyro() {
@@ -2343,6 +2369,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.bezel_dark),
             getString(R.string.bezel_gradient),
             getString(R.string.bezel_custom),
+            getString(R.string.bezel_body),
         )
         gameMenu.pushSelect(getString(R.string.menu_bezel), labels.toList(), layoutStore.bezelMode()) { which ->
             if (which == 3) {

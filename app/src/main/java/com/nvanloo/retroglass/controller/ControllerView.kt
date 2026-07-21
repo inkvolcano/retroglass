@@ -198,6 +198,9 @@ class ControllerView @JvmOverloads constructor(
         if (tiltBezel) invalidate()
     }
 
+    /** The current light, for anything else that has to agree with the buttons. */
+    fun currentLight(): Triple<Float, Float, Float> = lightVector()
+
     /**
      * Direction of the lit edge plus how strongly it applies, in screen space.
      *
@@ -880,20 +883,7 @@ class ControllerView @JvmOverloads constructor(
         // other way.
         val hx = if (invert) -dx else dx
         val hy = if (invert) -dy else dy
-        val cx = bounds.centerX()
-        val cy = bounds.centerY()
-        val reach = abs(hx) * bounds.width() / 2f + abs(hy) * bounds.height() / 2f
-        bezelPaint.shader = android.graphics.LinearGradient(
-            cx + hx * reach, cy + hy * reach,
-            cx - hx * reach, cy - hy * reach,
-            intArrayOf(
-                Color.argb((BEZEL_HIGHLIGHT * strength).toInt() * alpha / 255, 255, 255, 255),
-                Color.TRANSPARENT,
-                Color.argb((BEZEL_SHADE * strength).toInt() * alpha / 255, 0, 0, 0),
-            ),
-            floatArrayOf(0f, 0.5f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
+        bezelPaint.shader = Bevel.gradient(bounds, hx, hy, strength, alpha)
     }
 
     private fun bezelWidth(c: ControlState): Float = when (c.def.shape) {
@@ -911,32 +901,6 @@ class ControllerView @JvmOverloads constructor(
         else -> EXTRUDE_DEPTH
     }
 
-    private fun applyBezelShader(
-        cx: Float,
-        cy: Float,
-        r: Float,
-        alpha: Int,
-        invert: Boolean = false,
-    ) {
-        val (dx, dy, strength) = lightVector()
-        // A recess catches the light on the far side from a bump, so the same gradient runs
-        // the other way.
-        val hx = if (invert) -dx else dx
-        val hy = if (invert) -dy else dy
-        // The rim fades with the same strength, so the highlight cannot be caught mid-spin
-        // while it still has weight on screen.
-        bezelPaint.shader = android.graphics.LinearGradient(
-            cx + hx * r, cy + hy * r,
-            cx - hx * r, cy - hy * r,
-            intArrayOf(
-                Color.argb((BEZEL_HIGHLIGHT * strength).toInt() * alpha / 255, 255, 255, 255),
-                Color.TRANSPARENT,
-                Color.argb((BEZEL_SHADE * strength).toInt() * alpha / 255, 0, 0, 0),
-            ),
-            floatArrayOf(0f, 0.5f, 1f),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-    }
 
     /** A control's outer silhouette, for filling (extrusion) or stroking (rim). */
     private fun buildControlPath(

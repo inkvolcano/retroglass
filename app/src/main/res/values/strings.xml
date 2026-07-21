@@ -141,6 +141,7 @@
     <string name="bezel_dark">Dark</string>
     <string name="bezel_gradient">Gradient</string>
     <string name="bezel_custom">Custom image…</string>
+    <string name="bezel_body">Console shell</string>
     <string name="menu_gyro_on">Gyro aiming: On</string>
     <string name="menu_gyro_off">Gyro aiming: Off</string>
     <string name="menu_gyro_sensitivity">Gyro sensitivity</string>
