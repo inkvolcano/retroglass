@@ -1460,6 +1460,7 @@ class EmulationActivity : AppCompatActivity() {
         12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa()
         13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc()
         14 -> com.nvanloo.retroglass.video.RetroShaders.bloom()
+        15 -> com.nvanloo.retroglass.video.RetroShaders.lcdGrid()
         else -> ShaderConfig.Default
     }
 
@@ -1469,7 +1470,7 @@ class EmulationActivity : AppCompatActivity() {
     private val comboOrder =
         listOf(
             "dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa",
-            "cas", "crt", "bloom", "grade",
+            "cas", "crt", "lcdgrid", "bloom", "grade",
         )
 
     private fun comboLabel(token: String): String = when (token) {
@@ -1482,6 +1483,7 @@ class EmulationActivity : AppCompatActivity() {
         "pixelaa" -> getString(R.string.filter_pixelaa)
         "cas" -> getString(R.string.filter_cas)
         "crt" -> getString(R.string.combo_crt)
+        "lcdgrid" -> getString(R.string.filter_lcdgrid)
         "bloom" -> getString(R.string.filter_bloom)
         "grade" -> getString(R.string.combo_grade)
         else -> token
@@ -1497,6 +1499,7 @@ class EmulationActivity : AppCompatActivity() {
         "pixelaa" -> com.nvanloo.retroglass.video.PixelAaShaders.stage()
         "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
+        "lcdgrid" -> com.nvanloo.retroglass.video.RetroShaders.lcdGridStage()
         "bloom" -> com.nvanloo.retroglass.video.RetroShaders.bloomStage()
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
         else -> null
@@ -1509,11 +1512,18 @@ class EmulationActivity : AppCompatActivity() {
         Console.PSP, Console.THREEDO, Console.NAOMI, Console.ATOMISWAVE,
     )
 
+    // Small LCD panels: crisp pixels plus the dot-matrix grid reads most like the real thing.
+    private val handhelds = setOf(
+        Console.GAMEBOY, Console.GBA, Console.GAMEGEAR, Console.NGP,
+        Console.WONDERSWAN, Console.LYNX, Console.POKEMONMINI,
+    )
+
     /** The best filter chain for a console (the §6 per-system recipe): PS1 de-dithers before
      *  the upscale, other 3D systems get FSR1, 2D pixel-art gets SABR. */
     private fun recommendedCombo(c: Console): List<String> = when {
         c == Console.PSX -> listOf("dedither", "fsr1")
         c in consoles3D -> listOf("fsr1")
+        c in handhelds -> listOf("pixelaa", "lcdgrid")
         else -> listOf("sabr")
     }
 
@@ -1600,6 +1610,7 @@ class EmulationActivity : AppCompatActivity() {
             12 -> R.string.filter_pixelaa
             13 -> R.string.filter_ntsc
             14 -> R.string.filter_bloom
+            15 -> R.string.filter_lcdgrid
             else -> R.string.filter_off
         }
     )
@@ -1608,7 +1619,7 @@ class EmulationActivity : AppCompatActivity() {
     private val filterCategories: List<Pair<Int, List<Int>>> = listOf(
         R.string.filtercat_scale to listOf(3, 4, 11, 12, 6),   // sharp/upscale/lanczos/pixel-AA/CAS
         R.string.filtercat_upscale to listOf(7, 9, 5),          // FSR1 / SABR / Anime4K
-        R.string.filtercat_crt to listOf(1, 8, 2),              // CRT / CRT-Lottes / LCD
+        R.string.filtercat_crt to listOf(1, 8, 2, 15),              // CRT / CRT-Lottes / LCD
         R.string.filtercat_signal to listOf(13, 10, 14),        // NTSC / de-dither / bloom
     )
 

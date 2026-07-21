@@ -168,6 +168,57 @@ void main() {
     fun dedither(strength: Float = 0.85f): ShaderConfig =
         FilterStack.compose(listOf(deditherStage(strength)))
 
+    // --------------------------------------------------------------------- LCD grid
+    // Handheld dot-matrix look: a real GB/GBA/Game Gear panel shows a fine dark gap between
+    // pixels. Darkens the border of every *source* pixel, and fades the effect out when a
+    // source pixel covers fewer than ~3 output pixels so it never turns into moiré.
+
+    private fun lcdGridFragment(
+        input: String,
+        inScale: Float,
+        gap: Float,
+        depth: Float,
+    ): String = HEADER + """
+const float IN_SCALE = ${"%.5f".format(Locale.US, inScale)};
+const float GAP = ${"%.4f".format(Locale.US, gap)};
+const float DEPTH = ${"%.4f".format(Locale.US, depth)};
+
+void main() {
+    vec2 inSize = sourceSize * IN_SCALE;
+    vec2 sp = coords * inSize;
+    vec3 c = texture($input, coords).rgb;
+
+    // Distance to the nearest source-pixel border, 0 at the edge .. 0.5 at the centre.
+    vec2 f = fract(sp);
+    float d = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+    float shade = mix(1.0 - DEPTH, 1.0, smoothstep(0.0, GAP, d));
+
+    // Only draw the grid when source pixels are comfortably larger than output pixels.
+    float outPerSrc = 1.0 / max(fwidth(sp.x), 1e-5);
+    shade = mix(1.0, shade, smoothstep(2.0, 4.0, outPerSrc));
+
+    fragColor = vec4(clamp(c * shade, 0.0, 1.0), 1.0);
+}
+"""
+
+    /** Handheld LCD dot-matrix grid as a composable stage. */
+    fun lcdGridStage(gap: Float = 0.14f, depth: Float = 0.33f): FilterStack.Builder =
+        FilterStack.Builder { ctx ->
+            FilterStack.Stage(
+                passes = listOf(
+                    ShaderConfig.CustomPass(
+                        fragment = lcdGridFragment(ctx.inputSampler, ctx.inScale, gap, depth),
+                        scale = ctx.inScale,
+                        linear = true,
+                    )
+                ),
+                outScale = 1.0f,
+            )
+        }
+
+    fun lcdGrid(gap: Float = 0.14f, depth: Float = 0.33f): ShaderConfig =
+        FilterStack.compose(listOf(lcdGridStage(gap, depth)))
+
     // ----------------------------------------------------------------------- Bloom
     // Phosphor glow: a CRT's bright areas bleed light into their surroundings. Takes a
     // bright-pass of a ring of neighbours and adds it back, so highlights (explosions, neon,
