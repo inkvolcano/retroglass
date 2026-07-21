@@ -47,3 +47,72 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# ---------------------------------------------------------------------------
+# NEVER commit games or firmware. ROMs, disc images and BIOS/boot files are
+# copyrighted; this repo is public. Keep them on the device or outside the tree.
+# ---------------------------------------------------------------------------
+*.nes
+*.fds
+*.sfc
+*.smc
+*.gb
+*.gbc
+*.gba
+*.n64
+*.z64
+*.v64
+# NOTE: '*.md' is deliberately NOT ignored — it would hide our Markdown docs.
+# Mega Drive .md ROMs must simply never be placed in the repo.
+*.gen
+*.smd
+*.sms
+*.gg
+*.32x
+*.pce
+*.sgx
+*.ngp
+*.ngc
+*.ws
+*.wsc
+*.int
+*.col
+*.vec
+*.min
+*.a26
+*.a52
+*.a78
+*.lnx
+*.d64
+*.t64
+*.prg
+*.crt
+*.adf
+*.hdf
+*.tap
+*.tzx
+*.z80
+*.cdt
+*.sna
+*.mx1
+*.mx2
+*.dsk
+*.chd
+*.cue
+*.gdi
+*.cdi
+*.iso
+*.img
+*.mdf
+*.mds
+*.nrg
+*.pbp
+*.cso
+*.ecm
+*.bin
+*.7z
+roms/
+bios/
+system/
+*bios*.zip
+scph*
