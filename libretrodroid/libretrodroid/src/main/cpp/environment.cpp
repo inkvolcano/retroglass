@@ -64,6 +64,12 @@ void Environment::deinitialize() {
     gameGeometryHeight = 0;
     gameGeometryAspectRatio = -1.0f;
 
+    // Environment is a process-lifetime singleton, so a core's variables would otherwise
+    // outlive it: load snes9x then mupen64plus and the options list becomes the union of
+    // both, with the previous core's stale values still answering GET_VARIABLE.
+    variables.clear();
+    dirtyVariables = false;
+
     rumbleStates.fill(libretrodroid::RumbleState {});
 }
 
@@ -146,6 +152,19 @@ bool Environment::environment_handle_set_controller_info(const struct retro_cont
 }
 
 bool Environment::environment_handle_set_hw_render(struct retro_hw_render_callback* hw_render_callback) {
+    // The context type/version the core asked for. We always hand it the GLSurfaceView's
+    // context regardless, so log the mismatch: a core that believes it negotiated a
+    // different profile emits shaders that will not compile against what it actually got.
+    LOGI(
+        "SET_HW_RENDER: context_type=%u version=%u.%u depth=%d stencil=%d bottom_left=%d",
+        hw_render_callback->context_type,
+        hw_render_callback->version_major,
+        hw_render_callback->version_minor,
+        hw_render_callback->depth,
+        hw_render_callback->stencil,
+        hw_render_callback->bottom_left_origin
+    );
+
     useHWAcceleration = true;
     useDepth = hw_render_callback->depth;
     useStencil = hw_render_callback->stencil;
