@@ -186,6 +186,13 @@
     <string name="filter_ntsc">NTSC composite (colour bleed)</string>
     <string name="filter_bloom">Phosphor glow (bloom)</string>
     <string name="filter_lcdgrid">LCD dot-matrix grid</string>
+    <string name="menu_filter_settings">Filter settings…</string>
+    <string name="param_sharpness">Sharpen (CAS / FSR): %1$d%%</string>
+    <string name="param_bloom">Phosphor glow: %1$d%%</string>
+    <string name="param_scanline">CRT scanline depth: %1$d%%</string>
+    <string name="param_ntsc">NTSC colour bleed: %1$d%%</string>
+    <string name="param_lcdgrid">LCD grid depth: %1$d%%</string>
+
     <string name="filtercat_scale">Scale &amp; sharpen</string>
     <string name="filtercat_upscale">Upscalers (AI / 3D / pixel-art)</string>
     <string name="filtercat_crt">CRT &amp; LCD look</string>

@@ -1249,7 +1249,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
         actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
-        actions += getString(R.string.menu_sharpness) to { showSharpnessDialog() }
+        actions += getString(R.string.menu_filter_settings) to { showFilterSettings() }
         actions += getString(R.string.menu_core_options) to { showCoreOptions() }
         actions += getString(R.string.menu_cheats) to { showCheats() }
         actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
@@ -1458,9 +1458,9 @@ class EmulationActivity : AppCompatActivity() {
         10 -> com.nvanloo.retroglass.video.RetroShaders.dedither()
         11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos()
         12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa()
-        13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc()
-        14 -> com.nvanloo.retroglass.video.RetroShaders.bloom()
-        15 -> com.nvanloo.retroglass.video.RetroShaders.lcdGrid()
+        13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc(bleed = ntscBleed())
+        14 -> com.nvanloo.retroglass.video.RetroShaders.bloom(intensity = bloomAmount())
+        15 -> com.nvanloo.retroglass.video.RetroShaders.lcdGrid(depth = lcdGridDepth())
         else -> ShaderConfig.Default
     }
 
@@ -1491,16 +1491,16 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun comboBuilder(token: String): com.nvanloo.retroglass.video.FilterStack.Builder? = when (token) {
         "dedither" -> com.nvanloo.retroglass.video.RetroShaders.deditherStage()
-        "ntsc" -> com.nvanloo.retroglass.video.NtscShaders.stage()
+        "ntsc" -> com.nvanloo.retroglass.video.NtscShaders.stage(bleed = ntscBleed())
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
         "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
         "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
         "lanczos" -> com.nvanloo.retroglass.video.LanczosShaders.stage()
         "pixelaa" -> com.nvanloo.retroglass.video.PixelAaShaders.stage()
         "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
-        "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
-        "lcdgrid" -> com.nvanloo.retroglass.video.RetroShaders.lcdGridStage()
-        "bloom" -> com.nvanloo.retroglass.video.RetroShaders.bloomStage()
+        "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage(scanDepth = scanlineDepth())
+        "lcdgrid" -> com.nvanloo.retroglass.video.RetroShaders.lcdGridStage(depth = lcdGridDepth())
+        "bloom" -> com.nvanloo.retroglass.video.RetroShaders.bloomStage(intensity = bloomAmount())
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
         else -> null
     }
@@ -1559,40 +1559,6 @@ class EmulationActivity : AppCompatActivity() {
             .show().gamepadNavigable()
     }
 
-    /** Live slider for the CAS / FSR1 sharpen amount; re-applies the active filter. */
-    private fun showSharpnessDialog() {
-        val label = TextView(this).apply {
-            text = getString(R.string.sharpness_value, (layoutStore.filterSharpness() * 100).toInt())
-            setPadding(56, 40, 56, 8)
-        }
-        val seek = SeekBar(this).apply {
-            max = 100
-            progress = (layoutStore.filterSharpness() * 100).toInt()
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
-                    label.text = getString(R.string.sharpness_value, p)
-                    layoutStore.setFilterSharpness(p / 100f)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    retroView?.shader = currentShaderConfig()
-                }
-            })
-        }
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(label)
-            addView(seek, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(56, 8, 56, 24) })
-        }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_sharpness)
-            .setView(layout)
-            .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
-            .show().gamepadNavigable()
-    }
-
     /** Display name of a single-filter index (see [shaderForIndex]). */
     private fun filterName(i: Int): String = getString(
         when (i) {
@@ -1617,10 +1583,10 @@ class EmulationActivity : AppCompatActivity() {
 
     // The filter set grouped by what it does, so the (now long) list stays browsable.
     private val filterCategories: List<Pair<Int, List<Int>>> = listOf(
-        R.string.filtercat_scale to listOf(3, 4, 11, 12, 6),   // sharp/upscale/lanczos/pixel-AA/CAS
-        R.string.filtercat_upscale to listOf(7, 9, 5),          // FSR1 / SABR / Anime4K
-        R.string.filtercat_crt to listOf(1, 8, 2, 15),              // CRT / CRT-Lottes / LCD
-        R.string.filtercat_signal to listOf(13, 10, 14),        // NTSC / de-dither / bloom
+        R.string.filtercat_scale to listOf(3, 4, 11, 12, 6),
+        R.string.filtercat_upscale to listOf(7, 9, 5),
+        R.string.filtercat_crt to listOf(1, 8, 2, 15),
+        R.string.filtercat_signal to listOf(13, 10, 14),
     )
 
     private fun applySingleFilter(index: Int) {
@@ -1639,6 +1605,69 @@ class EmulationActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    // Tunable look-filter parameters. The UI keeps everything on a 0..1 slider and each
+    // accessor maps it onto that filter's useful range (defaults reproduce the tuned values).
+    private fun bloomAmount() = layoutStore.filterParam("bloom", 0.40f) * 0.8f
+    private fun scanlineDepth() = layoutStore.filterParam("scanline", 0.47f) * 0.6f
+    private fun ntscBleed() = layoutStore.filterParam("ntsc", 0.50f) * 2.0f
+    private fun lcdGridDepth() = layoutStore.filterParam("lcdgrid", 0.55f) * 0.6f
+
+    /** One labelled 0..100 slider bound to a filter parameter. */
+    private fun paramSlider(
+        parent: LinearLayout,
+        labelRes: Int,
+        value: Float,
+        onChange: (Float) -> Unit,
+    ) {
+        val label = TextView(this).apply {
+            text = getString(labelRes, (value * 100).toInt())
+            setPadding(56, 28, 56, 0)
+        }
+        val seek = SeekBar(this).apply {
+            max = 100
+            progress = (value * 100).toInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                    label.text = getString(labelRes, p)
+                    onChange(p / 100f)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    retroView?.shader = currentShaderConfig()
+                }
+            })
+        }
+        parent.addView(label)
+        parent.addView(seek, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(56, 4, 56, 12) })
+    }
+
+    /** Live tuning for every filter that has a knob, in one place. */
+    private fun showFilterSettings() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        paramSlider(box, R.string.param_sharpness, layoutStore.filterSharpness()) {
+            layoutStore.setFilterSharpness(it)
+        }
+        paramSlider(box, R.string.param_bloom, layoutStore.filterParam("bloom", 0.40f)) {
+            layoutStore.setFilterParam("bloom", it)
+        }
+        paramSlider(box, R.string.param_scanline, layoutStore.filterParam("scanline", 0.47f)) {
+            layoutStore.setFilterParam("scanline", it)
+        }
+        paramSlider(box, R.string.param_ntsc, layoutStore.filterParam("ntsc", 0.50f)) {
+            layoutStore.setFilterParam("ntsc", it)
+        }
+        paramSlider(box, R.string.param_lcdgrid, layoutStore.filterParam("lcdgrid", 0.55f)) {
+            layoutStore.setFilterParam("lcdgrid", it)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_filter_settings)
+            .setView(android.widget.ScrollView(this).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
             .show().gamepadNavigable()
     }
 

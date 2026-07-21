@@ -149,6 +149,14 @@ class LayoutStore(context: Context) {
         prefs.edit().putString("shader_combo/${console.prefKey}", tokens.joinToString(",")).apply()
     }
 
+    /** A 0..1 tuning value for a named filter parameter (glow, scanline depth, …). */
+    fun filterParam(key: String, def: Float): Float =
+        prefs.getFloat("fparam/$key", def).coerceIn(0f, 1f)
+
+    fun setFilterParam(key: String, v: Float) {
+        prefs.edit().putFloat("fparam/$key", v.coerceIn(0f, 1f)).apply()
+    }
+
     /** Sharpen amount for the CAS / FSR1 filters, 0..1 (higher = sharper). */
     fun filterSharpness(): Float = prefs.getFloat("filter_sharpness", 0.5f).coerceIn(0f, 1f)
     fun setFilterSharpness(v: Float) {
