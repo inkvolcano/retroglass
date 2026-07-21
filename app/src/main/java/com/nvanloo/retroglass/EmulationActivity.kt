@@ -471,14 +471,17 @@ class EmulationActivity : AppCompatActivity() {
                 bezelView.setBackgroundColor(Color.BLACK)
                 bezelView.visibility = View.VISIBLE
             }
-            else -> { // Console body (default) — the shell colour, screen cut into it
-                bezelView.visibility = View.GONE
-            }
+            else -> Unit // Console shell — handled below, since it needs the rim too
         }
-        // The shell owns the background in body mode; the other modes paint their own.
+        // In shell mode the plain background is the console's plastic; the rim is separate.
         val shell = layoutStore.bezelMode() == LayoutStore.BEZEL_BODY
-        screenBezel.bodyColor = console.bodyColor
+        if (shell) {
+            bezelView.setImageDrawable(null)
+            bezelView.setBackgroundColor(console.bodyColor)
+            bezelView.visibility = View.VISIBLE
+        }
         screenBezel.visibility = if (shell) View.VISIBLE else View.GONE
+        updateScreenBezel()
         // The GL surface clears to its own colour before drawing, so wherever it covers the
         // window - the whole screen in landscape - the letterbox bars are the only background
         // you actually see. Recolouring them at the source fixes every layout at once.
@@ -632,20 +635,17 @@ class EmulationActivity : AppCompatActivity() {
 
         // Bezel/background sits behind the game so it frames a shrunk picture.
         rootLayout.addView(bezelView, matchParent())
-        // The console shell: body colour everywhere, with the screen cut into it. Above the
-        // bezel image so it can replace it, below the game so the rim never covers the picture.
+        // The screen's moulded lip. Above the game, not behind it: the GL surface covers its
+        // own view and clears first, so anything underneath is invisible - in landscape that is
+        // the whole window. The shell colour is set on the GL clear instead.
         screenBezel = com.nvanloo.retroglass.controller.ScreenBezelView(this).apply {
             visibility = View.GONE
-            bodyColor = console.bodyColor
-        }
-        rootLayout.addView(screenBezel, matchParent())
-        // Keep the cut-out on the game wherever the layout puts it.
-        gameContainer.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-            screenBezel.setScreenRect(
-                v.x, v.y, v.x + v.width, v.y + v.height,
-            )
         }
         rootLayout.addView(gameContainer, matchParent())
+        rootLayout.addView(screenBezel, matchParent())
+        gameContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateScreenBezel()
+        }
         rootLayout.addView(controllerView, matchParent())
         rootLayout.addView(companionView, matchParent())
         rootLayout.addView(
@@ -1139,6 +1139,38 @@ class EmulationActivity : AppCompatActivity() {
      * portrait the game fills the top screen region; on glasses / landscape it is
      * scaled and can be shrunk, rotated (0/90/180/270) and nudged around.
      */
+    /**
+     * Puts the screen bezel around the picture's real edges.
+     *
+     * The game view is usually bigger than the picture — the renderer letterboxes inside it —
+     * so the rim has to be laid out from the core's aspect ratio, not from the view's bounds.
+     * A quarter-turn swaps the picture's proportions with it.
+     */
+    private fun updateScreenBezel() {
+        if (!::screenBezel.isInitialized) return
+        val v = retroView ?: return
+        if (v.width == 0 || v.height == 0) return
+        val raw = runCatching { v.aspectRatio() }.getOrDefault(0f)
+        if (raw <= 0f) return
+        val rot = layoutStore.videoRotation()
+        val aspect = if (rot == 90 || rot == 270) 1f / raw else raw
+
+        var pw = v.width.toFloat()
+        var ph = pw / aspect
+        if (ph > v.height) {
+            ph = v.height.toFloat()
+            pw = ph * aspect
+        }
+        val here = IntArray(2)
+        val mine = IntArray(2)
+        v.getLocationInWindow(here)
+        screenBezel.getLocationInWindow(mine)
+        val cx = (here[0] - mine[0]) + v.width / 2f
+        val cy = (here[1] - mine[1]) + v.height / 2f
+        screenBezel.setPicture(cx - pw / 2f, cy - ph / 2f, cx + pw / 2f, cy + ph / 2f)
+        Log.i(TAG, "screen bezel: aspect=$aspect view=${v.width}x${v.height} picture=${pw.toInt()}x${ph.toInt()}")
+    }
+
     private fun applyVideoTransform() {
         val v = retroView ?: return
         val parent = v.parent as? FrameLayout ?: return

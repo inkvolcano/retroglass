@@ -548,6 +548,13 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_step(
     }
 }
 
+JNIEXPORT jfloat JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_getAspectRatio(
+    JNIEnv* env,
+    jclass obj
+) {
+    return LibretroDroid::getInstance().getAspectRatio();
+}
+
 JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_setBackgroundColor(
     JNIEnv* env,
     jclass obj,

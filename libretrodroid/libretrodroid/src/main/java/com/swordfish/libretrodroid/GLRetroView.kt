@@ -507,6 +507,14 @@ class GLRetroView(
     }
 
     /**
+     * The picture's aspect ratio (width / height), or 0 before the core reports geometry.
+     *
+     * The view is usually larger than the picture — the renderer letterboxes inside it — so
+     * anything drawn around the picture needs this to find its edges.
+     */
+    fun aspectRatio(): Float = runOnEmulationThread(true) { LibretroDroid.getAspectRatio() }
+
+    /**
      * Colour drawn around the picture when it does not fill the view.
      *
      * The frontend paints its own background behind this view, but the GL surface covers it

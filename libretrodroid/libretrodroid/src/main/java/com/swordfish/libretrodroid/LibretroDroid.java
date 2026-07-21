@@ -112,6 +112,9 @@ public class LibretroDroid {
 
     public static native void setRumbleEnabled(boolean enabled);
 
+    /** The picture's aspect ratio (width / height). */
+    public static native float getAspectRatio();
+
     /** Colour drawn around the picture (letterbox bars), 0..1 per channel. */
     public static native void setBackgroundColor(float red, float green, float blue);
     public static native void setFrameSpeed(int speed);
