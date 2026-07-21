@@ -168,6 +168,53 @@ void main() {
     fun dedither(strength: Float = 0.85f): ShaderConfig =
         FilterStack.compose(listOf(deditherStage(strength)))
 
+    // ------------------------------------------------------------------- Curvature
+    // Tube geometry as its own block: barrel-warps the image and darkens toward the corners,
+    // with a hard black edge where the glass bends past the frame. crt-lottes bakes this in;
+    // having it standalone lets any chain get the tube shape (e.g. SABR -> scanlines -> tube).
+
+    private fun curvatureFragment(input: String, curve: Float, vignette: Float): String = HEADER + """
+const float WARP_X = ${"%.5f".format(Locale.US, curve * 0.031f)};
+const float WARP_Y = ${"%.5f".format(Locale.US, curve * 0.041f)};
+const float VIGNETTE = ${"%.4f".format(Locale.US, vignette)};
+
+vec2 warp(vec2 p) {
+    p = p * 2.0 - 1.0;
+    p *= vec2(1.0 + (p.y * p.y) * WARP_X, 1.0 + (p.x * p.x) * WARP_Y);
+    return p * 0.5 + 0.5;
+}
+
+void main() {
+    vec2 p = warp(coords);
+    vec3 c = texture($input, p).rgb;
+
+    // Corner falloff, then a hard cut where the glass curves past the frame.
+    vec2 v = p * 2.0 - 1.0;
+    float vig = 1.0 - VIGNETTE * dot(v, v) * 0.35;
+    float inside = step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0);
+
+    fragColor = vec4(clamp(c * vig * inside, 0.0, 1.0), 1.0);
+}
+"""
+
+    /** Screen curvature + vignette as a composable stage (does not change resolution). */
+    fun curvatureStage(curve: Float = 1.0f, vignette: Float = 0.5f): FilterStack.Builder =
+        FilterStack.Builder { ctx ->
+            FilterStack.Stage(
+                passes = listOf(
+                    ShaderConfig.CustomPass(
+                        fragment = curvatureFragment(ctx.inputSampler, curve, vignette),
+                        scale = ctx.inScale,
+                        linear = true,
+                    )
+                ),
+                outScale = 1.0f,
+            )
+        }
+
+    fun curvature(curve: Float = 1.0f, vignette: Float = 0.5f): ShaderConfig =
+        FilterStack.compose(listOf(curvatureStage(curve, vignette)))
+
     // --------------------------------------------------------------------- LCD grid
     // Handheld dot-matrix look: a real GB/GBA/Game Gear panel shows a fine dark gap between
     // pixels. Darkens the border of every *source* pixel, and fades the effect out when a

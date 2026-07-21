@@ -1461,6 +1461,7 @@ class EmulationActivity : AppCompatActivity() {
         13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc(bleed = ntscBleed())
         14 -> com.nvanloo.retroglass.video.RetroShaders.bloom(intensity = bloomAmount())
         15 -> com.nvanloo.retroglass.video.RetroShaders.lcdGrid(depth = lcdGridDepth())
+        16 -> com.nvanloo.retroglass.video.RetroShaders.curvature(curve = curveAmount())
         else -> ShaderConfig.Default
     }
 
@@ -1470,7 +1471,7 @@ class EmulationActivity : AppCompatActivity() {
     private val comboOrder =
         listOf(
             "dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa",
-            "cas", "crt", "lcdgrid", "bloom", "grade",
+            "cas", "crt", "lcdgrid", "bloom", "curve", "grade",
         )
 
     private fun comboLabel(token: String): String = when (token) {
@@ -1485,6 +1486,7 @@ class EmulationActivity : AppCompatActivity() {
         "crt" -> getString(R.string.combo_crt)
         "lcdgrid" -> getString(R.string.filter_lcdgrid)
         "bloom" -> getString(R.string.filter_bloom)
+        "curve" -> getString(R.string.filter_curve)
         "grade" -> getString(R.string.combo_grade)
         else -> token
     }
@@ -1501,6 +1503,7 @@ class EmulationActivity : AppCompatActivity() {
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage(scanDepth = scanlineDepth())
         "lcdgrid" -> com.nvanloo.retroglass.video.RetroShaders.lcdGridStage(depth = lcdGridDepth())
         "bloom" -> com.nvanloo.retroglass.video.RetroShaders.bloomStage(intensity = bloomAmount())
+        "curve" -> com.nvanloo.retroglass.video.RetroShaders.curvatureStage(curve = curveAmount())
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
         else -> null
     }
@@ -1537,6 +1540,17 @@ class EmulationActivity : AppCompatActivity() {
         return shaderForIndex(layoutStore.shaderIndex(console))
     }
 
+    // Rough GPU weight of each block (passes x how much area it renders), so the chaining
+    // menu can warn before someone stacks two upscalers and a CRT on a 4x framebuffer.
+    private fun comboCost(token: String): Int = when (token) {
+        "anime4k" -> 8   // 6 passes, two of them at 2x
+        "fsr1" -> 4      // EASU + RCAS at 2x
+        "sabr" -> 3      // 21 taps at 2x
+        "lanczos" -> 3   // 16 taps at 2x
+        "crt", "bloom", "ntsc", "dedither" -> 2
+        else -> 1
+    }
+
     private fun showComboFilterPicker() {
         val tokens = comboOrder
         val labels = tokens.map { comboLabel(it) }.toTypedArray()
@@ -1548,8 +1562,13 @@ class EmulationActivity : AppCompatActivity() {
                 if (isChecked) current.add(tokens[which]) else current.remove(tokens[which])
             }
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                layoutStore.setComboFilters(console, tokens.filter { it in current })
+                val chosen = tokens.filter { it in current }
+                layoutStore.setComboFilters(console, chosen)
                 retroView?.shader = currentShaderConfig()
+                val cost = chosen.sumOf { comboCost(it) }
+                if (cost >= 10) {
+                    Toast.makeText(this, R.string.combo_heavy, Toast.LENGTH_LONG).show()
+                }
             }
             .setNeutralButton(R.string.combo_clear) { _, _ ->
                 layoutStore.setComboFilters(console, emptyList())
@@ -1577,6 +1596,7 @@ class EmulationActivity : AppCompatActivity() {
             13 -> R.string.filter_ntsc
             14 -> R.string.filter_bloom
             15 -> R.string.filter_lcdgrid
+            16 -> R.string.filter_curve
             else -> R.string.filter_off
         }
     )
@@ -1585,7 +1605,7 @@ class EmulationActivity : AppCompatActivity() {
     private val filterCategories: List<Pair<Int, List<Int>>> = listOf(
         R.string.filtercat_scale to listOf(3, 4, 11, 12, 6),
         R.string.filtercat_upscale to listOf(7, 9, 5),
-        R.string.filtercat_crt to listOf(1, 8, 2, 15),
+        R.string.filtercat_crt to listOf(1, 8, 2, 15, 16),
         R.string.filtercat_signal to listOf(13, 10, 14),
     )
 
@@ -1614,6 +1634,7 @@ class EmulationActivity : AppCompatActivity() {
     private fun scanlineDepth() = layoutStore.filterParam("scanline", 0.47f) * 0.6f
     private fun ntscBleed() = layoutStore.filterParam("ntsc", 0.50f) * 2.0f
     private fun lcdGridDepth() = layoutStore.filterParam("lcdgrid", 0.55f) * 0.6f
+    private fun curveAmount() = layoutStore.filterParam("curve", 0.50f) * 2.0f
 
     /** One labelled 0..100 slider bound to a filter parameter. */
     private fun paramSlider(
@@ -1663,6 +1684,9 @@ class EmulationActivity : AppCompatActivity() {
         }
         paramSlider(box, R.string.param_lcdgrid, layoutStore.filterParam("lcdgrid", 0.55f)) {
             layoutStore.setFilterParam("lcdgrid", it)
+        }
+        paramSlider(box, R.string.param_curve, layoutStore.filterParam("curve", 0.50f)) {
+            layoutStore.setFilterParam("curve", it)
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_filter_settings)
