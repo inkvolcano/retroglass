@@ -75,10 +75,15 @@ curvature warps the composed picture; colour grade is last.
 * **★ Best for &lt;system&gt;** applies the recipe: PS1 → `dedither + fsr1`; other 3D →
   `fsr1`; handhelds → `pixelaa + lcdgrid`; everything else (2D) → `sabr`.
 * **Upscale factor.** *Upscale factor…* sets how far the resamplers (FSR1, SABR, Lanczos,
-  Pixel-AA) render before the final blit — 2×, 3× or 4×. This matters: a 240p game on a
-  1080p panel is a ~4.5× jump, so at 2× the scaler reconstructs at 480p and hardware
-  bilinear blurs the rest of the way. Anime4K is fixed at 2× (its depth-to-space pass emits
-  a 2×2 residual).
+  Pixel-AA) render before the final blit. This matters: a 240p game on a 1080p panel is a
+  ~4.5× jump, so at 2× the scaler reconstructs at only 480p and hardware bilinear blurs the
+  rest of the way.
+
+  **Auto** (the default) computes it per system as `on-screen game height / Console.nativeHeight`,
+  clamped to 2..4 — because no fixed factor is right for everything: a 480p Dreamcast game
+  only needs ~2×, a 240p NES game wants ~4×, and a 144p Game Boy game is already past 4×.
+  2× / 3× / 4× can still be forced. Anime4K is always 2× (its depth-to-space pass emits a
+  2×2 residual).
 * **Cost warning.** Each block has a rough GPU weight, scaled by factor² since cost follows
   rendered area; a heavy chain warns to watch the FPS counter.
 

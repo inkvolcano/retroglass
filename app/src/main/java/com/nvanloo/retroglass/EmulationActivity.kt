@@ -1657,8 +1657,27 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun param(key: String) = layoutStore.filterParam(key, paramDefaults[key] ?: 0.5f)
 
-    /** Upscale factor the resampling scalers render at (2..4). */
-    private fun upscale() = layoutStore.upscaleFactor().toFloat()
+    /**
+     * Upscale factor the resampling scalers render at (2..4).
+     *
+     * On Auto it is derived from how tall the game actually appears on screen versus what the
+     * system renders: a 240p NES game on a 1080p panel wants ~4×, a 480p Dreamcast game only
+     * ~2×. Without this the scaler reconstructs well below the panel and hardware bilinear
+     * blurs away the difference.
+     */
+    private fun upscale(): Float {
+        val stored = layoutStore.upscaleFactor()
+        if (stored != LayoutStore.UPSCALE_AUTO) return stored.toFloat()
+        return autoUpscale().toFloat()
+    }
+
+    /** The factor Auto resolves to right now, 2..4. */
+    private fun autoUpscale(): Int {
+        val viewH = (retroView?.height ?: 0).takeIf { it > 0 }
+            ?: resources.displayMetrics.heightPixels
+        val src = console.nativeHeight.coerceAtLeast(1)
+        return Math.round(viewH.toFloat() / src).coerceIn(2, 4)
+    }
 
     private fun bloomAmount() = param("bloom") * 0.8f
     private fun scanlineDepth() = param("scanline") * 0.6f
@@ -1700,12 +1719,15 @@ class EmulationActivity : AppCompatActivity() {
     /** How far the scalers render before the final blit. Higher = sharper, costs fill-rate. */
     private fun showUpscaleFactorPicker() {
         val labels = arrayOf(
+            getString(R.string.upscale_auto, autoUpscale(), console.displayName),
             getString(R.string.upscale_2x), getString(R.string.upscale_3x), getString(R.string.upscale_4x),
         )
+        val stored = layoutStore.upscaleFactor()
+        val checked = if (stored == LayoutStore.UPSCALE_AUTO) 0 else stored - 1
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_upscale_factor)
-            .setSingleChoiceItems(labels, layoutStore.upscaleFactor() - 2) { dialog, which ->
-                layoutStore.setUpscaleFactor(which + 2)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                layoutStore.setUpscaleFactor(if (which == 0) LayoutStore.UPSCALE_AUTO else which + 1)
                 retroView?.shader = currentShaderConfig()
                 dialog.dismiss()
             }

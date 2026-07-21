@@ -308,6 +308,38 @@ enum class Console(
 
     val prefKey: String get() = name.lowercase()
 
+    /**
+     * Typical vertical resolution the system renders at, in scanlines.
+     *
+     * Used to pick the upscale factor: the useful factor is roughly
+     * `panelHeight / nativeHeight`, and it differs wildly across systems — a Dreamcast game
+     * at 480p only needs ~2× to fill a 1080p panel, while a 240p NES game needs ~4×. A single
+     * fixed factor is therefore wrong for one end of the range or the other.
+     *
+     * These are the common/most representative modes; several systems have more than one
+     * (e.g. PS1 also does 480i), which is fine — the value only steers a 2..4 choice.
+     */
+    val nativeHeight: Int
+        get() = when (this) {
+            POKEMONMINI -> 64
+            LYNX -> 102
+            GAMEBOY, GAMEGEAR, WONDERSWAN -> 144
+            NGP -> 152
+            GBA -> 160
+            MASTERSYSTEM, COLECO, INTELLIVISION, SPECTRUM -> 192
+            C64, AMSTRAD -> 200
+            ATARI2600 -> 210
+            MSX -> 212
+            SNES, MEGADRIVE, SATURN, SEGA32X, SEGACD, NEOGEOCD, ARCADE, VIRTUALBOY -> 224
+            AMIGA -> 256
+            PSP -> 272
+            NDS -> 384 // two 192-line screens stacked
+            PS2 -> 448
+            DREAMCAST, NAOMI, ATOMISWAVE, VECTREX -> 480
+            // NES, PSX, N64, PC Engine (+CD), 3DO, Atari 5200/7800/8-bit and anything else.
+            else -> 240
+        }
+
     /** Core options that MUST be forced for this system (applied at load). Used where one
      *  core serves several machines — e.g. atari800 runs both the 5200 console and the 8-bit
      *  computers, selected by the atari800_system option. */

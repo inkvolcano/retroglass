@@ -178,8 +178,13 @@ class LayoutStore(context: Context) {
      * needs ~4x; at 2x the scaler reconstructs at 480p and hardware bilinear blurs the rest
      * of the way, throwing away most of the benefit.
      */
-    fun upscaleFactor(): Int = prefs.getInt("upscale_factor", 2).coerceIn(2, 4)
-    fun setUpscaleFactor(v: Int) { prefs.edit().putInt("upscale_factor", v.coerceIn(2, 4)).apply() }
+    fun upscaleFactor(): Int = prefs.getInt("upscale_factor", UPSCALE_AUTO).let {
+        if (it == UPSCALE_AUTO) UPSCALE_AUTO else it.coerceIn(2, 4)
+    }
+
+    fun setUpscaleFactor(v: Int) {
+        prefs.edit().putInt("upscale_factor", if (v == UPSCALE_AUTO) v else v.coerceIn(2, 4)).apply()
+    }
 
     /** A 0..1 tuning value for a named filter parameter (glow, scanline depth, …). */
     fun filterParam(key: String, def: Float): Float =
@@ -236,6 +241,9 @@ class LayoutStore(context: Context) {
     }
 
     companion object {
+        /** Upscale factor is derived from panel height / the system's native height. */
+        const val UPSCALE_AUTO = 0
+
         const val SCREEN_AUTO = 0          // follow connected display + device rotation (default)
         const val SCREEN_INT_PORTRAIT = 1  // on the phone, portrait: game on top, pad below
         const val SCREEN_INT_LANDSCAPE = 2 // on the phone, landscape: game centred, pad frames it
