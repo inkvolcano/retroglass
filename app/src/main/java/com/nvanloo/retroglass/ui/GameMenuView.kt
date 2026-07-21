@@ -50,6 +50,10 @@ class GameMenuView(context: Context) : FrameLayout(context) {
     var consoleTint: Int = MenuTheme.ACCENT
     var consoleName: String = ""
 
+    /** Identity line under the logo ("PlayStation · running"). Null hides the row — the
+     *  library has no console to identify, so it just gets the logo. */
+    var rootStatus: String? = null
+
     /** Called when the user closes the whole menu (✕, B at the root, or back). */
     var onClosed: (() -> Unit)? = null
 
@@ -65,6 +69,16 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         isClickable = true
         isFocusable = true
         descendantFocusability = FOCUS_AFTER_DESCENDANTS
+        // The library draws edge-to-edge, so without this the ✕ / logo / B row sits under the
+        // clock and battery. In-game the bars are hidden and these insets are simply 0.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            val bars = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout(),
+            )
+            host.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
     }
 
     // ------------------------------------------------------------------ stack
@@ -166,22 +180,27 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             ))
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(12f))
-            addView(View(context).apply {
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(consoleTint)
-                }
-            }, LinearLayout.LayoutParams(dp(7f), dp(7f)).apply { marginEnd = dp(7f) })
-            addView(TextView(context).apply {
-                text = context.getString(R.string.menu_console_running, consoleName)
-                setTextColor(MenuTheme.DIM)
-                textSize = 12f
-            })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        rootStatus?.let { status ->
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(12f))
+                addView(View(context).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(consoleTint)
+                    }
+                }, LinearLayout.LayoutParams(dp(7f), dp(7f)).apply { marginEnd = dp(7f) })
+                addView(TextView(context).apply {
+                    text = status
+                    setTextColor(MenuTheme.DIM)
+                    textSize = 12f
+                })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        if (rootStatus == null) addView(View(context), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(6f),
+        ))
     }
 
     /** Sub-screen: ‹ back · title · "B" hint. */
@@ -328,8 +347,12 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         rowShell(MenuTheme.TILE_H, onClick = onClick).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            addView(label(title, bold = true))
-            if (sub != null) addView(label(sub, size = 10f, color = MenuTheme.DIM))
+            // A vertical LinearLayout hands children MATCH_PARENT width, so the TextView would
+            // fill the tile and left-align its own text regardless of this gravity.
+            val wrap = { -> LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
+            addView(label(title, bold = true), wrap())
+            if (sub != null) addView(label(sub, size = 10f, color = MenuTheme.DIM), wrap())
         }
 
     /** Full-width button. [danger] paints the destructive variant, [tint] the console one. */
@@ -500,6 +523,73 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             ))
         }
     }
+
+    /**
+     * Two-line row: label above, current value below in monospace. The value is [MenuTheme.ACCENT]
+     * when the user has overridden it and [MenuTheme.DIM] when it is still the core's default —
+     * so "what have I actually changed" is readable by colour alone.
+     */
+    fun valueRow(title: String, value: String, changed: Boolean, onClick: () -> Unit): View =
+        rowShell(58f, onClick = onClick).apply {
+            setPadding(dp(14f), dp(9f), dp(14f), dp(9f))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(title, size = 14f))
+                addView(TextView(context).apply {
+                    text = value
+                    setTextColor(if (changed) MenuTheme.ACCENT else MenuTheme.DIM)
+                    textSize = 12f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                }, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(2f) })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label("›", color = MenuTheme.CHEVRON))
+        }
+
+    /** Single-select row: the chosen one is ticked and tinted. */
+    fun selectRow(text: String, selected: Boolean, onClick: () -> Unit): View =
+        rowShell(MenuTheme.ROW_H, onClick = onClick).apply {
+            setPadding(dp(14f), 0, dp(14f), 0)
+            addView(label(text, color = if (selected) MenuTheme.ACCENT else MenuTheme.FG),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (selected) addView(label("✓", color = MenuTheme.ACCENT, bold = true))
+        }
+
+    /** Non-interactive status line (BIOS present/missing, disc info). */
+    fun infoRow(text: String, value: String, ok: Boolean? = null): View =
+        rowShell(MenuTheme.ROW_H).apply {
+            setPadding(dp(14f), 0, dp(14f), 0)
+            addView(label(text), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label(
+                value, size = 13f,
+                color = when (ok) { true -> MenuTheme.ACCENT; false -> MenuTheme.DANGER; else -> MenuTheme.DIM },
+                bold = ok != null,
+            ))
+        }
+
+    /** Rounded search/filter field. [onChange] fires per keystroke. */
+    fun searchField(hint: String, onChange: (String) -> Unit): View =
+        rowShell(46f).apply {
+            background = context.tile(radius = 23f)
+            setPadding(dp(16f), 0, dp(16f), 0)
+            addView(label("⌕", size = 14f, color = MenuTheme.DIM))
+            addView(android.widget.EditText(context).apply {
+                this.hint = hint
+                setHintTextColor(MenuTheme.DIM)
+                setTextColor(MenuTheme.FG)
+                textSize = 14f
+                background = null
+                isSingleLine = true
+                addTextChangedListener(object : android.text.TextWatcher {
+                    override fun afterTextChanged(s: android.text.Editable?) { onChange(s?.toString() ?: "") }
+                    override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                    override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(8f)
+            })
+        }
 
     /** Eats the leftover height so a trailing row sits at the bottom (the design's margin-top:auto). */
     fun spacer(): View = View(context).apply {

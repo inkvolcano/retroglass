@@ -244,6 +244,16 @@
     <string name="menu_filters_none">None</string>
     <string name="menu_combo_count">%1$d in chain</string>
 
+    <string name="menu_core_changed">Changed</string>
+    <string name="menu_core_changed_count">%1$d changed</string>
+    <string name="menu_core_all">All options</string>
+    <string name="menu_core_option_count">%1$d options</string>
+    <string name="menu_core_search">Filter %1$d options…</string>
+    <string name="menu_core_type_value">Type a value…</string>
+    <string name="menu_library_title">Library</string>
+    <string name="menu_group_data">Save data</string>
+    <string name="menu_group_setup">Setup</string>
+
     <string name="filtercat_scale">Scale &amp; sharpen</string>
     <string name="filtercat_upscale">Upscalers (AI / 3D / pixel-art)</string>
     <string name="filtercat_crt">CRT &amp; LCD look</string>

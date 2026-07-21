@@ -33,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var carousel: RecyclerView
     private lateinit var emptyView: LinearLayout
     private lateinit var sortToggle: TextView
+    private val libraryMenu by lazy { com.nvanloo.retroglass.ui.GameMenuView(this).apply { visibility = View.GONE } }
     private lateinit var searchBox: android.widget.EditText
     private lateinit var consoleTitle: TextView
     private lateinit var consoleMeta: TextView
@@ -138,18 +139,6 @@ class MainActivity : AppCompatActivity() {
                 refresh()
             }
         }.start()
-    }
-
-    private fun showBackupMenu() {
-        val options = arrayOf(getString(R.string.backup_save), getString(R.string.restore_save))
-        AlertDialog.Builder(this)
-            .setTitle(R.string.backup_title)
-            .setItems(options) { _, which ->
-                if (which == 0) createBackup.launch("retroglass-saves.zip")
-                else restoreBackup.launch(arrayOf("application/zip", "application/octet-stream"))
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
     }
 
     /** On launch, if a crash log was written last session, offer to view/share it. */
@@ -491,8 +480,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
             setPadding(dp(6f), dp(topPad), dp(6f), 0)
-            addView(iconButton("⚙", 19f) { showBackupMenu() })
-            addView(iconButton("⋯", 22f) { showTopMenu() })
+            addView(iconButton("⚙", 20f) { showTopMenu() })
         }
 
         if (landscape) {
@@ -522,8 +510,7 @@ class MainActivity : AppCompatActivity() {
             topRow.addView(View(this), LinearLayout.LayoutParams(dp(8f), 1))
             topRow.addView(sortToggle)
             topRow.addView(View(this), LinearLayout.LayoutParams(dp(4f), 1))
-            topRow.addView(iconButton("⚙", 19f) { showBackupMenu() })
-            topRow.addView(iconButton("⋯", 22f) { showTopMenu() })
+            topRow.addView(iconButton("⚙", 20f) { showTopMenu() })
 
             val rightPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             rightPane.addView(topRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -537,7 +524,7 @@ class MainActivity : AppCompatActivity() {
             }
             row.addView(leftPane, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.42f))
             row.addView(rightPane, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.58f))
-            setContentView(row)
+            setContentWithMenu(row)
         } else {
             // ---- PORTRAIT: vertical stack with the black hero band behind the transparent content.
             val searchRow = LinearLayout(this).apply {
@@ -589,7 +576,7 @@ class MainActivity : AppCompatActivity() {
                     blackBand.layoutParams = lp
                 }
             }
-            setContentView(frame)
+            setContentWithMenu(frame)
         }
         checkForCrashReport()
     }
@@ -790,18 +777,73 @@ class MainActivity : AppCompatActivity() {
         carousel.smoothScrollBy(delta * itemW, 0)
     }
 
-    private fun showTopMenu() {
-        val items = arrayOf(
-            getString(R.string.add_roms),
-            getString(R.string.import_bios),
-            getString(R.string.backup_title),
-        )
-        AlertDialog.Builder(this)
-            .setItems(items) { _, which ->
-                when (which) { 0 -> showAddSource(); 1 -> showBiosStatus(); else -> showBackupMenu() }
+    /**
+     * The library's single settings surface. Previously split between a gear (backup/restore)
+     * and a "⋯" (add ROMs / BIOS / backup) that overlapped — the gear's two items were both
+     * reachable from the dots. Merged into one gear using the same overlay as the in-game menu.
+     */
+    /** Content plus the settings overlay on top, so the gear can cover the library. */
+    private fun setContentWithMenu(content: View) {
+        setContentView(android.widget.FrameLayout(this).apply {
+            addView(content, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addView(libraryMenu, android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        })
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (libraryMenu.onBack()) return
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        })
+    }
+
+    private fun showTopMenu() {
+        // No console here, and green means "focused / live" - so the identity rule falls back
+        // to the app's own colorPrimary rather than borrowing the focus colour.
+        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.rootStatus = null
+        libraryMenu.open { libraryMenuScreen() }
+    }
+
+    private fun libraryMenuScreen(): View = with(libraryMenu) {
+        body {
+            addView(group(getString(R.string.menu_library_title)))
+            addView(navRow("＋", getString(R.string.add_roms)) {
+                push(getString(R.string.add_roms)) { addSourceScreen() }
+            })
+            addView(navRow("▤", getString(R.string.bios_status_title)) {
+                libraryMenu.close(); showBiosStatus()
+            })
+            addView(group(getString(R.string.menu_group_data)))
+            addView(navRow("↑", getString(R.string.backup_save)) {
+                libraryMenu.close(); createBackup.launch("retroglass-saves.zip")
+            })
+            addView(navRow("↓", getString(R.string.restore_save)) {
+                libraryMenu.close()
+                restoreBackup.launch(arrayOf("application/zip", "application/octet-stream"))
+            })
+            addView(group(getString(R.string.menu_group_setup)))
+            addView(navRow("▣", getString(R.string.screen_mode_title), screenModeShort(layoutStore.screenMode())) {
+                libraryMenu.close(); showScreenModePicker()
+            })
+        }
+    }
+
+    private fun addSourceScreen(): View = with(libraryMenu) {
+        body {
+            addView(navRow(null, getString(R.string.scan_all)) {
+                libraryMenu.close(); startStorageScan()
+            })
+            addView(navRow(null, getString(R.string.add_files)) {
+                libraryMenu.close(); pickRoms.launch(arrayOf("*/*"))
+            })
+            addView(navRow(null, getString(R.string.add_folder)) {
+                libraryMenu.close(); pickFolder.launch(null)
+            })
+        }
     }
 
     /** 1–2 letter monogram from a game's name, skipping filler words. */

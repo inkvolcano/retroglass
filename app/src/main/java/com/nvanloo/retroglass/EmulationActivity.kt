@@ -419,7 +419,8 @@ class EmulationActivity : AppCompatActivity() {
                 lastFps = frameCounter
                 // The counter also feeds the companion dashboard's stats; keep the game overlay
                 // hidden while the dashboard is up (it would draw over the empty game container).
-                if (layoutStore.fpsOverlay() && !dashboardActive()) {
+                // The menu is a full-screen surface; fpsView.bringToFront() would punch through it.
+                if (layoutStore.fpsOverlay() && !dashboardActive() && !gameMenu.isOpen) {
                     fpsView.visibility = View.VISIBLE
                     fpsView.text = getString(R.string.fps_value, frameCounter)
                     fpsView.bringToFront()
@@ -2101,35 +2102,112 @@ class EmulationActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------- core options
 
+    /**
+     * A core option's human title and its choices, both parsed out of the libretro
+     * `description` field, which the core formats as `"RDP Plugin; gliden64|angrylion|parallel"`.
+     * That means every option can be a pick-list — the old dialog made you type the raw value
+     * ("angrylion") by hand, which is how the ugliest surface in the app got that way.
+     * The first choice is the core's own default.
+     */
+    private data class CoreOpt(val key: String, val title: String, val choices: List<String>)
+
+    private fun parseCoreOpt(key: String, description: String): CoreOpt {
+        val semi = description.indexOf(';')
+        if (semi < 0) return CoreOpt(key, description.ifBlank { key }, emptyList())
+        val title = description.substring(0, semi).trim().ifBlank { key }
+        val choices = description.substring(semi + 1).trim()
+            .split('|').map { it.trim() }.filter { it.isNotEmpty() }
+        return CoreOpt(key, title, choices)
+    }
+
     /** Lists the core's live options (real keys/values from the core), each editable. */
     private fun showCoreOptions() {
         val view = retroView ?: return
         val vars = view.getVariables()
         if (vars.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.core_options_title, console.displayName))
-                .setMessage(R.string.core_options_none)
-                .setPositiveButton(android.R.string.ok, null)
-                .show().gamepadNavigable()
+            Toast.makeText(this, R.string.core_options_none, Toast.LENGTH_LONG).show()
             return
         }
-        // Show the stored override if any, else the core's current value.
-        val stored = coreOptions.overrides(consoleKey)
-        val labels = vars.map { v ->
-            val key = v.key ?: ""
-            val cur = stored[key] ?: (v.value ?: "")
-            val desc = (v.description ?: "").ifBlank { key }
-            "$desc\n  = ${valueLabel(key, cur)}"
-        }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.core_options_title, console.displayName))
-            .setItems(labels) { _, which -> editCoreOption(vars[which].key ?: "", vars[which].description ?: "") }
-            .setNeutralButton(R.string.core_option_reset_all) { _, _ ->
-                coreOptions.clear(consoleKey)
-                Toast.makeText(this, R.string.core_options_note, Toast.LENGTH_LONG).show()
+        if (!gameMenu.isOpen) showMenu()
+        gameMenu.push(getString(R.string.menu_core_options)) { menuCoreOptionsScreen(vars) }
+    }
+
+    private fun menuCoreOptionsScreen(
+        vars: Array<com.swordfish.libretrodroid.Variable>,
+    ): View = with(gameMenu) {
+        val opts = vars.map { parseCoreOpt(it.key ?: "", it.description ?: "") }
+        val liveValue = vars.associate { (it.key ?: "") to (it.value ?: "") }
+        val list = LinearLayout(this@EmulationActivity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        fun populate(query: String) {
+            list.removeAllViews()
+            val stored = coreOptions.overrides(consoleKey)
+            val q = query.trim().lowercase()
+            val matches = opts.filter { q.isEmpty() || it.title.lowercase().contains(q) || it.key.contains(q) }
+            val changed = matches.filter { stored.containsKey(it.key) }
+            val rest = matches.filterNot { stored.containsKey(it.key) }
+
+            fun addRow(o: CoreOpt, isChanged: Boolean) {
+                val current = stored[o.key] ?: liveValue[o.key] ?: o.choices.firstOrNull() ?: ""
+                list.addView(
+                    valueRow(o.title, valueLabel(o.key, current), isChanged) {
+                        push(o.title) { menuCoreValueScreen(o, current) }
+                    },
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply { topMargin = (9 * resources.displayMetrics.density).toInt() },
+                )
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+            if (changed.isNotEmpty()) {
+                list.addView(group(
+                    getString(R.string.menu_core_changed),
+                    getString(R.string.menu_core_changed_count, changed.size),
+                    trailingLive = true,
+                ))
+                changed.forEach { addRow(it, true) }
+            }
+            list.addView(group(
+                getString(R.string.menu_core_all),
+                getString(R.string.menu_core_option_count, rest.size),
+            ))
+            rest.forEach { addRow(it, false) }
+        }
+
+        populate("")
+        body(padSides = 16f) {
+            addView(searchField(getString(R.string.menu_core_search, opts.size)) { populate(it) })
+            addView(list)
+            addView(bigButton(getString(R.string.core_option_reset_all), danger = true) {
+                coreOptions.clear(consoleKey)
+                Toast.makeText(this@EmulationActivity, R.string.core_options_note, Toast.LENGTH_LONG).show()
+                populate("")
+            })
+        }
+    }
+
+    /** One option's choices as a pick-list, with a text fallback for free-form options. */
+    private fun menuCoreValueScreen(opt: CoreOpt, current: String): View = with(gameMenu) {
+        // A curated list wins when we have one (it carries friendlier labels than the raw values).
+        val known = com.nvanloo.retroglass.controller.CoreOptions.KNOWN_VALUES[opt.key]
+        val pairs: List<Pair<String, String>> = known
+            ?: opt.choices.map { it to it }
+        body {
+            if (pairs.isEmpty()) {
+                addView(navRow(null, getString(R.string.menu_core_type_value), current) {
+                    editCoreOption(opt.key, opt.title)
+                })
+            } else {
+                for ((label, value) in pairs) {
+                    addView(selectRow(label, value == current) {
+                        applyCoreOption(opt.key, value)
+                        pop()
+                        gameMenu.refresh()
+                    })
+                }
+            }
+        }
     }
 
     /** Human label for a stored value (uses the curated list when the value is known). */
