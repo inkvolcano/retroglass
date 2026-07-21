@@ -46,7 +46,11 @@ class ControllerView @JvmOverloads constructor(
         /** How far the body is pushed off the glass, as a fraction of radius. */
         const val EXTRUDE_DEPTH = 0.10f
         /** Contact shadow on the screen underneath. */
-        const val CONTACT_ALPHA = 80
+        const val CONTACT_ALPHA = 90
+        /** Stacked silhouettes standing in for a blur; more layers = softer, costlier. */
+        const val SHADOW_LAYERS = 4
+        /** How much wider the outermost shadow layer spreads. */
+        const val SHADOW_SPREAD = 0.13f
         /** Below this the effect is invisible anyway; skip the passes entirely. */
         const val LIGHT_CUTOFF = 0.02f
         const val BEZEL_HIGHLIGHT = 120
@@ -162,6 +166,12 @@ class ControllerView @JvmOverloads constructor(
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bezelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val extrudePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    // Reused across the extrusion passes: onDraw runs on every frame the pad is touched and
+    // every time the tilt moves, so allocating paths per control per frame would churn.
+    private val scratchPath = android.graphics.Path()
+    private val scratchPath2 = android.graphics.Path()
+    private val scratchMatrix = android.graphics.Matrix()
 
     // ---- tilt-driven bezel ---------------------------------------------------------------
     // A virtual light fixed in the world. Each control carries a bevelled rim: bright on the
@@ -718,14 +728,27 @@ class ControllerView @JvmOverloads constructor(
         val cy = centerY(c)
         val depth = r * EXTRUDE_DEPTH * strength
 
-        // Contact shadow, thrown a little further than the body it belongs to.
-        extrudePaint.color = Color.argb((CONTACT_ALPHA * strength).toInt() * alpha / 255, 0, 0, 0)
-        canvas.drawPath(controlPath(c, cx - hx * depth * 1.9f, cy - hy * depth * 1.9f, r), extrudePaint)
+        // Contact shadow. A real blur would mean a BlurMaskFilter, whose hardware-canvas
+        // support is version-dependent and which would otherwise force the whole overlay into
+        // software rendering; stacking a few silhouettes at growing size and offset gives a
+        // penumbra that costs a handful of path fills instead.
+        val layerAlpha = (CONTACT_ALPHA * strength / SHADOW_LAYERS).toInt() * alpha / 255
+        extrudePaint.color = Color.argb(layerAlpha, 0, 0, 0)
+        for (i in SHADOW_LAYERS downTo 1) {
+            val f = i.toFloat() / SHADOW_LAYERS
+            val ox = cx - hx * depth * (1.1f + 0.9f * f)
+            val oy = cy - hy * depth * (1.1f + 0.9f * f)
+            buildControlPath(c, ox, oy, r, scratchPath)
+            scratchMatrix.setScale(1f + SHADOW_SPREAD * f, 1f + SHADOW_SPREAD * f, ox, oy)
+            scratchPath.transform(scratchMatrix)
+            canvas.drawPath(scratchPath, extrudePaint)
+        }
 
         // Side wall: the same silhouette in a darker tone, offset by the extrusion depth. Drawn
         // under the face, so only the sliver away from the light stays visible.
         extrudePaint.color = withAlpha(darken(darken(c.def.fillColor)), (alpha * strength).toInt())
-        canvas.drawPath(controlPath(c, cx - hx * depth, cy - hy * depth, r), extrudePaint)
+        buildControlPath(c, cx - hx * depth, cy - hy * depth, r, scratchPath)
+        canvas.drawPath(scratchPath, extrudePaint)
     }
 
     /**
@@ -742,7 +765,8 @@ class ControllerView @JvmOverloads constructor(
         applyBezelShader(cx, cy, r, alpha)
         bezelPaint.strokeWidth = w
         bezelPaint.style = Paint.Style.STROKE
-        canvas.drawPath(controlPath(c, cx, cy, r - w / 2f), bezelPaint)
+        buildControlPath(c, cx, cy, r - w / 2f, scratchPath)
+        canvas.drawPath(scratchPath, bezelPaint)
 
         // The stick's knob is its own raised part and reads flat without a rim of its own.
         if (c.def.shape == ControlShape.STICK) {
@@ -779,47 +803,61 @@ class ControllerView @JvmOverloads constructor(
     }
 
     /** A control's outer silhouette, for filling (extrusion) or stroking (rim). */
-    private fun controlPath(
+    private fun buildControlPath(
         c: ControlState,
         cx: Float,
         cy: Float,
         r: Float,
-    ): android.graphics.Path = android.graphics.Path().apply {
+        out: android.graphics.Path,
+    ) {
+        val cw = android.graphics.Path.Direction.CW
+        out.reset()
         when (c.def.shape) {
-            ControlShape.CIRCLE, ControlShape.STICK ->
-                addCircle(cx, cy, r, android.graphics.Path.Direction.CW)
+            ControlShape.CIRCLE, ControlShape.STICK -> out.addCircle(cx, cy, r, cw)
             ControlShape.PILL -> {
                 val w = r * 1.85f
-                addRoundRect(
-                    RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f),
-                    r, r, android.graphics.Path.Direction.CW,
-                )
+                out.addRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, cw)
             }
             ControlShape.BAR -> {
                 val hl = barHalfLen(c)
                 val ht = barHalfThick(c)
-                addRoundRect(
-                    RectF(cx - hl, cy - ht, cx + hl, cy + ht),
-                    ht, ht, android.graphics.Path.Direction.CW,
-                )
+                out.addRoundRect(RectF(cx - hl, cy - ht, cx + hl, cy + ht), ht, ht, cw)
             }
             ControlShape.CROSS, ControlShape.PSX_CROSS -> {
-                // Union of the two arms, so the outline follows the cross instead of cutting
-                // two rectangles straight through the middle of it.
                 val armW = r * 0.62f
                 val half = armW / 2f
                 val corner = armW * 0.28f
-                addRoundRect(
-                    RectF(cx - r, cy - half, cx + r, cy + half),
-                    corner, corner, android.graphics.Path.Direction.CW,
-                )
-                val vertical = android.graphics.Path().apply {
-                    addRoundRect(
-                        RectF(cx - half, cy - r, cx + half, cy + r),
-                        corner, corner, android.graphics.Path.Direction.CW,
+                val gap = if (c.def.shape == ControlShape.PSX_CROSS) r * 0.06f else 0f
+                if (gap == 0f) {
+                    // One solid plus: union the two arms so the outline follows the cross
+                    // instead of cutting two rectangles through the middle of it.
+                    out.addRoundRect(RectF(cx - r, cy - half, cx + r, cy + half), corner, corner, cw)
+                    scratchPath2.reset()
+                    scratchPath2.addRoundRect(
+                        RectF(cx - half, cy - r, cx + half, cy + r), corner, corner, cw,
+                    )
+                    out.op(scratchPath2, android.graphics.Path.Op.UNION)
+                } else {
+                    // A PlayStation cross is five separate pieces with gaps between them. The
+                    // silhouette has to keep those gaps: filling them made the extrusion put a
+                    // dark slab across the middle of the pad.
+                    out.addRoundRect(
+                        RectF(cx - r, cy - half, cx - half - gap, cy + half), corner, corner, cw,
+                    )
+                    out.addRoundRect(
+                        RectF(cx + half + gap, cy - half, cx + r, cy + half), corner, corner, cw,
+                    )
+                    out.addRoundRect(
+                        RectF(cx - half, cy - r, cx + half, cy - half - gap), corner, corner, cw,
+                    )
+                    out.addRoundRect(
+                        RectF(cx - half, cy + half + gap, cx + half, cy + r), corner, corner, cw,
+                    )
+                    out.addRoundRect(
+                        RectF(cx - half, cy - half, cx + half, cy + half),
+                        corner * 0.6f, corner * 0.6f, cw,
                     )
                 }
-                op(vertical, android.graphics.Path.Op.UNION)
             }
         }
     }
