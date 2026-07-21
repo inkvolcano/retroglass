@@ -47,8 +47,8 @@ class ControllerView @JvmOverloads constructor(
         const val EXTRUDE_DEPTH = 0.10f
         /** Contact shadow on the screen underneath. */
         const val CONTACT_ALPHA = 80
-        /** How far off "straight up" the lit edge sits in the resting pose. */
-        const val BEZEL_BASE = 0.6f
+        /** Below this the effect is invisible anyway; skip the passes entirely. */
+        const val LIGHT_CUTOFF = 0.02f
         const val BEZEL_HIGHLIGHT = 120
         const val BEZEL_SHADE = 130
         const val LAYOUT_PORTRAIT = 0   // as authored (game above, pad below / handheld)
@@ -186,15 +186,26 @@ class ControllerView @JvmOverloads constructor(
     }
 
     /**
-     * Unit vector to the lit edge, in screen space. Resting pose points up, so a control looks
-     * lit from above the way a physical button on a handheld does; rolling the phone right
-     * swings the highlight left, leaning it back walks the highlight down across the face.
+     * Direction of the lit edge plus how strongly it applies, in screen space.
+     *
+     * The strength is the tilt vector's own length, *not* a normalised direction at constant
+     * weight. Near the resting pose the vector shrinks toward zero, so its angle becomes
+     * meaningless and swings wildly on the smallest movement — normalising kept the effect at
+     * full strength while it spun. Letting the magnitude carry through means the whole effect
+     * fades out as it approaches the dead point, so there is nothing left to see rotating.
+     *
+     * Consequence, and it is the intended one: held at the resting pose the controls are flat.
+     * They lift as you tilt away from it, in whatever direction you tilt.
      */
-    private fun lightDir(): Pair<Float, Float> {
+    private fun lightVector(): Triple<Float, Float, Float> {
         val hx = -lightX
-        val hy = -BEZEL_BASE + lightY
+        val hy = lightY
         val len = hypot(hx.toDouble(), hy.toDouble()).toFloat()
-        return if (len < 1e-4f) 0f to -1f else (hx / len) to (hy / len)
+        if (len < 1e-4f) return Triple(0f, -1f, 0f)
+        val t = len.coerceAtMost(1f)
+        // Smoothstep so the effect eases in rather than arriving linearly out of nothing.
+        val strength = t * t * (3f - 2f * t)
+        return Triple(hx / len, hy / len, strength)
     }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -700,19 +711,20 @@ class ControllerView @JvmOverloads constructor(
      * and the control looks like it is standing off the surface rather than drawn onto it.
      */
     private fun drawExtrusion(canvas: Canvas, c: ControlState, alpha: Int) {
+        val (hx, hy, strength) = lightVector()
+        if (strength < LIGHT_CUTOFF) return  // flat at the resting pose, by design
         val r = controlRadius(c)
         val cx = centerX(c)
         val cy = centerY(c)
-        val (hx, hy) = lightDir()
-        val depth = r * EXTRUDE_DEPTH
+        val depth = r * EXTRUDE_DEPTH * strength
 
         // Contact shadow, thrown a little further than the body it belongs to.
-        extrudePaint.color = Color.argb(CONTACT_ALPHA * alpha / 255, 0, 0, 0)
+        extrudePaint.color = Color.argb((CONTACT_ALPHA * strength).toInt() * alpha / 255, 0, 0, 0)
         canvas.drawPath(controlPath(c, cx - hx * depth * 1.9f, cy - hy * depth * 1.9f, r), extrudePaint)
 
         // Side wall: the same silhouette in a darker tone, offset by the extrusion depth. Drawn
         // under the face, so only the sliver away from the light stays visible.
-        extrudePaint.color = withAlpha(darken(darken(c.def.fillColor)), alpha)
+        extrudePaint.color = withAlpha(darken(darken(c.def.fillColor)), (alpha * strength).toInt())
         canvas.drawPath(controlPath(c, cx - hx * depth, cy - hy * depth, r), extrudePaint)
     }
 
@@ -722,6 +734,7 @@ class ControllerView @JvmOverloads constructor(
      * opposite side falls away.
      */
     private fun drawBezel(canvas: Canvas, c: ControlState, alpha: Int) {
+        if (lightVector().third < LIGHT_CUTOFF) return
         val r = controlRadius(c)
         val cx = centerX(c)
         val cy = centerY(c)
@@ -749,14 +762,16 @@ class ControllerView @JvmOverloads constructor(
     }
 
     private fun applyBezelShader(cx: Float, cy: Float, r: Float, alpha: Int) {
-        val (hx, hy) = lightDir()
+        val (hx, hy, strength) = lightVector()
+        // The rim fades with the same strength, so the highlight cannot be caught mid-spin
+        // while it still has weight on screen.
         bezelPaint.shader = android.graphics.LinearGradient(
             cx + hx * r, cy + hy * r,
             cx - hx * r, cy - hy * r,
             intArrayOf(
-                Color.argb(BEZEL_HIGHLIGHT * alpha / 255, 255, 255, 255),
+                Color.argb((BEZEL_HIGHLIGHT * strength).toInt() * alpha / 255, 255, 255, 255),
                 Color.TRANSPARENT,
-                Color.argb(BEZEL_SHADE * alpha / 255, 0, 0, 0),
+                Color.argb((BEZEL_SHADE * strength).toInt() * alpha / 255, 0, 0, 0),
             ),
             floatArrayOf(0f, 0.5f, 1f),
             android.graphics.Shader.TileMode.CLAMP,
