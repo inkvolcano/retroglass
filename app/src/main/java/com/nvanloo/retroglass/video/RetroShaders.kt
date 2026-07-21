@@ -106,7 +106,7 @@ void main() {
     }
 
     /** CRT scanlines + aperture grille as a composable stage. */
-    fun crtStage(scanDepth: Float = 0.35f, maskLow: Float = 0.88f): FilterStack.Builder =
+    fun crtStage(scanDepth: Float = 0.28f, maskLow: Float = 0.92f): FilterStack.Builder =
         FilterStack.Builder { ctx ->
             FilterStack.Stage(
                 passes = listOf(

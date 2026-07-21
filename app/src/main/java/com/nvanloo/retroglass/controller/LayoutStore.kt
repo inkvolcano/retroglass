@@ -128,6 +128,12 @@ class LayoutStore(context: Context) {
         prefs.edit().putString("shader_combo", tokens.joinToString(",")).apply()
     }
 
+    /** Sharpen amount for the CAS / FSR1 filters, 0..1 (higher = sharper). */
+    fun filterSharpness(): Float = prefs.getFloat("filter_sharpness", 0.5f).coerceIn(0f, 1f)
+    fun setFilterSharpness(v: Float) {
+        prefs.edit().putFloat("filter_sharpness", v.coerceIn(0f, 1f)).apply()
+    }
+
     /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
     fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)
     fun setLocalMultiplayer(v: Boolean) { prefs.edit().putBoolean("local_mp", v).apply() }

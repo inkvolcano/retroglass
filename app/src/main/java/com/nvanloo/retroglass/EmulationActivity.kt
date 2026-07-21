@@ -1249,6 +1249,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
         actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
+        actions += getString(R.string.menu_sharpness) to { showSharpnessDialog() }
         actions += getString(R.string.menu_core_options) to { showCoreOptions() }
         actions += getString(R.string.menu_cheats) to { showCheats() }
         actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
@@ -1450,18 +1451,21 @@ class EmulationActivity : AppCompatActivity() {
         4 -> ShaderConfig.CUT2()
         // Our fork's custom end-phase chains (work on every system, 2D and 3D).
         5 -> com.nvanloo.retroglass.video.Anime4KShaders.upscaleCnnX2S()
-        6 -> com.nvanloo.retroglass.video.RetroShaders.casSharpen()
-        7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1()
+        6 -> com.nvanloo.retroglass.video.RetroShaders.casSharpen(layoutStore.filterSharpness())
+        7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1(layoutStore.filterSharpness())
+        8 -> com.nvanloo.retroglass.video.CrtLottesShaders.crtLottes()
+        9 -> com.nvanloo.retroglass.video.SabrShaders.sabr()
         else -> ShaderConfig.Default
     }
 
     // Composable filter building blocks, in the order they stack (scalers first, looks
     // last). Anime4K must be first because its residual sits on the original frame.
-    private val comboOrder = listOf("anime4k", "fsr1", "cas", "crt", "grade")
+    private val comboOrder = listOf("anime4k", "fsr1", "sabr", "cas", "crt", "grade")
 
     private fun comboLabel(token: String): String = when (token) {
         "anime4k" -> getString(R.string.filter_anime4k)
         "fsr1" -> getString(R.string.filter_fsr1)
+        "sabr" -> getString(R.string.filter_sabr)
         "cas" -> getString(R.string.filter_cas)
         "crt" -> getString(R.string.combo_crt)
         "grade" -> getString(R.string.combo_grade)
@@ -1470,8 +1474,9 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun comboBuilder(token: String): com.nvanloo.retroglass.video.FilterStack.Builder? = when (token) {
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
-        "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage()
-        "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage()
+        "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
+        "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
+        "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
         else -> null
@@ -1509,6 +1514,40 @@ class EmulationActivity : AppCompatActivity() {
             .show().gamepadNavigable()
     }
 
+    /** Live slider for the CAS / FSR1 sharpen amount; re-applies the active filter. */
+    private fun showSharpnessDialog() {
+        val label = TextView(this).apply {
+            text = getString(R.string.sharpness_value, (layoutStore.filterSharpness() * 100).toInt())
+            setPadding(56, 40, 56, 8)
+        }
+        val seek = SeekBar(this).apply {
+            max = 100
+            progress = (layoutStore.filterSharpness() * 100).toInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                    label.text = getString(R.string.sharpness_value, p)
+                    layoutStore.setFilterSharpness(p / 100f)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    retroView?.shader = currentShaderConfig()
+                }
+            })
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label)
+            addView(seek, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(56, 8, 56, 24) })
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_sharpness)
+            .setView(layout)
+            .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
+            .show().gamepadNavigable()
+    }
+
     private fun showVideoFilterPicker() {
         val names = arrayOf(
             getString(R.string.filter_off),
@@ -1519,6 +1558,8 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_anime4k),
             getString(R.string.filter_cas),
             getString(R.string.filter_fsr1),
+            getString(R.string.filter_crtlottes),
+            getString(R.string.filter_sabr),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)

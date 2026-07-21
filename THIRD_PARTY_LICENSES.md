@@ -52,6 +52,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## SABR v3.0 (shader algorithm)
+
+The "SABR HD (2D pixel-art)" video filter ports Joshua Street's SABR v3.0 (itself derived
+in part from Hyllian's 5xBR) from the RetroArch `sabr-v3.0.slang` to OpenGL ES 3.0 in
+`app/src/main/java/com/nvanloo/retroglass/video/SabrShaders.kt`.
+
+Copyright © Joshua Street. Licensed under the GNU General Public License, version 2 or (at
+your option) any later version — compatible with, and here distributed under, this app's
+GPLv3. See `libretrodroid/LICENSE` for the GPLv3 text.
+
+## CRT-Lottes (shader algorithm)
+
+The "CRT (Lottes, curved)" video filter ports Timothy Lottes' CRT shader (the scanline
+beam, shadow mask and screen-curvature portions) to OpenGL ES 3.0 in
+`app/src/main/java/com/nvanloo/retroglass/video/CrtLottesShaders.kt`.
+
+Timothy Lottes released this CRT shader to the **public domain**; no restrictions apply.
+
 ## LibretroDroid (vendored fork)
 
 `libretrodroid/` is a vendored fork of [LibretroDroid](https://github.com/Swordfish90/LibretroDroid)
