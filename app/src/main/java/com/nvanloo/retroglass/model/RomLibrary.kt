@@ -32,6 +32,13 @@ object RomLibrary {
     /** Index files that own a set of data/track files. */
     private val DISC_INDEX_EXTS = setOf("cue", "gdi", "ccd", "mds")
 
+    /**
+     * Formats we recognise but cannot read yet. .ecm is a CD image with its sector ECC/EDC
+     * stripped; restoring it needs a proper unecm implementation, so flag it clearly rather
+     * than skipping the archive in silence.
+     */
+    private val KNOWN_UNSUPPORTED_EXTS = setOf("ecm")
+
     /** Below this, a ".md" really is Markdown; above it, it is a Mega Drive ROM. */
     private const val MIN_MD_ROM_BYTES = 256L * 1024
 
@@ -828,6 +835,13 @@ object RomLibrary {
             }
         ) return Console.MEGADRIVE
         if (exts.any { it in DISC_CONTAINER_EXTS }) return Console.PSX
+        exts.firstOrNull { it in KNOWN_UNSUPPORTED_EXTS }?.let {
+            android.util.Log.w(
+                "RomLibrary",
+                "Archive holds a .$it image (${names.firstOrNull()}) — unsupported, needs decoding first",
+            )
+            return null
+        }
         val flat = names.none { it.contains('/') }
         val clean = exts.none { it in NON_ROM_ZIP_EXTS }
         return if (flat && clean) Console.ARCADE else null
