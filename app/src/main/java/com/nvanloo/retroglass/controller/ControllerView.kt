@@ -174,6 +174,8 @@ class ControllerView @JvmOverloads constructor(
     private val scratchPath = android.graphics.Path()
     private val scratchPath2 = android.graphics.Path()
     private val scratchMatrix = android.graphics.Matrix()
+    private val scratchRect = RectF()
+    private val pieceRect = RectF()
 
     // ---- tilt-driven bezel ---------------------------------------------------------------
     // A virtual light fixed in the world. Each control carries a bevelled rim: bright on the
@@ -767,22 +769,21 @@ class ControllerView @JvmOverloads constructor(
         val r = controlRadius(c)
         val cx = centerX(c)
         val cy = centerY(c)
-        val w = r * bezelWidth(c)
-        applyBezelShader(cx, cy, r, alpha)
-        bezelPaint.strokeWidth = w
-        bezelPaint.style = Paint.Style.STROKE
-        buildControlPath(c, cx, cy, r - w / 2f, scratchPath)
-        canvas.drawPath(scratchPath, bezelPaint)
+
+        if (c.def.shape == ControlShape.CROSS || c.def.shape == ControlShape.PSX_CROSS) {
+            drawCrossBezel(canvas, c, cx, cy, r, alpha)
+        } else {
+            buildControlPath(c, cx, cy, r, scratchPath)
+            strokeRim(canvas, scratchPath, r * bezelWidth(c), alpha)
+        }
 
         // The PS-style centre is a dimple, not a hole. Flat dark fill made it read as a
         // punched-out circle; the same rim with the light reversed reads as recessed.
         if (c.def.shape == ControlShape.PSX_CROSS) {
-            val half = r * 0.62f / 2f
-            val dimple = half * 0.55f
-            val dw = dimple * 0.42f
-            applyBezelShader(cx, cy, dimple, alpha, invert = true)
-            bezelPaint.strokeWidth = dw
-            canvas.drawCircle(cx, cy, dimple - dw / 2f, bezelPaint)
+            val dimple = (r * 0.62f / 2f) * 0.55f
+            scratchPath.reset()
+            scratchPath.addCircle(cx, cy, dimple, android.graphics.Path.Direction.CW)
+            strokeRim(canvas, scratchPath, dimple * 0.42f, alpha, invert = true)
         }
 
         // The stick's knob is its own raised part and reads flat without a rim of its own.
@@ -790,11 +791,101 @@ class ControllerView @JvmOverloads constructor(
             val knobR = r * 0.52f
             val kx = cx + c.valueX * r * 0.48f
             val ky = cy + c.valueY * r * 0.48f
-            val kw = knobR * BEZEL_WIDTH * 1.4f
-            applyBezelShader(kx, ky, knobR, alpha)
-            bezelPaint.strokeWidth = kw
-            canvas.drawCircle(kx, ky, knobR - kw / 2f, bezelPaint)
+            scratchPath.reset()
+            scratchPath.addCircle(kx, ky, knobR, android.graphics.Path.Direction.CW)
+            strokeRim(canvas, scratchPath, knobR * BEZEL_WIDTH * 1.4f, alpha)
         }
+    }
+
+    /**
+     * Each arm of a gapped cross is its own raised key, so each gets its own gradient. Running
+     * one gradient across the whole cross put the bottom arm entirely in the highlight and the
+     * top arm entirely in the shade — a white glow round one and a dark smudge round the other,
+     * instead of a bevel on either.
+     */
+    private fun drawCrossBezel(
+        canvas: Canvas,
+        c: ControlState,
+        cx: Float,
+        cy: Float,
+        r: Float,
+        alpha: Int,
+    ) {
+        val w = r * BEZEL_WIDTH_CROSS
+        val armW = r * 0.62f
+        val half = armW / 2f
+        val corner = armW * 0.28f
+        val gap = if (c.def.shape == ControlShape.PSX_CROSS) r * 0.06f else 0f
+
+        if (gap == 0f) {
+            // A solid plus really is one piece; one gradient across it is correct.
+            buildControlPath(c, cx, cy, r, scratchPath)
+            strokeRim(canvas, scratchPath, w, alpha)
+            return
+        }
+        fun rim(l: Float, t: Float, rr: Float, b: Float, rad: Float) {
+            pieceRect.set(l, t, rr, b)
+            scratchPath.reset()
+            scratchPath.addRoundRect(pieceRect, rad, rad, android.graphics.Path.Direction.CW)
+            strokeRim(canvas, scratchPath, w, alpha)
+        }
+        rim(cx - r, cy - half, cx - half - gap, cy + half, corner)
+        rim(cx + half + gap, cy - half, cx + r, cy + half, corner)
+        rim(cx - half, cy - r, cx + half, cy - half - gap, corner)
+        rim(cx - half, cy + half + gap, cx + half, cy + r, corner)
+        rim(cx - half, cy - half, cx + half, cy + half, corner * 0.6f)
+    }
+
+    /**
+     * Strokes a rim just inside [path].
+     *
+     * Clipped to the path and drawn at double width, rather than inset by hand. Insetting means
+     * shrinking the shape by half the stroke, and for a cross that is not a uniform shrink —
+     * arm thickness comes from a fraction of the radius, so the stroke ended up hanging outside
+     * the arm and painting the highlight onto the background.
+     */
+    private fun strokeRim(
+        canvas: Canvas,
+        path: android.graphics.Path,
+        width: Float,
+        alpha: Int,
+        invert: Boolean = false,
+    ) {
+        path.computeBounds(scratchRect, true)
+        applyBezelShader(scratchRect, alpha, invert)
+        bezelPaint.style = Paint.Style.STROKE
+        bezelPaint.strokeWidth = width * 2f
+        canvas.save()
+        canvas.clipPath(path)
+        canvas.drawPath(path, bezelPaint)
+        canvas.restore()
+    }
+
+    /**
+     * Gradient across [bounds] along the light axis. The extent is the shape's reach in that
+     * direction, so a long thin arm lit from above still gets its full light-to-dark ramp
+     * across its short side instead of a barely-visible one across its length.
+     */
+    private fun applyBezelShader(bounds: RectF, alpha: Int, invert: Boolean = false) {
+        val (dx, dy, strength) = lightVector()
+        // A recess catches the light on the far side from a bump, so the gradient runs the
+        // other way.
+        val hx = if (invert) -dx else dx
+        val hy = if (invert) -dy else dy
+        val cx = bounds.centerX()
+        val cy = bounds.centerY()
+        val reach = abs(hx) * bounds.width() / 2f + abs(hy) * bounds.height() / 2f
+        bezelPaint.shader = android.graphics.LinearGradient(
+            cx + hx * reach, cy + hy * reach,
+            cx - hx * reach, cy - hy * reach,
+            intArrayOf(
+                Color.argb((BEZEL_HIGHLIGHT * strength).toInt() * alpha / 255, 255, 255, 255),
+                Color.TRANSPARENT,
+                Color.argb((BEZEL_SHADE * strength).toInt() * alpha / 255, 0, 0, 0),
+            ),
+            floatArrayOf(0f, 0.5f, 1f),
+            android.graphics.Shader.TileMode.CLAMP,
+        )
     }
 
     private fun bezelWidth(c: ControlState): Float = when (c.def.shape) {
