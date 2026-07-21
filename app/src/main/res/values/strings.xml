@@ -190,6 +190,10 @@
     <string name="combo_heavy">Heavy filter chain — watch the FPS counter; drop a stage if it dips.</string>
     <string name="menu_filter_settings">Filter settings…</string>
     <string name="menu_filter_presets">Saved looks…</string>
+    <string name="menu_res_boost">Internal resolution ×2 (toggle)</string>
+    <string name="res_boost_on">Internal resolution boosted — restart the game to apply. Pair it with FSR 1.</string>
+    <string name="res_boost_off">Internal resolution back to native — restart the game to apply.</string>
+    <string name="res_boost_unsupported">This core has no internal-resolution option.</string>
     <string name="param_reset">Reset defaults</string>
     <string name="param_reset_done">Filter settings reset</string>
     <string name="preset_save">＋ Save current look…</string>

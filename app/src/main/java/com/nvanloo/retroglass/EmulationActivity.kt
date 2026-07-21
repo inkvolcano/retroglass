@@ -1251,6 +1251,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
         actions += getString(R.string.menu_filter_settings) to { showFilterSettings() }
         actions += getString(R.string.menu_filter_presets) to { showFilterPresets() }
+        actions += getString(R.string.menu_res_boost) to { toggleInternalResolution() }
         actions += getString(R.string.menu_core_options) to { showCoreOptions() }
         actions += getString(R.string.menu_cheats) to { showCheats() }
         actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
@@ -1818,6 +1819,43 @@ class EmulationActivity : AppCompatActivity() {
         layoutStore.setComboFilters(console, recommendedCombo(console))
         retroView?.shader = currentShaderConfig()
         Toast.makeText(this, R.string.filter_recommended_applied, Toast.LENGTH_SHORT).show()
+    }
+
+    // --------------------------------------------------- internal resolution boost
+    // Shader upscalers reconstruct detail; raising the core's own render resolution
+    // recovers *real* detail, and is the single biggest quality win on 3D systems. The
+    // right option key differs per core, so pick whichever one this core actually exposes.
+    // label -> (key, "boosted" value, native value)
+    private val resolutionOptions = listOf(
+        Triple("pcsx_rearmed_neon_enhancement_enable", "enabled", "disabled"),
+        Triple("ppsspp_internal_resolution", "960x544", "480x272"),
+        Triple("mupen64plus-43screensize", "640x480", "320x240"),
+        Triple("flycast_internal_resolution", "1280x960", "640x480"),
+        Triple("reicast_internal_resolution", "1280x960", "640x480"),
+    )
+
+    /** The resolution option this core exposes, if any. */
+    private fun resolutionOption(): Triple<String, String, String>? {
+        val keys = retroView?.getVariables()?.mapNotNull { it.key }?.toSet() ?: return null
+        return resolutionOptions.firstOrNull { it.first in keys }
+    }
+
+    /** One tap: render the game internally at 2x, then let the shader chain scale that. */
+    private fun toggleInternalResolution() {
+        val opt = resolutionOption()
+        if (opt == null) {
+            Toast.makeText(this, R.string.res_boost_unsupported, Toast.LENGTH_LONG).show()
+            return
+        }
+        val (key, boosted, native) = opt
+        val current = coreOptions.override(consoleKey, key)
+        val target = if (current == boosted) native else boosted
+        applyCoreOption(key, target)
+        Toast.makeText(
+            this,
+            getString(if (target == boosted) R.string.res_boost_on else R.string.res_boost_off),
+            Toast.LENGTH_LONG,
+        ).show()
     }
 
     // ---------------------------------------------------------- core options
