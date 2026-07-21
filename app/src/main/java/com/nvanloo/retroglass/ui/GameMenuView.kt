@@ -314,6 +314,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         text: String,
         value: String? = null,
         valueIsLive: Boolean = true,
+        chevron: Boolean = true,
         onClick: () -> Unit,
     ): View = rowShell(MenuTheme.ROW_H, onClick = onClick).apply {
         setPadding(dp(14f), 0, dp(14f), 0)
@@ -333,7 +334,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { marginEnd = dp(8f) },
         )
-        addView(label("›", color = MenuTheme.CHEVRON))
+        if (chevron) addView(label("›", color = MenuTheme.CHEVRON))
     }
 
     /** A row carrying a pill switch. */
@@ -391,12 +392,17 @@ class GameMenuView(context: Context) : FrameLayout(context) {
      * Label + live value + track. The whole block takes focus and D-pad left/right nudges the
      * value, matching the design's ring-around-the-block focus state.
      */
-    fun slider(text: String, value: Float, onChange: (Float) -> Unit): View {
-        val readout = label("%.2f".format(value), size = 14f, color = MenuTheme.ACCENT, bold = true)
+    fun slider(
+        text: String,
+        value: Float,
+        format: (Float) -> String = { "%.2f".format(it) },
+        onChange: (Float) -> Unit,
+    ): View {
+        val readout = label(format(value), size = 14f, color = MenuTheme.ACCENT, bold = true)
         val track = SliderView(context).apply {
             this.value = value
             onValueChanged = { v ->
-                readout.text = "%.2f".format(v)
+                readout.text = format(v)
                 onChange(v)
             }
         }

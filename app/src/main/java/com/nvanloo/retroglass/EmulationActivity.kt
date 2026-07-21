@@ -1257,8 +1257,7 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun showPhonePanelPicker() {
         ensureMenu()
-        gameMenu.pushSelect(
-            getString(R.string.menu_phone_panel),
+        gameMenu.pushSelect(menuTitle(R.string.menu_phone_panel),
             listOf(
                 getString(R.string.phone_panel_auto),
                 getString(R.string.phone_panel_controller),
@@ -1398,10 +1397,10 @@ class EmulationActivity : AppCompatActivity() {
         ) { loadState(); gameMenu.close() }
         val ff = toggleRow(getString(R.string.menu_fast_forward), fastForward) { toggleFastForward() }
         val filters = navRow("▷", getString(R.string.menu_filters_look), filterSummary()) {
-            push(getString(R.string.menu_filters_look)) { menuVideoScreen() }
+            push(menuTitle(R.string.menu_filters_look)) { menuVideoScreen() }
         }
         val controls = navRow("◎", getString(R.string.menu_controls_input)) {
-            push(getString(R.string.menu_controls_input)) { menuControlsScreen() }
+            push(menuTitle(R.string.menu_controls_input)) { menuControlsScreen() }
         }
         val changedCount = coreOptions.overrides(consoleKey).size
         val core = navRow(
@@ -1441,10 +1440,10 @@ class EmulationActivity : AppCompatActivity() {
                 showVideoFilterPicker()
             })
             addView(navRow(null, getString(R.string.menu_combine_filters)) {
-                push(getString(R.string.menu_combine_filters)) { menuChainScreen() }
+                push(menuTitle(R.string.menu_combine_filters)) { menuChainScreen() }
             })
             addView(navRow(null, getString(R.string.menu_filter_settings)) {
-                push(getString(R.string.menu_filter_settings)) { menuFilterSettingsScreen() }
+                push(menuTitle(R.string.menu_filter_settings)) { menuFilterSettingsScreen() }
             })
             addView(navRow(null, getString(R.string.menu_upscale_factor), upscaleLabel()) {
                 showUpscaleFactorPicker()
@@ -1492,7 +1491,9 @@ class EmulationActivity : AppCompatActivity() {
      * capture, so dragging a slider changes what you are looking at in real time.
      */
     private fun menuFilterSettingsScreen(): View = with(gameMenu) {
-        fun live(key: String, label: Int) = slider(getString(label), param(key)) {
+        fun live(key: String, label: Int) = slider(
+            getString(label), param(key), format = { "${(it * 100).toInt()}%" },
+        ) {
             layoutStore.setFilterParam(key, it)
             retroView?.shader = currentShaderConfig()
         }
@@ -1500,7 +1501,10 @@ class EmulationActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             addView(previewWindow(96f, getString(R.string.menu_live_caption, filterSummary())))
             addView(body(padSides = 18f) {
-                addView(slider(getString(R.string.menu_slider_sharpness), layoutStore.filterSharpness()) {
+                addView(slider(
+                    getString(R.string.menu_slider_sharpness), layoutStore.filterSharpness(),
+                    format = { "${(it * 100).toInt()}%" },
+                ) {
                     layoutStore.setFilterSharpness(it)
                     retroView?.shader = currentShaderConfig()
                 })
@@ -1569,7 +1573,7 @@ class EmulationActivity : AppCompatActivity() {
         val current = v.getCurrentDisk()
         val names = (0 until count).map { getString(R.string.disc_n, it + 1) }.toTypedArray()
         ensureMenu()
-        gameMenu.pushSelect(getString(R.string.menu_swap_disc), names.toList(), current) { which ->
+        gameMenu.pushSelect(menuTitle(R.string.menu_swap_disc), names.toList(), current) { which ->
             v.changeDisk(which)
             Toast.makeText(this, getString(R.string.disc_switched, which + 1), Toast.LENGTH_SHORT).show()
         }
@@ -1588,7 +1592,7 @@ class EmulationActivity : AppCompatActivity() {
         connectedGamepads().forEach { items.add(Ctrl(deviceKey(it), it.name, it)) }
 
         ensureMenu()
-        gameMenu.push(getString(R.string.menu_controllers)) {
+        gameMenu.push(menuTitle(R.string.menu_controllers)) {
             with(gameMenu) {
                 body {
                     for (c in items) {
@@ -1613,7 +1617,7 @@ class EmulationActivity : AppCompatActivity() {
         val checked = presets.indexOfFirst { it.second == current }
         val labels = presets.map { it.first }.toTypedArray()
         ensureMenu()
-        gameMenu.pushSelect(getString(R.string.menu_hotkey_title), labels.toList(), checked) { which ->
+        gameMenu.pushSelect(menuTitle(R.string.menu_hotkey_title), labels.toList(), checked) { which ->
             inputConfig.setMenuHotkey(presets[which].second)
             Toast.makeText(this, getString(R.string.menu_hotkey_set, labels[which]), Toast.LENGTH_SHORT).show()
         }
@@ -1925,8 +1929,7 @@ class EmulationActivity : AppCompatActivity() {
     private fun showUpscaleFactorPicker() {
         ensureMenu()
         val stored = layoutStore.upscaleFactor()
-        gameMenu.pushSelect(
-            getString(R.string.menu_upscale_factor),
+        gameMenu.pushSelect(menuTitle(R.string.menu_upscale_factor),
             listOf(
                 getString(R.string.upscale_auto, autoUpscale(), console.displayName),
                 getString(R.string.upscale_2x), getString(R.string.upscale_3x), getString(R.string.upscale_4x),
@@ -2001,7 +2004,7 @@ class EmulationActivity : AppCompatActivity() {
     private fun showFilterPresets() {
         val names = layoutStore.presetNames()
         ensureMenu()
-        gameMenu.push(getString(R.string.menu_filter_presets)) {
+        gameMenu.push(menuTitle(R.string.menu_filter_presets)) {
             with(gameMenu) {
                 body {
                     for (name in names) {
@@ -2026,9 +2029,19 @@ class EmulationActivity : AppCompatActivity() {
     /** Opens the menu first when a picker is reached from a hotkey rather than the menu. */
     private fun ensureMenu() { if (!gameMenu.isOpen) showMenu() }
 
+    /**
+     * A screen's heading, from the label of the row that opens it.
+     *
+     * Rows say "Filter settings…" and "Core options (system settings)" because they have to
+     * announce what tapping them does. A heading is already the answer to that, so it drops the
+     * trailing ellipsis and the qualifier in brackets.
+     */
+    private fun menuTitle(res: Int): String =
+        getString(res).substringBefore(" (").trimEnd('…', '.', ' ')
+
     private fun showVideoFilterPicker() {
         ensureMenu()
-        gameMenu.push(getString(R.string.menu_video_filter)) { menuFilterPickerScreen() }
+        gameMenu.push(menuTitle(R.string.menu_video_filter)) { menuFilterPickerScreen() }
     }
 
     private fun menuFilterPickerScreen(): View = with(gameMenu) {
@@ -2048,7 +2061,7 @@ class EmulationActivity : AppCompatActivity() {
             }
             addView(navRow(null, getString(R.string.menu_combine_filters),
                 if (chained) getString(R.string.menu_combo_count, layoutStore.comboFilters(console).size) else null) {
-                push(getString(R.string.menu_combine_filters)) { menuChainScreen() }
+                push(menuTitle(R.string.menu_combine_filters)) { menuChainScreen() }
             })
             addView(bigButton(getString(R.string.filter_recommended, console.displayName), tint = true) {
                 applyRecommended(); pop()
@@ -2129,7 +2142,7 @@ class EmulationActivity : AppCompatActivity() {
             return
         }
         if (!gameMenu.isOpen) showMenu()
-        gameMenu.push(getString(R.string.menu_core_options)) { menuCoreOptionsScreen(vars) }
+        gameMenu.push(menuTitle(R.string.menu_core_options)) { menuCoreOptionsScreen(vars) }
     }
 
     private fun menuCoreOptionsScreen(
@@ -2318,8 +2331,7 @@ class EmulationActivity : AppCompatActivity() {
             return
         }
         ensureMenu()
-        gameMenu.pushActions(
-            getString(R.string.ctype_title),
+        gameMenu.pushActions(menuTitle(R.string.ctype_title),
             selectablePorts.map { port ->
                 getString(R.string.player_n, port + 1) to { showControllerTypeForPort(port) }
             },
@@ -2345,7 +2357,7 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun showDisplayExtras() {
         ensureMenu()
-        gameMenu.push(getString(R.string.menu_display_extras)) {
+        gameMenu.push(menuTitle(R.string.menu_display_extras)) {
             with(gameMenu) {
                 body {
                     addView(toggleRow(getString(R.string.menu_fps_label), layoutStore.fpsOverlay()) {
@@ -2367,6 +2379,7 @@ class EmulationActivity : AppCompatActivity() {
                             getString(R.string.menu_gyro_sensitivity),
                             // 0.2..3.0 mapped onto the slider's 0..1
                             ((layoutStore.gyroSensitivity() - 0.2f) / 2.8f).coerceIn(0f, 1f),
+                            format = { "%.1f×".format(0.2f + it * 2.8f) },
                         ) { layoutStore.setGyroSensitivity(0.2f + it * 2.8f) })
                     }
                     addView(navRow(null, getString(R.string.menu_bezel), bezelLabel()) { showBezelPicker() })
@@ -2407,7 +2420,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.bezel_custom),
             getString(R.string.bezel_body),
         )
-        gameMenu.pushSelect(getString(R.string.menu_bezel), labels.toList(), layoutStore.bezelMode()) { which ->
+        gameMenu.pushSelect(menuTitle(R.string.menu_bezel), labels.toList(), layoutStore.bezelMode()) { which ->
             if (which == 3) {
                 gameMenu.close()
                 pickBezelImage.launch(arrayOf("image/*"))
@@ -2543,7 +2556,7 @@ class EmulationActivity : AppCompatActivity() {
             return
         }
         ensureMenu()
-        gameMenu.push(getString(R.string.menu_turbo)) {
+        gameMenu.push(menuTitle(R.string.menu_turbo)) {
             with(gameMenu) {
                 body {
                     for ((id, label) in buttons) {
@@ -2661,84 +2674,75 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun showScreenSizeDialog() {
-        val density = resources.displayMetrics.density
-        val pad = (20 * density).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-        }
+        ensureMenu()
+        gameMenu.push(menuTitle(R.string.menu_screen_size)) { menuScreenSizeScreen() }
+    }
 
-        // When the phone is the display (BT pads, no touch controller) treat it like
-        // the external screen: one fill-scale slider, no top/bottom split.
+    /**
+     * Size, rotation and nudge for the picture. Portrait splits the screen with the pad so it
+     * gets a height share; every other mode scales the picture inside its own box.
+     */
+    private fun menuScreenSizeScreen(): View = with(gameMenu) {
         val portrait = isPortrait() && !extendedMode && !phoneIsDisplay()
         val editingExternal = extendedMode || phoneIsDisplay()
-
-        // --- Size ---
-        if (portrait) {
-            addSlider(
-                container, maxProgress = 45,
-                initialProgress = ((layoutStore.portraitScreenFraction() - 0.25f) * 100f).toInt(),
-                labelFor = { getString(R.string.screen_height_value, (25 + it)) },
-            ) { p ->
-                layoutStore.setPortraitScreenFraction(0.25f + p / 100f)
-                arrangeLayout()
+        body(padSides = 18f) {
+            // Each slider prints its own unit: a bare 0..1 position next to a label that
+            // already quotes a percentage reads as two different numbers for one control.
+            if (portrait) {
+                val frac = layoutStore.portraitScreenFraction()
+                addView(slider(
+                    getString(R.string.screen_height_label),
+                    ((frac - 0.25f) / 0.45f).coerceIn(0f, 1f),
+                    format = { "${(25 + it * 45).toInt()}%" },
+                ) {
+                    layoutStore.setPortraitScreenFraction(0.25f + it * 0.45f)
+                    arrangeLayout()
+                    updateScreenBezel()
+                })
+            } else {
+                val minScale = if (editingExternal) 0.4f else 0.3f
+                val cur = if (editingExternal) videoScale else videoScaleLocal
+                addView(slider(
+                    getString(R.string.screen_size_label),
+                    ((cur - minScale) / (1f - minScale)).coerceIn(0f, 1f),
+                    format = { "${((minScale + it * (1f - minScale)) * 100).toInt()}%" },
+                ) {
+                    val value = minScale + it * (1f - minScale)
+                    if (editingExternal) videoScale = value else videoScaleLocal = value
+                    if (editingExternal) layoutStore.setVideoScale(value)
+                    else layoutStore.setLocalVideoScale(value)
+                    applyVideoTransform()
+                    updateScreenBezel()
+                })
             }
-        } else {
-            val minScale = if (editingExternal) 0.4f else 0.3f
-            val range = ((1.0f - minScale) * 100f).toInt()
-            val cur = if (editingExternal) videoScale else videoScaleLocal
-            addSlider(
-                container, maxProgress = range,
-                initialProgress = ((cur - minScale) * 100f).toInt(),
-                labelFor = { getString(R.string.screen_size_value, ((minScale + it / 100f) * 100).toInt()) },
-            ) { p ->
-                val value = minScale + p / 100f
-                if (editingExternal) videoScale = value else videoScaleLocal = value
-                if (editingExternal) layoutStore.setVideoScale(value) else layoutStore.setLocalVideoScale(value)
-                applyVideoTransform()
-            }
-        }
-
-        // --- Rotation ---
-        val rotateBtn = com.google.android.material.button.MaterialButton(this).apply {
-            text = getString(R.string.screen_rotate, layoutStore.videoRotation())
-            setOnClickListener {
+            addView(navRow(
+                null, getString(R.string.screen_rotate, layoutStore.videoRotation()),
+                null, chevron = false,
+            ) {
                 layoutStore.setVideoRotation(layoutStore.videoRotation() + 90)
-                text = getString(R.string.screen_rotate, layoutStore.videoRotation())
                 applyVideoTransform()
-            }
+                updateScreenBezel()
+                gameMenu.refresh()
+            })
+            addView(slider(
+                getString(R.string.screen_pos_h), layoutStore.videoOffsetX() + 0.5f,
+                format = { "${((it - 0.5f) * 100).toInt()}" },
+            ) {
+                layoutStore.setVideoOffset(it - 0.5f, layoutStore.videoOffsetY())
+                applyVideoTransform()
+                updateScreenBezel()
+            })
+            addView(slider(
+                getString(R.string.screen_pos_v), layoutStore.videoOffsetY() + 0.5f,
+                format = { "${((it - 0.5f) * 100).toInt()}" },
+            ) {
+                layoutStore.setVideoOffset(layoutStore.videoOffsetX(), it - 0.5f)
+                applyVideoTransform()
+                updateScreenBezel()
+            })
         }
-        container.addView(rotateBtn)
-
-        // --- Position ---
-        addSlider(
-            container, maxProgress = 100,
-            initialProgress = ((layoutStore.videoOffsetX() + 0.5f) * 100f).toInt(),
-            labelFor = { getString(R.string.screen_pos_h) },
-        ) { p ->
-            layoutStore.setVideoOffset(p / 100f - 0.5f, layoutStore.videoOffsetY())
-            applyVideoTransform()
-        }
-        addSlider(
-            container, maxProgress = 100,
-            initialProgress = ((layoutStore.videoOffsetY() + 0.5f) * 100f).toInt(),
-            labelFor = { getString(R.string.screen_pos_v) },
-        ) { p ->
-            layoutStore.setVideoOffset(layoutStore.videoOffsetX(), p / 100f - 0.5f)
-            applyVideoTransform()
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle(R.string.menu_screen_size)
-            .setView(container)
-            .setPositiveButton(R.string.edit_done, null)
-            .setNeutralButton(R.string.screen_reset) { _, _ ->
-                layoutStore.setVideoRotation(0)
-                layoutStore.setVideoOffset(0f, 0f)
-                arrangeLayout()
-            }
-            .show().gamepadNavigable()
     }
+
 
     private fun setEditMode(enabled: Boolean) {
         controllerView.editMode = enabled

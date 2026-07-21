@@ -256,6 +256,8 @@
     <string name="menu_group_setup">Setup</string>
 
     <string name="menu_fps_label">FPS overlay</string>
+    <string name="screen_height_label">Screen height</string>
+    <string name="screen_size_label">Picture size</string>
     <string name="menu_gyro_label">Gyro aiming</string>
     <string name="menu_tilt_shadows">3D bezel (tilt)</string>
     <string name="bios_present">present</string>
