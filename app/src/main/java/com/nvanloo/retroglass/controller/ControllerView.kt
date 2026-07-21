@@ -46,11 +46,13 @@ class ControllerView @JvmOverloads constructor(
         /** How far the body is pushed off the glass, as a fraction of radius. */
         const val EXTRUDE_DEPTH = 0.10f
         /** Contact shadow on the screen underneath. */
-        const val CONTACT_ALPHA = 90
-        /** Stacked silhouettes standing in for a blur; more layers = softer, costlier. */
-        const val SHADOW_LAYERS = 4
-        /** How much wider the outermost shadow layer spreads. */
-        const val SHADOW_SPREAD = 0.13f
+        const val CONTACT_ALPHA = 105
+        /** Concentric silhouettes standing in for a blur; more layers = softer, costlier. */
+        const val SHADOW_LAYERS = 5
+        /** How much wider the outermost shadow layer spreads — this is the softness. */
+        const val SHADOW_SPREAD = 0.11f
+        /** How far the shadow sits from the body, in extrusion depths. */
+        const val SHADOW_OFFSET = 1.25f
         /** Below this the effect is invisible anyway; skip the passes entirely. */
         const val LIGHT_CUTOFF = 0.02f
         const val BEZEL_HIGHLIGHT = 120
@@ -726,20 +728,24 @@ class ControllerView @JvmOverloads constructor(
         val r = controlRadius(c)
         val cx = centerX(c)
         val cy = centerY(c)
-        val depth = r * EXTRUDE_DEPTH * strength
+        val depth = r * extrudeDepth(c) * strength
 
-        // Contact shadow. A real blur would mean a BlurMaskFilter, whose hardware-canvas
-        // support is version-dependent and which would otherwise force the whole overlay into
-        // software rendering; stacking a few silhouettes at growing size and offset gives a
-        // penumbra that costs a handful of path fills instead.
+        // Contact shadow. All layers share one position and differ only in size, so they
+        // build a penumbra spreading outward from the silhouette. Varying the offset instead
+        // stacks translated copies, which reads as a motion trail — four visibly separate
+        // ghosts of each D-pad arm, which is exactly what it looked like.
+        //
+        // A real blur would mean a BlurMaskFilter, whose hardware-canvas support is version
+        // dependent and whose fallback drags the whole overlay into software rendering.
+        val ox = cx - hx * depth * SHADOW_OFFSET
+        val oy = cy - hy * depth * SHADOW_OFFSET
         val layerAlpha = (CONTACT_ALPHA * strength / SHADOW_LAYERS).toInt() * alpha / 255
         extrudePaint.color = Color.argb(layerAlpha, 0, 0, 0)
         for (i in SHADOW_LAYERS downTo 1) {
             val f = i.toFloat() / SHADOW_LAYERS
-            val ox = cx - hx * depth * (1.1f + 0.9f * f)
-            val oy = cy - hy * depth * (1.1f + 0.9f * f)
+            val scale = 1f + SHADOW_SPREAD * f
             buildControlPath(c, ox, oy, r, scratchPath)
-            scratchMatrix.setScale(1f + SHADOW_SPREAD * f, 1f + SHADOW_SPREAD * f, ox, oy)
+            scratchMatrix.setScale(scale, scale, ox, oy)
             scratchPath.transform(scratchMatrix)
             canvas.drawPath(scratchPath, extrudePaint)
         }
@@ -768,6 +774,17 @@ class ControllerView @JvmOverloads constructor(
         buildControlPath(c, cx, cy, r - w / 2f, scratchPath)
         canvas.drawPath(scratchPath, bezelPaint)
 
+        // The PS-style centre is a dimple, not a hole. Flat dark fill made it read as a
+        // punched-out circle; the same rim with the light reversed reads as recessed.
+        if (c.def.shape == ControlShape.PSX_CROSS) {
+            val half = r * 0.62f / 2f
+            val dimple = half * 0.55f
+            val dw = dimple * 0.42f
+            applyBezelShader(cx, cy, dimple, alpha, invert = true)
+            bezelPaint.strokeWidth = dw
+            canvas.drawCircle(cx, cy, dimple - dw / 2f, bezelPaint)
+        }
+
         // The stick's knob is its own raised part and reads flat without a rim of its own.
         if (c.def.shape == ControlShape.STICK) {
             val knobR = r * 0.52f
@@ -785,8 +802,28 @@ class ControllerView @JvmOverloads constructor(
         else -> BEZEL_WIDTH
     }
 
-    private fun applyBezelShader(cx: Float, cy: Float, r: Float, alpha: Int) {
-        val (hx, hy, strength) = lightVector()
+    /**
+     * The cross lifts less than a round button. Depth scales off the control radius, but a
+     * D-pad's arms are only ~0.62r wide, so the full depth threw a shadow a third of an arm
+     * wide and the pad looked like it was floating rather than raised.
+     */
+    private fun extrudeDepth(c: ControlState): Float = when (c.def.shape) {
+        ControlShape.CROSS, ControlShape.PSX_CROSS -> EXTRUDE_DEPTH * 0.5f
+        else -> EXTRUDE_DEPTH
+    }
+
+    private fun applyBezelShader(
+        cx: Float,
+        cy: Float,
+        r: Float,
+        alpha: Int,
+        invert: Boolean = false,
+    ) {
+        val (dx, dy, strength) = lightVector()
+        // A recess catches the light on the far side from a bump, so the same gradient runs
+        // the other way.
+        val hx = if (invert) -dx else dx
+        val hy = if (invert) -dy else dy
         // The rim fades with the same strength, so the highlight cannot be caught mid-spin
         // while it still has weight on screen.
         bezelPaint.shader = android.graphics.LinearGradient(
