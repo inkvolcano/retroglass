@@ -548,6 +548,16 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_step(
     }
 }
 
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_setBackgroundColor(
+    JNIEnv* env,
+    jclass obj,
+    jfloat red,
+    jfloat green,
+    jfloat blue
+) {
+    LibretroDroid::getInstance().setBackgroundColor(red, green, blue);
+}
+
 JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_setRumbleEnabled(
     JNIEnv* env,
     jclass obj,

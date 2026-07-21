@@ -73,6 +73,9 @@ public:
     void updateViewportAlignment(unsigned int viewportAlignment);
     void updateRendererSize(unsigned width, unsigned height);
     void updateRotation(float rotation);
+
+    /** Colour of the area around the picture, 0..1 per channel. */
+    void updateBackgroundColor(float red, float green, float blue);
     void updateShaderType(ShaderManager::Config shaderConfig);
 
     void renderFrame();
@@ -102,6 +105,10 @@ private:
         ShaderManager::Type::SHADER_DEFAULT
     };
     std::optional<ShaderManager::Config> loadedShaderType = std::nullopt;
+
+    float backgroundRed = 0.0F;
+    float backgroundGreen = 0.0F;
+    float backgroundBlue = 0.0F;
 
     bool isDirty = false;
     bool skipDuplicateFrames = false;

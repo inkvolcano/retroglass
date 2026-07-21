@@ -174,7 +174,9 @@ void Video::renderFrame() {
     glDisable(GL_DEPTH_TEST);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
+    // Letterbox fill. Black by default, but the frontend can paint it the console's own body
+    // colour so the picture sits in a shell rather than in a void.
+    glClearColor(backgroundRed, backgroundGreen, backgroundBlue, 1.0F);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (immersiveModeEnabled) {
@@ -277,6 +279,13 @@ void Video::updateViewportAlignment(unsigned int viewportAlignment) {
 void Video::updateRendererSize(unsigned int width, unsigned int height) {
     LOGD("Updating renderer size: %d x %d", width, height);
     renderer->updateRenderedResolution(width, height);
+}
+
+void Video::updateBackgroundColor(float red, float green, float blue) {
+    backgroundRed = red;
+    backgroundGreen = green;
+    backgroundBlue = blue;
+    isDirty = true;
 }
 
 void Video::updateRotation(float rotation) {

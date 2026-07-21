@@ -111,6 +111,9 @@ public class LibretroDroid {
     public static native void reset();
 
     public static native void setRumbleEnabled(boolean enabled);
+
+    /** Colour drawn around the picture (letterbox bars), 0..1 per channel. */
+    public static native void setBackgroundColor(float red, float green, float blue);
     public static native void setFrameSpeed(int speed);
     public static native void setAudioEnabled(boolean enabled);
     public static native void setShaderConfig(GLRetroShader shader);

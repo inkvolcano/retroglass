@@ -506,6 +506,21 @@ class GLRetroView(
         }
     }
 
+    /**
+     * Colour drawn around the picture when it does not fill the view.
+     *
+     * The frontend paints its own background behind this view, but the GL surface covers it
+     * and clears to its own colour first — so letterbox bars can only be recoloured here.
+     */
+    fun setLetterboxColor(color: Int) {
+        val r = ((color shr 16) and 0xFF) / 255f
+        val g = ((color shr 8) and 0xFF) / 255f
+        val b = (color and 0xFF) / 255f
+        runOnEmulationThread(true) {
+            LibretroDroid.setBackgroundColor(r, g, b)
+        }
+    }
+
     private fun refreshAspectRatio() {
         runOnEmulationThread(true) {
             LibretroDroid.refreshAspectRatio()

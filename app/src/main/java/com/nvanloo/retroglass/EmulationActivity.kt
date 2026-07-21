@@ -476,9 +476,13 @@ class EmulationActivity : AppCompatActivity() {
             }
         }
         // The shell owns the background in body mode; the other modes paint their own.
+        val shell = layoutStore.bezelMode() == LayoutStore.BEZEL_BODY
         screenBezel.bodyColor = console.bodyColor
-        screenBezel.visibility =
-            if (layoutStore.bezelMode() == LayoutStore.BEZEL_BODY) View.VISIBLE else View.GONE
+        screenBezel.visibility = if (shell) View.VISIBLE else View.GONE
+        // The GL surface clears to its own colour before drawing, so wherever it covers the
+        // window - the whole screen in landscape - the letterbox bars are the only background
+        // you actually see. Recolouring them at the source fixes every layout at once.
+        retroView?.setLetterboxColor(if (shell) console.bodyColor else Color.BLACK)
     }
 
     // --------------------------------------------------------- gyro aiming

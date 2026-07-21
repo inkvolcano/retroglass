@@ -217,6 +217,9 @@ void LibretroDroid::onSurfaceCreated() {
     );
 
     video = std::unique_ptr<Video>(newVideo);
+    // The video object is rebuilt on surface changes; re-apply the frontend's chosen
+    // letterbox colour or it would silently revert to black.
+    video->updateBackgroundColor(backgroundRed, backgroundGreen, backgroundBlue);
 
     if (Environment::getInstance().getHwContextReset() != nullptr) {
         Environment::getInstance().getHwContextReset()();
@@ -497,6 +500,15 @@ float LibretroDroid::getAspectRatio() {
 
 void LibretroDroid::refreshAspectRatio() {
     video->updateAspectRatio(getAspectRatio());
+}
+
+void LibretroDroid::setBackgroundColor(float red, float green, float blue) {
+    backgroundRed = red;
+    backgroundGreen = green;
+    backgroundBlue = blue;
+    if (video != nullptr) {
+        video->updateBackgroundColor(red, green, blue);
+    }
 }
 
 void LibretroDroid::setRumbleEnabled(bool enabled) {

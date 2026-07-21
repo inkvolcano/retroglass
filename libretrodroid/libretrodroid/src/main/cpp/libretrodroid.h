@@ -124,6 +124,9 @@ public:
     void changeDisk(unsigned int index);
 
     void setRumbleEnabled(bool enabled);
+
+    /** Colour drawn around the picture; survives a video reset. */
+    void setBackgroundColor(float red, float green, float blue);
     bool isRumbleEnabled() const;
     void handleRumbleUpdates(const std::function<void(int, float, float)> &handler);
 
@@ -161,6 +164,9 @@ private:
     bool audioEnabled = true;
     bool preferLowLatencyAudio = false;
     bool rumbleEnabled = false;
+    float backgroundRed = 0.0F;
+    float backgroundGreen = 0.0F;
+    float backgroundBlue = 0.0F;
 
     ShaderManager::Config fragmentShaderConfig = ShaderManager::Config {
         ShaderManager::Type::SHADER_DEFAULT, { }
