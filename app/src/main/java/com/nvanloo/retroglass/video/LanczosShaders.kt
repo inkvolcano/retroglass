@@ -15,7 +15,8 @@ import java.util.Locale
  */
 object LanczosShaders {
 
-    private const val OUT_SCALE = 2.0f
+    /** Default upscale factor; callers may raise it to better match the panel. */
+    const val DEFAULT_SCALE = 2.0f
 
     private fun fragment(input: String, inScale: Float): String = """#version 300 es
 precision highp float;
@@ -60,18 +61,19 @@ void main() {
 """
 
     /** Lanczos-2 as a composable stage (2× output). */
-    fun stage(): FilterStack.Builder = FilterStack.Builder { ctx ->
+    fun stage(outScale: Float = DEFAULT_SCALE): FilterStack.Builder = FilterStack.Builder { ctx ->
         FilterStack.Stage(
             passes = listOf(
                 ShaderConfig.CustomPass(
                     fragment = fragment(ctx.inputSampler, ctx.inScale),
-                    scale = ctx.inScale * OUT_SCALE,
+                    scale = ctx.inScale * outScale,
                     linear = true,
                 )
             ),
-            outScale = OUT_SCALE,
+            outScale = outScale,
         )
     }
 
-    fun lanczos(): ShaderConfig = FilterStack.compose(listOf(stage()))
+    fun lanczos(outScale: Float = DEFAULT_SCALE): ShaderConfig =
+        FilterStack.compose(listOf(stage(outScale)))
 }

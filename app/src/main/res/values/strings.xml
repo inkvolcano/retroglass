@@ -189,6 +189,10 @@
     <string name="filter_curve">CRT tube (curve + vignette)</string>
     <string name="combo_anime4k_order">Anime4K runs first (it needs the original frame), so De-dither / NTSC now apply after the upscale.</string>
     <string name="combo_heavy">Heavy filter chain — watch the FPS counter; drop a stage if it dips.</string>
+    <string name="menu_upscale_factor">Upscale factor…</string>
+    <string name="upscale_2x">2× — fastest</string>
+    <string name="upscale_3x">3× — sharper</string>
+    <string name="upscale_4x">4× — sharpest (matches 1080p from 240p)</string>
     <string name="menu_filter_settings">Filter settings…</string>
     <string name="menu_filter_presets">Saved looks…</string>
     <string name="menu_res_boost">Internal resolution ×2 (toggle)</string>

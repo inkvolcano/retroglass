@@ -30,8 +30,8 @@ import kotlin.math.pow
  */
 object FsrShaders {
 
-    /** EASU's fixed upscale factor (relative to its own input). */
-    private const val OUT_SCALE = 2.0f
+    /** Default EASU upscale factor; callers may raise it to better match the panel. */
+    const val DEFAULT_SCALE = 2.0f
 
     private const val HEADER = """#version 300 es
 precision highp float;
@@ -189,8 +189,8 @@ void main() {
 
     // ----------------------------------------------------------------- pass 2: RCAS
     // Sharpen-only, over the EASU output (which sits at sourceSize*inScale*OUT_SCALE).
-    private fun rcas(inScale: Float, sharp: Float): String = HEADER + """
-const float EASU_SCALE = ${"%.5f".format(Locale.US, inScale * OUT_SCALE)};
+    private fun rcas(inScale: Float, sharp: Float, outScale: Float): String = HEADER + """
+const float EASU_SCALE = ${"%.5f".format(Locale.US, inScale * outScale)};
 const float SHARP = ${"%.5f".format(Locale.US, sharp)};
 const float RCAS_LIMIT = 0.25 - (1.0 / 16.0); // 0.1875
 
@@ -243,9 +243,12 @@ void main() {
     }
 
     /** FSR1 as a composable [FilterStack] stage (EASU→RCAS, 2× output). */
-    fun stage(sharpness: Float = 0.45f): FilterStack.Builder = FilterStack.Builder { ctx ->
+    fun stage(
+        sharpness: Float = 0.45f,
+        outScale: Float = DEFAULT_SCALE,
+    ): FilterStack.Builder = FilterStack.Builder { ctx ->
         val sharp = sharpFor(sharpness)
-        val passScale = ctx.inScale * OUT_SCALE
+        val passScale = ctx.inScale * outScale
         FilterStack.Stage(
             passes = listOf(
                 ShaderConfig.CustomPass(
@@ -255,13 +258,13 @@ void main() {
                     float16 = false,
                 ),
                 ShaderConfig.CustomPass(
-                    fragment = rcas(ctx.inScale, sharp),
+                    fragment = rcas(ctx.inScale, sharp, outScale),
                     scale = passScale,
                     linear = true,
                     float16 = false,
                 ),
             ),
-            outScale = OUT_SCALE,
+            outScale = outScale,
         )
     }
 
@@ -271,6 +274,6 @@ void main() {
      * @param sharpness RCAS strength on the 0..1 UI scale (higher = sharper); default ~0.45
      *   is moderate, which the big scale factor and PS1 dithering favour.
      */
-    fun fsr1(sharpness: Float = 0.45f): ShaderConfig =
-        FilterStack.compose(listOf(stage(sharpness)))
+    fun fsr1(sharpness: Float = 0.45f, outScale: Float = DEFAULT_SCALE): ShaderConfig =
+        FilterStack.compose(listOf(stage(sharpness, outScale)))
 }

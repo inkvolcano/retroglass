@@ -151,8 +151,12 @@ class LayoutStore(context: Context) {
 
     // Named filter presets ("my CRT look"). The blob is an opaque key=value;… string owned
     // by the caller, so adding new tunables later doesn't need a store change.
+    //
+    // NOTE the prefix is "look/", NOT "preset/": the latter is already used above for the
+    // per-console controller-layout selection, and sharing it made every configured layout
+    // show up as a bogus saved look (and applying one fed a layout id to the filter parser).
 
-    private val presetPrefix = "preset/"
+    private val presetPrefix = "look/"
 
     fun presetNames(): List<String> = prefs.all.keys
         .filter { it.startsWith(presetPrefix) }
@@ -168,6 +172,14 @@ class LayoutStore(context: Context) {
     fun deletePreset(name: String) {
         prefs.edit().remove(presetPrefix + name).apply()
     }
+
+    /**
+     * How far the scalers upscale before the final blit, 2..4. A 240p game on a 1080p panel
+     * needs ~4x; at 2x the scaler reconstructs at 480p and hardware bilinear blurs the rest
+     * of the way, throwing away most of the benefit.
+     */
+    fun upscaleFactor(): Int = prefs.getInt("upscale_factor", 2).coerceIn(2, 4)
+    fun setUpscaleFactor(v: Int) { prefs.edit().putInt("upscale_factor", v.coerceIn(2, 4)).apply() }
 
     /** A 0..1 tuning value for a named filter parameter (glow, scanline depth, …). */
     fun filterParam(key: String, def: Float): Float =

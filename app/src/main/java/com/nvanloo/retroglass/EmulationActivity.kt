@@ -1249,6 +1249,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
         actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
+        actions += getString(R.string.menu_upscale_factor) to { showUpscaleFactorPicker() }
         actions += getString(R.string.menu_filter_settings) to { showFilterSettings() }
         actions += getString(R.string.menu_filter_presets) to { showFilterPresets() }
         actions += getString(R.string.menu_res_boost) to { toggleInternalResolution() }
@@ -1454,12 +1455,12 @@ class EmulationActivity : AppCompatActivity() {
         // Our fork's custom end-phase chains (work on every system, 2D and 3D).
         5 -> com.nvanloo.retroglass.video.Anime4KShaders.upscaleCnnX2S()
         6 -> com.nvanloo.retroglass.video.RetroShaders.casSharpen(layoutStore.filterSharpness())
-        7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1(layoutStore.filterSharpness())
+        7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1(layoutStore.filterSharpness(), upscale())
         8 -> com.nvanloo.retroglass.video.CrtLottesShaders.crtLottes()
-        9 -> com.nvanloo.retroglass.video.SabrShaders.sabr()
+        9 -> com.nvanloo.retroglass.video.SabrShaders.sabr(upscale())
         10 -> com.nvanloo.retroglass.video.RetroShaders.dedither()
-        11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos()
-        12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa()
+        11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos(upscale())
+        12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa(upscale())
         13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc(bleed = ntscBleed())
         14 -> com.nvanloo.retroglass.video.RetroShaders.bloom(intensity = bloomAmount())
         15 -> com.nvanloo.retroglass.video.RetroShaders.lcdGrid(depth = lcdGridDepth())
@@ -1508,10 +1509,10 @@ class EmulationActivity : AppCompatActivity() {
         "dedither" -> com.nvanloo.retroglass.video.RetroShaders.deditherStage()
         "ntsc" -> com.nvanloo.retroglass.video.NtscShaders.stage(bleed = ntscBleed())
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
-        "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
-        "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
-        "lanczos" -> com.nvanloo.retroglass.video.LanczosShaders.stage()
-        "pixelaa" -> com.nvanloo.retroglass.video.PixelAaShaders.stage()
+        "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness(), upscale())
+        "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage(upscale())
+        "lanczos" -> com.nvanloo.retroglass.video.LanczosShaders.stage(upscale())
+        "pixelaa" -> com.nvanloo.retroglass.video.PixelAaShaders.stage(upscale())
         "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage(scanDepth = scanlineDepth())
         "lcdgrid" -> com.nvanloo.retroglass.video.RetroShaders.lcdGridStage(depth = lcdGridDepth())
@@ -1653,6 +1654,9 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun param(key: String) = layoutStore.filterParam(key, paramDefaults[key] ?: 0.5f)
 
+    /** Upscale factor the resampling scalers render at (2..4). */
+    private fun upscale() = layoutStore.upscaleFactor().toFloat()
+
     private fun bloomAmount() = param("bloom") * 0.8f
     private fun scanlineDepth() = param("scanline") * 0.6f
     private fun ntscBleed() = param("ntsc") * 2.0f
@@ -1688,6 +1692,22 @@ class EmulationActivity : AppCompatActivity() {
         parent.addView(seek, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { setMargins(56, 4, 56, 12) })
+    }
+
+    /** How far the scalers render before the final blit. Higher = sharper, costs fill-rate. */
+    private fun showUpscaleFactorPicker() {
+        val labels = arrayOf(
+            getString(R.string.upscale_2x), getString(R.string.upscale_3x), getString(R.string.upscale_4x),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_upscale_factor)
+            .setSingleChoiceItems(labels, layoutStore.upscaleFactor() - 2) { dialog, which ->
+                layoutStore.setUpscaleFactor(which + 2)
+                retroView?.shader = currentShaderConfig()
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
     }
 
     /** Live tuning for every filter that has a knob, in one place. */
