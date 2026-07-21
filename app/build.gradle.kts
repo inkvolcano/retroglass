@@ -60,3 +60,12 @@ dependencies {
     // contract can be tested on the JVM without a device or Robolectric.
     testImplementation("junit:junit:4.13.2")
 }
+
+android {
+    testOptions {
+        // Console's enum constants call Color.parseColor at class-init, so the stubbed
+        // android.jar has to answer rather than throw. Nothing under test depends on the
+        // value - only on which Console constant comes back.
+        unitTests.isReturnDefaultValues = true
+    }
+}

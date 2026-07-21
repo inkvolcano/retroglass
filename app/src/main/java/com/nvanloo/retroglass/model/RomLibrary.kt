@@ -820,7 +820,14 @@ object RomLibrary {
      *  3. otherwise a FLAT, clean romset is an arcade set for FBNeo — which rejects source
      *     repos (nested, .md/.py/etc.) and normal archives. Else null.
      */
-    private fun classifyArchiveEntries(entries: List<Pair<String, Long>>): Console? {
+    /**
+     * What system an archive holds, from its entry names and sizes alone — no decompression.
+     *
+     * Visible for tests: this is the logic behind several real import failures (a 4 MB ".md"
+     * read as Markdown, arcade romsets vs plain zips), and it is pure enough to pin down.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun classifyArchiveEntries(entries: List<Pair<String, Long>>): Console? {
         if (entries.isEmpty()) return null
         val names = entries.map { it.first }
         val exts = names.map { it.substringAfterLast('/').substringAfterLast('.', "").lowercase() }
