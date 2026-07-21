@@ -1456,19 +1456,21 @@ class EmulationActivity : AppCompatActivity() {
         8 -> com.nvanloo.retroglass.video.CrtLottesShaders.crtLottes()
         9 -> com.nvanloo.retroglass.video.SabrShaders.sabr()
         10 -> com.nvanloo.retroglass.video.RetroShaders.dedither()
+        11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos()
         else -> ShaderConfig.Default
     }
 
     // Composable filter building blocks, in the order they stack (a de-dither pre-pass
     // first, then scalers, then looks). Anime4K sits among the scalers because its residual
     // reads the original frame directly.
-    private val comboOrder = listOf("dedither", "anime4k", "fsr1", "sabr", "cas", "crt", "grade")
+    private val comboOrder = listOf("dedither", "anime4k", "fsr1", "sabr", "lanczos", "cas", "crt", "grade")
 
     private fun comboLabel(token: String): String = when (token) {
         "dedither" -> getString(R.string.filter_dedither)
         "anime4k" -> getString(R.string.filter_anime4k)
         "fsr1" -> getString(R.string.filter_fsr1)
         "sabr" -> getString(R.string.filter_sabr)
+        "lanczos" -> getString(R.string.filter_lanczos)
         "cas" -> getString(R.string.filter_cas)
         "crt" -> getString(R.string.combo_crt)
         "grade" -> getString(R.string.combo_grade)
@@ -1480,6 +1482,7 @@ class EmulationActivity : AppCompatActivity() {
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
         "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
         "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
+        "lanczos" -> com.nvanloo.retroglass.video.LanczosShaders.stage()
         "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
@@ -1565,6 +1568,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_crtlottes),
             getString(R.string.filter_sabr),
             getString(R.string.filter_dedither),
+            getString(R.string.filter_lanczos),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)
