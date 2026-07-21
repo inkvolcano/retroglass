@@ -168,6 +168,77 @@ void main() {
     fun dedither(strength: Float = 0.85f): ShaderConfig =
         FilterStack.compose(listOf(deditherStage(strength)))
 
+    // ----------------------------------------------------------------------- Bloom
+    // Phosphor glow: a CRT's bright areas bleed light into their surroundings. Takes a
+    // bright-pass of a ring of neighbours and adds it back, so highlights (explosions, neon,
+    // white text) glow without washing out midtones. Cheap: a 12-tap ring, single pass.
+
+    private fun bloomFragment(
+        input: String,
+        inScale: Float,
+        threshold: Float,
+        intensity: Float,
+        radius: Float,
+    ): String = HEADER + """
+const float IN_SCALE = ${"%.5f".format(Locale.US, inScale)};
+const float THRESH = ${"%.4f".format(Locale.US, threshold)};
+const float INTENSITY = ${"%.4f".format(Locale.US, intensity)};
+const float RADIUS = ${"%.4f".format(Locale.US, radius)};
+
+// Keep only the part of a colour above the threshold, preserving its hue.
+vec3 brightPass(vec3 c) {
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    return c * (max(0.0, l - THRESH) / max(l, 1e-4));
+}
+
+void main() {
+    vec2 px = RADIUS / (sourceSize * IN_SCALE);
+    vec3 c = texture($input, coords).rgb;
+
+    vec3 b = vec3(0.0);
+    // Inner ring (8 neighbours) plus an outer cross (4) for a softer falloff.
+    b += brightPass(texture($input, coords + vec2(-1.0, -1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 0.0, -1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 1.0, -1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2(-1.0,  0.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 1.0,  0.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2(-1.0,  1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 0.0,  1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 1.0,  1.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 0.0, -2.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 0.0,  2.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2(-2.0,  0.0) * px).rgb);
+    b += brightPass(texture($input, coords + vec2( 2.0,  0.0) * px).rgb);
+    b /= 12.0;
+
+    fragColor = vec4(clamp(c + b * INTENSITY, 0.0, 1.0), 1.0);
+}
+"""
+
+    /** Phosphor glow as a composable stage (does not change resolution). */
+    fun bloomStage(
+        threshold: Float = 0.6f,
+        intensity: Float = 0.55f,
+        radius: Float = 2.0f,
+    ): FilterStack.Builder = FilterStack.Builder { ctx ->
+        FilterStack.Stage(
+            passes = listOf(
+                ShaderConfig.CustomPass(
+                    fragment = bloomFragment(ctx.inputSampler, ctx.inScale, threshold, intensity, radius),
+                    scale = ctx.inScale,
+                    linear = true,
+                )
+            ),
+            outScale = 1.0f,
+        )
+    }
+
+    fun bloom(
+        threshold: Float = 0.6f,
+        intensity: Float = 0.55f,
+        radius: Float = 2.0f,
+    ): ShaderConfig = FilterStack.compose(listOf(bloomStage(threshold, intensity, radius)))
+
     // ----------------------------------------------------------------------- Grade
     // A mild colour grade: contrast, saturation and gamma. Cheap, resolution-agnostic;
     // handy as a final layer to make the picture pop.

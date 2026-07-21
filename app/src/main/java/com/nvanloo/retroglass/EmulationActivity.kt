@@ -1459,6 +1459,7 @@ class EmulationActivity : AppCompatActivity() {
         11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos()
         12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa()
         13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc()
+        14 -> com.nvanloo.retroglass.video.RetroShaders.bloom()
         else -> ShaderConfig.Default
     }
 
@@ -1466,7 +1467,10 @@ class EmulationActivity : AppCompatActivity() {
     // first, then scalers, then looks). Anime4K sits among the scalers because its residual
     // reads the original frame directly.
     private val comboOrder =
-        listOf("dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa", "cas", "crt", "grade")
+        listOf(
+            "dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa",
+            "cas", "crt", "bloom", "grade",
+        )
 
     private fun comboLabel(token: String): String = when (token) {
         "dedither" -> getString(R.string.filter_dedither)
@@ -1478,6 +1482,7 @@ class EmulationActivity : AppCompatActivity() {
         "pixelaa" -> getString(R.string.filter_pixelaa)
         "cas" -> getString(R.string.filter_cas)
         "crt" -> getString(R.string.combo_crt)
+        "bloom" -> getString(R.string.filter_bloom)
         "grade" -> getString(R.string.combo_grade)
         else -> token
     }
@@ -1492,6 +1497,7 @@ class EmulationActivity : AppCompatActivity() {
         "pixelaa" -> com.nvanloo.retroglass.video.PixelAaShaders.stage()
         "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage(layoutStore.filterSharpness())
         "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
+        "bloom" -> com.nvanloo.retroglass.video.RetroShaders.bloomStage()
         "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
         else -> null
     }
@@ -1593,6 +1599,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_lanczos),
             getString(R.string.filter_pixelaa),
             getString(R.string.filter_ntsc),
+            getString(R.string.filter_bloom),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)
