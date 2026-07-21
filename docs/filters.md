@@ -35,11 +35,12 @@ Three rules follow, and every composable stage honours them via its `FilterStack
 Blocks always compose in this order (signal → scale → look), regardless of tick order:
 
 ```
-dedither → ntsc → anime4k → fsr1 → sabr → lanczos → pixelaa → cas → crt → lcdgrid → bloom → curve → grade
+anime4k → dedither → ntsc → fsr1 → sabr → lanczos → pixelaa → cas → crt → lcdgrid → bloom → curve → grade
 ```
 
-Rationale: de-dither and NTSC act on the *signal*, so they run at source resolution before
-anything upscales; scalers come next; looks (scanlines, grid, glow) sit on the scaled image;
+Rationale: **Anime4K is pinned first** — its residual sits on `mainTexture`, so anything
+before it would be silently discarded (the UI warns when you pair it with a pre-pass).
+De-dither and NTSC act on the *signal* and otherwise run before any upscale; scalers come next; looks (scanlines, grid, glow) sit on the scaled image;
 curvature warps the composed picture; colour grade is last.
 
 ## The filters

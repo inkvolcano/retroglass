@@ -187,6 +187,7 @@
     <string name="filter_bloom">Phosphor glow (bloom)</string>
     <string name="filter_lcdgrid">LCD dot-matrix grid</string>
     <string name="filter_curve">CRT tube (curve + vignette)</string>
+    <string name="combo_anime4k_order">Anime4K runs first (it needs the original frame), so De-dither / NTSC now apply after the upscale.</string>
     <string name="combo_heavy">Heavy filter chain — watch the FPS counter; drop a stage if it dips.</string>
     <string name="menu_filter_settings">Filter settings…</string>
     <string name="menu_filter_presets">Saved looks…</string>

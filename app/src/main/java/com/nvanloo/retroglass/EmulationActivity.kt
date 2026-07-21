@@ -1467,14 +1467,25 @@ class EmulationActivity : AppCompatActivity() {
         else -> ShaderConfig.Default
     }
 
-    // Composable filter building blocks, in the order they stack (a de-dither pre-pass
-    // first, then scalers, then looks). Anime4K sits among the scalers because its residual
-    // reads the original frame directly.
+    // Composable filter building blocks, in the order they stack.
+    //
+    // Anime4K MUST come first: its depth-to-space pass adds a residual on top of the
+    // ORIGINAL frame (mainTexture), so anything placed before it would be discarded
+    // silently. With it first, a de-dither/NTSC pre-pass still runs — just after the
+    // upscale rather than before it (see nagAboutAnime4kOrder).
+    // Everything else is signal -> scale -> look.
     private val comboOrder =
         listOf(
-            "dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa",
+            "anime4k", "dedither", "ntsc", "fsr1", "sabr", "lanczos", "pixelaa",
             "cas", "crt", "lcdgrid", "bloom", "curve", "grade",
         )
+
+    /** Anime4K forces itself to the front, which changes what a pre-pass does. Say so. */
+    private fun nagAboutAnime4kOrder(chosen: List<String>) {
+        if ("anime4k" in chosen && chosen.any { it == "dedither" || it == "ntsc" }) {
+            Toast.makeText(this, R.string.combo_anime4k_order, Toast.LENGTH_LONG).show()
+        }
+    }
 
     private fun comboLabel(token: String): String = when (token) {
         "dedither" -> getString(R.string.filter_dedither)
@@ -1567,6 +1578,7 @@ class EmulationActivity : AppCompatActivity() {
                 val chosen = tokens.filter { it in current }
                 layoutStore.setComboFilters(console, chosen)
                 retroView?.shader = currentShaderConfig()
+                nagAboutAnime4kOrder(chosen)
                 val cost = chosen.sumOf { comboCost(it) }
                 if (cost >= 10) {
                     Toast.makeText(this, R.string.combo_heavy, Toast.LENGTH_LONG).show()
