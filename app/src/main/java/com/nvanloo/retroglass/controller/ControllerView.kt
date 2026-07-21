@@ -49,8 +49,8 @@ class ControllerView @JvmOverloads constructor(
         const val CONTACT_ALPHA = 105
         /** Concentric silhouettes standing in for a blur; more layers = softer, costlier. */
         const val SHADOW_LAYERS = 5
-        /** How much wider the outermost shadow layer spreads — this is the softness. */
-        const val SHADOW_SPREAD = 0.11f
+        /** Outermost shadow layer's spread, in extrusion depths — this is the softness. */
+        const val SHADOW_SPREAD = 1.15f
         /** How far the shadow sits from the body, in extrusion depths. */
         const val SHADOW_OFFSET = 1.25f
         /** Below this the effect is invisible anyway; skip the passes entirely. */
@@ -173,7 +173,6 @@ class ControllerView @JvmOverloads constructor(
     // every time the tilt moves, so allocating paths per control per frame would churn.
     private val scratchPath = android.graphics.Path()
     private val scratchPath2 = android.graphics.Path()
-    private val scratchMatrix = android.graphics.Matrix()
     private val scratchRect = RectF()
     private val pieceRect = RectF()
 
@@ -213,7 +212,11 @@ class ControllerView @JvmOverloads constructor(
      */
     private fun lightVector(): Triple<Float, Float, Float> {
         val hx = -lightX
-        val hy = lightY
+        // Negated: tipping the top of the phone away turns its top edge toward the light, so
+        // that edge should catch the highlight and the shadow should fall to the bottom. The
+        // other way round put a bright band along the bottom of every control, which is the
+        // opposite of how a raised key is lit anywhere else.
+        val hy = -lightY
         val len = hypot(hx.toDouble(), hy.toDouble()).toFloat()
         if (len < 1e-4f) return Triple(0f, -1f, 0f)
         val t = len.coerceAtMost(1f)
@@ -743,14 +746,19 @@ class ControllerView @JvmOverloads constructor(
         val oy = cy - hy * depth * SHADOW_OFFSET
         val layerAlpha = (CONTACT_ALPHA * strength / SHADOW_LAYERS).toInt() * alpha / 255
         extrudePaint.color = Color.argb(layerAlpha, 0, 0, 0)
+        // Grow each layer with a stroke rather than a scale. Scaling about the path's centre
+        // is wrong for anything made of separate pieces: a gapped cross is five subpaths in one
+        // path, so scaling pushed every arm radially outward and each ended up with its own
+        // halo pointing away from the middle instead of one shadow on one side. A stroke widens
+        // every subpath in place, uniformly, whatever the shape is made of.
+        extrudePaint.style = Paint.Style.FILL_AND_STROKE
+        buildControlPath(c, ox, oy, r, scratchPath)
         for (i in SHADOW_LAYERS downTo 1) {
             val f = i.toFloat() / SHADOW_LAYERS
-            val scale = 1f + SHADOW_SPREAD * f
-            buildControlPath(c, ox, oy, r, scratchPath)
-            scratchMatrix.setScale(scale, scale, ox, oy)
-            scratchPath.transform(scratchMatrix)
+            extrudePaint.strokeWidth = depth * SHADOW_SPREAD * f * 2f
             canvas.drawPath(scratchPath, extrudePaint)
         }
+        extrudePaint.style = Paint.Style.FILL
 
         // Side wall: the same silhouette in a darker tone, offset by the extrusion depth. Drawn
         // under the face, so only the sliver away from the light stays visible.
