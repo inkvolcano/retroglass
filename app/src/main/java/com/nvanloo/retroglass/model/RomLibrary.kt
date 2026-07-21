@@ -26,8 +26,14 @@ object RomLibrary {
     /** Non-playable companion files copied next to PS1 discs (LibCrypt subchannel). */
     private val PSX_SIDECAR_EXTENSIONS = setOf("sbi", "sub", "m3u")
 
-    /** Disc data/track files that a .cue sheet of the same name owns — never listed alone. */
-    private val DISC_DATA_EXTS = setOf("iso", "bin", "img", "mdf", "nrg")
+    /** Disc data/track files owned by a disc index (.cue/.gdi/…) — never listed alone. */
+    private val DISC_DATA_EXTS = setOf("iso", "bin", "img", "mdf", "nrg", "raw")
+
+    /** Index files that own a set of data/track files. */
+    private val DISC_INDEX_EXTS = setOf("cue", "gdi", "ccd", "mds")
+
+    /** Trailing "(Track 3)" on a data file that belongs to a .gdi/.cue set. */
+    private val TRACK_TOKEN = Regex("""\s*\(track\s*\d+\)$""", RegexOption.IGNORE_CASE)
 
     fun romsDir(context: Context, console: Console): File =
         File(context.filesDir, "roms/${console.prefKey}").apply { mkdirs() }
@@ -47,9 +53,10 @@ object RomLibrary {
             val dir = romsDir(context, console)
             val files = dir.listFiles()?.sortedBy { it.name.lowercase() } ?: continue
             val hasAnyCue = files.any { it.extension.equals("cue", true) }
-            // Base names of .cue sheets: their data files (.iso/.bin/.img/…) are part of the
-            // same disc and must not appear as separate library entries.
-            val cueBases = files.filter { it.extension.equals("cue", true) }
+            // Base names of disc indexes (.cue/.gdi/.ccd/.mds). Their data and track files
+            // are part of the same disc and must not appear as separate library entries —
+            // a GDI set is "Game.gdi" plus "Game (Track 1).bin", "Game (Track 2).bin", …
+            val discIndexBases = files.filter { it.extension.lowercase() in DISC_INDEX_EXTS }
                 .mapTo(HashSet()) { it.nameWithoutExtension.lowercase() }
             // Discs named inside an .m3u are hidden — the playlist is the single entry.
             val playlistRefs = files.filter { it.extension.equals("m3u", true) }
@@ -60,9 +67,12 @@ object RomLibrary {
             for (f in files) {
                 val ext = f.extension.lowercase()
                 if (ext != "m3u" && f.name.lowercase() in playlistRefs) continue
-                // A data file belonging to a .cue of the same name is that disc, not a game
-                // of its own (e.g. "Game.cue" + "Game.iso" must list once).
-                if (ext in DISC_DATA_EXTS && f.nameWithoutExtension.lowercase() in cueBases) continue
+                // A data/track file owned by a disc index is part of that disc, not a game of
+                // its own — match both "Game.iso" and "Game (Track 2).bin" against "Game.gdi".
+                if (ext in DISC_DATA_EXTS) {
+                    val base = f.nameWithoutExtension.lowercase()
+                    if (base in discIndexBases || TRACK_TOKEN.replace(base, "") in discIndexBases) continue
+                }
                 val playable = when {
                     ext in console.romExtensions -> true
                     // .bin: always playable on Mega Drive; on PS1 only when it isn't
