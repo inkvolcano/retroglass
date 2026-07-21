@@ -1693,6 +1693,16 @@ class EmulationActivity : AppCompatActivity() {
             .setTitle(R.string.menu_filter_settings)
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
+            .setNeutralButton(R.string.param_reset) { _, _ ->
+                layoutStore.setFilterSharpness(0.5f)
+                layoutStore.setFilterParam("bloom", 0.40f)
+                layoutStore.setFilterParam("scanline", 0.47f)
+                layoutStore.setFilterParam("ntsc", 0.50f)
+                layoutStore.setFilterParam("lcdgrid", 0.55f)
+                layoutStore.setFilterParam("curve", 0.50f)
+                retroView?.shader = currentShaderConfig()
+                Toast.makeText(this, R.string.param_reset_done, Toast.LENGTH_SHORT).show()
+            }
             .show().gamepadNavigable()
     }
 

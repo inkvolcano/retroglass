@@ -53,7 +53,9 @@ void main() {
             wsum += wgt;
         }
     }
-    fragColor = vec4(clamp(acc / wsum, 0.0, 1.0), 1.0);
+    // Lanczos has negative lobes, so the weights can very nearly cancel at some sub-texel
+    // positions — guard the divide before clamping back into range.
+    fragColor = vec4(clamp(acc / (abs(wsum) < 1e-4 ? 1.0 : wsum), 0.0, 1.0), 1.0);
 }
 """
 
