@@ -185,6 +185,10 @@
     <string name="filter_pixelaa">Pixel-AA (crisp, no jaggies)</string>
     <string name="filter_ntsc">NTSC composite (colour bleed)</string>
     <string name="filter_bloom">Phosphor glow (bloom)</string>
+    <string name="filtercat_scale">Scale &amp; sharpen</string>
+    <string name="filtercat_upscale">Upscalers (AI / 3D / pixel-art)</string>
+    <string name="filtercat_crt">CRT &amp; LCD look</string>
+    <string name="filtercat_signal">Signal &amp; glow</string>
     <string name="filter_recommended">★ Best for %1$s</string>
     <string name="filter_recommended_applied">Applied the recommended filter chain</string>
     <string name="combo_crt">CRT scanlines</string>

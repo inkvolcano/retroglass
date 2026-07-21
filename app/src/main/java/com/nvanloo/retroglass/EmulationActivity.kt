@@ -1583,40 +1583,82 @@ class EmulationActivity : AppCompatActivity() {
             .show().gamepadNavigable()
     }
 
-    private fun showVideoFilterPicker() {
-        val names = arrayOf(
-            getString(R.string.filter_off),
-            getString(R.string.filter_crt),
-            getString(R.string.filter_lcd),
-            getString(R.string.filter_sharp),
-            getString(R.string.filter_upscale),
-            getString(R.string.filter_anime4k),
-            getString(R.string.filter_cas),
-            getString(R.string.filter_fsr1),
-            getString(R.string.filter_crtlottes),
-            getString(R.string.filter_sabr),
-            getString(R.string.filter_dedither),
-            getString(R.string.filter_lanczos),
-            getString(R.string.filter_pixelaa),
-            getString(R.string.filter_ntsc),
-            getString(R.string.filter_bloom),
-        )
+    /** Display name of a single-filter index (see [shaderForIndex]). */
+    private fun filterName(i: Int): String = getString(
+        when (i) {
+            1 -> R.string.filter_crt
+            2 -> R.string.filter_lcd
+            3 -> R.string.filter_sharp
+            4 -> R.string.filter_upscale
+            5 -> R.string.filter_anime4k
+            6 -> R.string.filter_cas
+            7 -> R.string.filter_fsr1
+            8 -> R.string.filter_crtlottes
+            9 -> R.string.filter_sabr
+            10 -> R.string.filter_dedither
+            11 -> R.string.filter_lanczos
+            12 -> R.string.filter_pixelaa
+            13 -> R.string.filter_ntsc
+            14 -> R.string.filter_bloom
+            else -> R.string.filter_off
+        }
+    )
+
+    // The filter set grouped by what it does, so the (now long) list stays browsable.
+    private val filterCategories: List<Pair<Int, List<Int>>> = listOf(
+        R.string.filtercat_scale to listOf(3, 4, 11, 12, 6),   // sharp/upscale/lanczos/pixel-AA/CAS
+        R.string.filtercat_upscale to listOf(7, 9, 5),          // FSR1 / SABR / Anime4K
+        R.string.filtercat_crt to listOf(1, 8, 2),              // CRT / CRT-Lottes / LCD
+        R.string.filtercat_signal to listOf(13, 10, 14),        // NTSC / de-dither / bloom
+    )
+
+    private fun applySingleFilter(index: Int) {
+        layoutStore.setShaderIndex(index)
+        layoutStore.setComboFilters(emptyList()) // a single filter overrides any combo
+        retroView?.shader = shaderForIndex(index)
+    }
+
+    /** Second level: the filters inside one category. */
+    private fun showFilterCategory(titleRes: Int, indices: List<Int>) {
+        val names = indices.map { filterName(it) }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle(R.string.menu_video_filter)
-            .setSingleChoiceItems(names, layoutStore.shaderIndex()) { dialog, which ->
-                layoutStore.setShaderIndex(which)
-                layoutStore.setComboFilters(emptyList()) // a single filter overrides any combo
-                retroView?.shader = shaderForIndex(which)
+            .setTitle(titleRes)
+            .setSingleChoiceItems(names, indices.indexOf(layoutStore.shaderIndex())) { dialog, which ->
+                applySingleFilter(indices[which])
                 dialog.dismiss()
-            }
-            // One-tap best chain for this system (de-dither+FSR1 / FSR1 / SABR).
-            .setNeutralButton(getString(R.string.filter_recommended, console.displayName)) { _, _ ->
-                layoutStore.setComboFilters(recommendedCombo(console))
-                retroView?.shader = currentShaderConfig()
-                Toast.makeText(this, R.string.filter_recommended_applied, Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show().gamepadNavigable()
+    }
+
+    private fun showVideoFilterPicker() {
+        val rows = mutableListOf<String>()
+        rows += filterName(0)                                   // Off
+        filterCategories.forEach { rows += getString(it.first) + "  ▸" }
+        rows += getString(R.string.menu_combine_filters)        // chain several
+        rows += getString(R.string.filter_recommended, console.displayName)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_video_filter)
+            .setItems(rows.toTypedArray()) { _, which ->
+                when {
+                    which == 0 -> applySingleFilter(0)
+                    which <= filterCategories.size -> {
+                        val (title, idx) = filterCategories[which - 1]
+                        showFilterCategory(title, idx)
+                    }
+                    which == filterCategories.size + 1 -> showComboFilterPicker()
+                    else -> applyRecommended()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    /** One-tap best chain for this system (de-dither+FSR1 / FSR1 / SABR). */
+    private fun applyRecommended() {
+        layoutStore.setComboFilters(recommendedCombo(console))
+        retroView?.shader = currentShaderConfig()
+        Toast.makeText(this, R.string.filter_recommended_applied, Toast.LENGTH_SHORT).show()
     }
 
     // ---------------------------------------------------------- core options

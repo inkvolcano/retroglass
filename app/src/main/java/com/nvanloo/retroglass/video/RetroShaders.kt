@@ -215,10 +215,11 @@ void main() {
 }
 """
 
-    /** Phosphor glow as a composable stage (does not change resolution). */
+    /** Phosphor glow as a composable stage (does not change resolution).
+     *  Defaults are deliberately restrained — bright 2D scenes (skies, snow) blow out fast. */
     fun bloomStage(
-        threshold: Float = 0.6f,
-        intensity: Float = 0.55f,
+        threshold: Float = 0.72f,
+        intensity: Float = 0.32f,
         radius: Float = 2.0f,
     ): FilterStack.Builder = FilterStack.Builder { ctx ->
         FilterStack.Stage(
@@ -234,8 +235,8 @@ void main() {
     }
 
     fun bloom(
-        threshold: Float = 0.6f,
-        intensity: Float = 0.55f,
+        threshold: Float = 0.72f,
+        intensity: Float = 0.32f,
         radius: Float = 2.0f,
     ): ShaderConfig = FilterStack.compose(listOf(bloomStage(threshold, intensity, radius)))
 
