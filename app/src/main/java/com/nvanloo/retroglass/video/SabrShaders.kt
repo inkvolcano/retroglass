@@ -17,7 +17,7 @@ import java.util.Locale
  * in any chain position.
  *
  * Exposed as a composable [FilterStack] stage (reads `mainTexture` first, or `previousPass`
- * when stacked, at `sourceSize*inScale`) and rendered into a 2× framebuffer.
+ * when stacked, at `sourceSize*inScale`) and rendered into an `outScale`× framebuffer.
  *
  * SABR is GPLv2+ (© Joshua Street; portions from Hyllian's 5xBR) — compatible with this
  * app's GPLv3. See THIRD_PARTY_LICENSES.

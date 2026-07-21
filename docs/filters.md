@@ -47,11 +47,11 @@ curvature warps the composed picture; colour grade is last.
 
 | Filter | Kind | Notes |
 | --- | --- | --- |
-| **FSR 1** | upscaler 2× | AMD EASU + RCAS, ported from `ffx_fsr1.h` (MIT). Best for 3D |
-| **SABR** | upscaler 2× | Joshua Street's SABR v3.0 (GPLv2+). Best for 2D pixel-art |
+| **FSR 1** | upscaler ×N | AMD EASU + RCAS, ported from `ffx_fsr1.h` (MIT). Best for 3D |
+| **SABR** | upscaler ×N | Joshua Street's SABR v3.0 (GPLv2+). Best for 2D pixel-art |
 | **Anime4K CNN x2 (S)** | upscaler 2× | bloc97's 4-layer CNN (MIT). First-only |
-| **Lanczos-2** | resampler 2× | 16-tap windowed sinc; sharper than bilinear, no ringing |
-| **Pixel-AA** | resampler 2× | Sharp bilinear + one-output-pixel edge AA via derivatives |
+| **Lanczos-2** | resampler ×N | 16-tap windowed sinc; sharper than bilinear, no ringing |
+| **Pixel-AA** | resampler ×N | Sharp bilinear + one-output-pixel edge AA via derivatives |
 | **CAS** | sharpen | Contrast-adaptive sharpen |
 | **CRT-Lottes** | look | Timothy Lottes' CRT (public domain): beam, mask, curvature |
 | **CRT scanlines** | look | Source-locked scanlines + aperture grille |
@@ -74,8 +74,13 @@ curvature warps the composed picture; colour grade is last.
   slider) as a `key=value;` blob, so new tunables don't invalidate old saves.
 * **★ Best for &lt;system&gt;** applies the recipe: PS1 → `dedither + fsr1`; other 3D →
   `fsr1`; handhelds → `pixelaa + lcdgrid`; everything else (2D) → `sabr`.
-* **Cost warning.** Each block has a rough GPU weight; applying a heavy chain warns to watch
-  the FPS counter.
+* **Upscale factor.** *Upscale factor…* sets how far the resamplers (FSR1, SABR, Lanczos,
+  Pixel-AA) render before the final blit — 2×, 3× or 4×. This matters: a 240p game on a
+  1080p panel is a ~4.5× jump, so at 2× the scaler reconstructs at 480p and hardware
+  bilinear blurs the rest of the way. Anime4K is fixed at 2× (its depth-to-space pass emits
+  a 2×2 residual).
+* **Cost warning.** Each block has a rough GPU weight, scaled by factor² since cost follows
+  rendered area; a heavy chain warns to watch the FPS counter.
 
 ## Adding a filter
 

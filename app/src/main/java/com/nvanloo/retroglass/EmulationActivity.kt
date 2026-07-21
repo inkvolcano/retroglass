@@ -1580,7 +1580,10 @@ class EmulationActivity : AppCompatActivity() {
                 layoutStore.setComboFilters(console, chosen)
                 retroView?.shader = currentShaderConfig()
                 nagAboutAnime4kOrder(chosen)
-                val cost = chosen.sumOf { comboCost(it) }
+                // Cost scales with rendered area, so a 4x factor is 4x the fill-rate of 2x —
+                // a chain that was comfortable at 2x can miss 60fps at 4x.
+                val f = upscale()
+                val cost = (chosen.sumOf { comboCost(it) } * (f * f) / 4f).toInt()
                 if (cost >= 10) {
                     Toast.makeText(this, R.string.combo_heavy, Toast.LENGTH_LONG).show()
                 }

@@ -12,7 +12,8 @@ import kotlin.math.pow
  * Pass 1 — **EASU** (Edge-Adaptive Spatial Upsampling): a locally-adaptive, 12-tap
  * elliptical Lanczos-like filter that detects edge direction/strength and stretches its
  * kernel along the edge, min/max-clamped against the central 2×2 to suppress ringing.
- * Renders into a 2× framebuffer.
+ * Renders into a framebuffer `outScale`× the source (2× by default, up to 4× to match
+ * the panel).
  * Pass 2 — **RCAS** (Robust Contrast-Adaptive Sharpening): a 5-tap sharpen tuned to pair
  * with EASU, sampling the EASU output.
  *
