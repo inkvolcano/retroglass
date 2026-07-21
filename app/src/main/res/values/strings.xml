@@ -189,6 +189,12 @@
     <string name="filter_curve">CRT tube (curve + vignette)</string>
     <string name="combo_heavy">Heavy filter chain — watch the FPS counter; drop a stage if it dips.</string>
     <string name="menu_filter_settings">Filter settings…</string>
+    <string name="menu_filter_presets">Saved looks…</string>
+    <string name="preset_save">＋ Save current look…</string>
+    <string name="preset_delete">Delete a saved look…</string>
+    <string name="preset_name_hint">Name (e.g. My CRT)</string>
+    <string name="preset_saved">Saved “%1$s”</string>
+    <string name="preset_applied">Applied “%1$s”</string>
     <string name="param_sharpness">Sharpen (CAS / FSR): %1$d%%</string>
     <string name="param_bloom">Phosphor glow: %1$d%%</string>
     <string name="param_scanline">CRT scanline depth: %1$d%%</string>

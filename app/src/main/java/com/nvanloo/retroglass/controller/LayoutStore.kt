@@ -149,6 +149,26 @@ class LayoutStore(context: Context) {
         prefs.edit().putString("shader_combo/${console.prefKey}", tokens.joinToString(",")).apply()
     }
 
+    // Named filter presets ("my CRT look"). The blob is an opaque key=value;… string owned
+    // by the caller, so adding new tunables later doesn't need a store change.
+
+    private val presetPrefix = "preset/"
+
+    fun presetNames(): List<String> = prefs.all.keys
+        .filter { it.startsWith(presetPrefix) }
+        .map { it.removePrefix(presetPrefix) }
+        .sorted()
+
+    fun savePreset(name: String, blob: String) {
+        prefs.edit().putString(presetPrefix + name, blob).apply()
+    }
+
+    fun loadPreset(name: String): String? = prefs.getString(presetPrefix + name, null)
+
+    fun deletePreset(name: String) {
+        prefs.edit().remove(presetPrefix + name).apply()
+    }
+
     /** A 0..1 tuning value for a named filter parameter (glow, scanline depth, …). */
     fun filterParam(key: String, def: Float): Float =
         prefs.getFloat("fparam/$key", def).coerceIn(0f, 1f)

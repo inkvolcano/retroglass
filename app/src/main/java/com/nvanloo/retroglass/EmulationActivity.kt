@@ -1250,6 +1250,7 @@ class EmulationActivity : AppCompatActivity() {
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
         actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
         actions += getString(R.string.menu_filter_settings) to { showFilterSettings() }
+        actions += getString(R.string.menu_filter_presets) to { showFilterPresets() }
         actions += getString(R.string.menu_core_options) to { showCoreOptions() }
         actions += getString(R.string.menu_cheats) to { showCheats() }
         actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
@@ -1692,6 +1693,90 @@ class EmulationActivity : AppCompatActivity() {
             .setTitle(R.string.menu_filter_settings)
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
+            .show().gamepadNavigable()
+    }
+
+    // ------------------------------------------------------------ filter presets
+    // A "look" is the whole filter state: the single filter, the chain, and every slider.
+    // Serialised as key=value; pairs so new tunables can be added without breaking old saves.
+
+    private val tunableParams = listOf("bloom", "scanline", "ntsc", "lcdgrid", "curve")
+
+    private fun currentLookBlob(): String {
+        val parts = mutableListOf<String>()
+        parts += "idx=" + layoutStore.shaderIndex(console)
+        parts += "combo=" + layoutStore.comboFilters(console).joinToString(",")
+        parts += "sharp=" + layoutStore.filterSharpness()
+        tunableParams.forEach { parts += "$it=" + layoutStore.filterParam(it, 0.5f) }
+        return parts.joinToString(";")
+    }
+
+    private fun applyLookBlob(blob: String) {
+        for (kv in blob.split(";")) {
+            val i = kv.indexOf('=')
+            if (i <= 0) continue
+            val key = kv.substring(0, i)
+            val value = kv.substring(i + 1)
+            when (key) {
+                "idx" -> value.toIntOrNull()?.let { layoutStore.setShaderIndex(console, it) }
+                "combo" -> layoutStore.setComboFilters(
+                    console, value.split(",").filter { it.isNotBlank() }
+                )
+                "sharp" -> value.toFloatOrNull()?.let { layoutStore.setFilterSharpness(it) }
+                in tunableParams -> value.toFloatOrNull()?.let { layoutStore.setFilterParam(key, it) }
+            }
+        }
+        retroView?.shader = currentShaderConfig()
+    }
+
+    private fun promptSavePreset() {
+        val input = android.widget.EditText(this).apply {
+            hint = getString(R.string.preset_name_hint)
+            setPadding(56, 40, 56, 24)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.preset_save)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) return@setPositiveButton
+                layoutStore.savePreset(name, currentLookBlob())
+                Toast.makeText(this, getString(R.string.preset_saved, name), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    private fun promptDeletePreset() {
+        val names = layoutStore.presetNames()
+        if (names.isEmpty()) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.preset_delete)
+            .setItems(names.toTypedArray()) { _, which -> layoutStore.deletePreset(names[which]) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
+    }
+
+    /** Saved looks: apply one, save the current state, or delete. */
+    private fun showFilterPresets() {
+        val names = layoutStore.presetNames()
+        val rows = names.toMutableList()
+        rows += getString(R.string.preset_save)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_filter_presets)
+            .setItems(rows.toTypedArray()) { _, which ->
+                if (which < names.size) {
+                    layoutStore.loadPreset(names[which])?.let {
+                        applyLookBlob(it)
+                        Toast.makeText(this, getString(R.string.preset_applied, names[which]),
+                            Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    promptSavePreset()
+                }
+            }
+            .apply { if (names.isNotEmpty()) setNeutralButton(R.string.preset_delete) { _, _ -> promptDeletePreset() } }
+            .setNegativeButton(android.R.string.cancel, null)
             .show().gamepadNavigable()
     }
 
