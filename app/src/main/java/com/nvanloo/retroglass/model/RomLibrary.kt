@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.OpenableColumns
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipInputStream
@@ -116,8 +117,8 @@ object RomLibrary {
     /** Extensions we actually try to import; anything else in a scanned folder is ignored. */
     private fun isImportable(name: String): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase()
-        return ext == "zip" || ext in ALL_ROM_EXTENSIONS || ext in PSX_SIDECAR_EXTENSIONS ||
-            BiosCatalog.isBios(name)
+        return ext == "zip" || ext == "7z" || ext in ALL_ROM_EXTENSIONS ||
+            ext in PSX_SIDECAR_EXTENSIONS || BiosCatalog.isBios(name)
     }
 
     /**
@@ -277,7 +278,7 @@ object RomLibrary {
     // -------------------------------------------------- disc content sniffing
 
     /** Uncompressed disc data we can read a header from (CHD/PBP are compressed → skipped). */
-    private val SNIFFABLE_DISC_EXTS = setOf("cue", "iso", "bin", "img")
+    private val SNIFFABLE_DISC_EXTS = setOf("cue", "iso", "bin", "img", "mdf")
 
     /**
      * Identifies a disc's true system by scanning its data track for magic strings
@@ -305,6 +306,9 @@ object RomLibrary {
             "SEGA SEGAKATANA" in t -> Console.DREAMCAST
             "SEGADISCSYSTEM" in t || "SEGABOOTDISC" in t -> Console.SEGACD
             "SEGA SEGASATURN" in t -> Console.SATURN
+            "PSP GAME" in t || "PSP_GAME" in t || "UMD_DATA.BIN" in t -> Console.PSP
+            // 3DO Opera-FS volume header: 0x01 then five 0x5A ('Z') then 0x01.
+            t.length > 6 && t[0].code == 1 && t.regionMatches(1, "ZZZZZ", 0, 5) -> Console.THREEDO
             "BOOT2" in t -> Console.PS2
             "PLAYSTATION" in t || "cdrom:" in t -> Console.PSX
             "IPL.TXT" in t -> Console.NEOGEOCD
@@ -396,6 +400,7 @@ object RomLibrary {
     ): Boolean {
         val ext = name.substringAfterLast('.', "").lowercase()
         if (ext == "zip") return importZip(context, input, name, folderHint)
+        if (ext == "7z") return import7z(context, input, name, folderHint)
         // LibCrypt subchannel files live next to the PS1 disc so PCSX-ReARMed finds them.
         if (ext in PSX_SIDECAR_EXTENSIONS) {
             // Playlists (.m3u) follow a disc-system folder hint; subchannel files are PS1-only.
@@ -464,6 +469,90 @@ object RomLibrary {
         return result
     }
 
+    /**
+     * A .7z almost always packs a single console/disc ROM that must be unpacked before a
+     * core can read it (FBNeo's zip-only arcade sets aren't distributed as .7z). Stage it,
+     * then extract any console/disc ROM inside.
+     */
+    private fun import7z(
+        context: Context,
+        input: InputStream,
+        originalName: String,
+        folderHint: Console? = null,
+    ): Boolean {
+        val temp = File(context.cacheDir, "import_$originalName")
+        temp.outputStream().use { input.copyTo(it) }
+        val extracted = runCatching { extractConsole7z(context, temp) }.getOrDefault(false)
+        temp.delete()
+        return extracted
+    }
+
+    /** A system hint parsed from an archive's own file name, e.g. "… (Saturn).7z". */
+    private fun archiveNameHint(fileName: String): Console? =
+        folderHint(fileName.substringBeforeLast('.'))
+
+    /**
+     * Files a set of extracted ROM entries into the library. Cartridge ROMs go to their
+     * console by extension; disc images go to the archive-name-hinted disc system, or a PS1
+     * placeholder, so a later content sniff ([reclassifyDiscsByContent]) can correct them.
+     * Entries are moved (rename, no copy) when possible so large discs don't need 2× space.
+     */
+    private fun placeExtractedRoms(
+        context: Context,
+        staged: List<Pair<String, File>>,
+        nameHint: Console?,
+    ): Boolean {
+        val cueStems = staged.map { it.first }
+            .filter { it.endsWith(".cue", true) }
+            .map { it.substringBeforeLast('.').lowercase() }
+
+        // A disc archive's container plus its track .bin files must land in ONE disc system
+        // so a multi-track set isn't split. Decide it by the archive name, then by sniffing
+        // the data track, then by the container extension (PS1 default).
+        val hasDisc = staged.any { it.first.substringAfterLast('.', "").lowercase() in DISC_CONTAINER_EXTS }
+        val discConsole: Console? = if (hasDisc) {
+            nameHint?.takeIf { it in DISC_CONSOLES }
+                ?: sniffStagedDisc(staged)
+                ?: staged.map { it.first.substringAfterLast('.', "").lowercase() }
+                    .firstOrNull { it in DISC_CONTAINER_EXTS }?.let { Console.forExtension(it) }
+                ?: Console.PSX
+        } else null
+
+        var importedAny = false
+        for ((entryName, temp) in staged) {
+            val ext = entryName.substringAfterLast('.', "").lowercase()
+            val console = when {
+                ext in DISC_CONTAINER_EXTS -> discConsole
+                ext == "bin" && discConsole != null -> discConsole // disc track follows its set
+                else -> Console.forExtension(
+                    ext,
+                    siblingCue = ext == "bin" && binMatchesCue(entryName, cueStems),
+                    fileSize = temp.length(),
+                )
+            }
+            if (console != null) {
+                val dest = File(romsDir(context, console), entryName)
+                if (!temp.renameTo(dest)) {
+                    temp.copyTo(dest, overwrite = true)
+                    temp.delete()
+                }
+                importedAny = true
+            } else {
+                temp.delete()
+            }
+        }
+        return importedAny
+    }
+
+    /** Sniffs the largest sniffable data track among [staged] to detect its disc system. */
+    private fun sniffStagedDisc(staged: List<Pair<String, File>>): Console? = staged
+        .filter {
+            val e = it.first.substringAfterLast('.', "").lowercase()
+            e != "cue" && e in SNIFFABLE_DISC_EXTS
+        }
+        .sortedByDescending { it.second.length() }
+        .firstNotNullOfOrNull { detectDiscConsole(it.second) }
+
     private fun extractConsoleZip(context: Context, zipFile: File): Boolean {
         // Extract ROM-like entries to temp files first so .bin entries can be
         // classified with knowledge of any .cue sheets in the same archive.
@@ -481,25 +570,35 @@ object RomLibrary {
                 entry = zip.nextEntry
             }
         }
-        val cueStems = staged.map { it.first }
-            .filter { it.endsWith(".cue", true) }
-            .map { it.substringBeforeLast('.').lowercase() }
+        return placeExtractedRoms(context, staged, archiveNameHint(zipFile.name))
+    }
 
-        var importedAny = false
-        for ((entryName, temp) in staged) {
-            val ext = entryName.substringAfterLast('.', "").lowercase()
-            val console = Console.forExtension(
-                ext,
-                siblingCue = ext == "bin" && binMatchesCue(entryName, cueStems),
-                fileSize = temp.length(),
-            )
-            if (console != null) {
-                temp.copyTo(File(romsDir(context, console), entryName), overwrite = true)
-                importedAny = true
+    /** Same as [extractConsoleZip] for a .7z archive (sequential decode via SevenZFile). */
+    private fun extractConsole7z(context: Context, file: File): Boolean {
+        val staged = mutableListOf<Pair<String, File>>()
+        SevenZFile(file).use { sz ->
+            var entry = sz.nextEntry
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val entryName = entry.name.substringAfterLast('/').substringAfterLast('\\')
+                    val ext = entryName.substringAfterLast('.', "").lowercase()
+                    if (ext in CONSOLE_ROM_EXTENSIONS) {
+                        val temp = File(context.cacheDir, "import_$entryName")
+                        temp.outputStream().use { out ->
+                            val buf = ByteArray(1 shl 16)
+                            while (true) {
+                                val n = sz.read(buf)
+                                if (n < 0) break
+                                out.write(buf, 0, n)
+                            }
+                        }
+                        staged.add(entryName to temp)
+                    }
+                }
+                entry = sz.nextEntry
             }
-            temp.delete()
         }
-        return importedAny
+        return placeExtractedRoms(context, staged, archiveNameHint(file.name))
     }
 
     fun importBios(context: Context, uri: Uri): String? {
@@ -644,7 +743,7 @@ object RomLibrary {
                     if (!seenPaths.add(f.absolutePath)) return@forEach
                     val ext = f.extension.lowercase()
                     val bios = BiosCatalog.isBios(f.name)
-                    val isRom = ext == "zip" || ext in ALL_ROM_EXTENSIONS
+                    val isRom = ext == "zip" || ext == "7z" || ext in ALL_ROM_EXTENSIONS
                     if (!bios && !isRom) return@forEach
                     if (key(f) in known) return@forEach
                     val console = if (bios) null else classifyFile(context, f) ?: return@forEach
@@ -675,24 +774,58 @@ object RomLibrary {
         "rar", "7z", "tar", "gz", "bz2", "cab", "ttf", "otf", "woff", "csv",
     )
 
+    // Disc-image containers that can belong to any disc system — their true console is
+    // decided by sniffing the content after extraction, never by the extension alone.
+    private val DISC_CONTAINER_EXTS = setOf(
+        "cue", "iso", "chd", "gdi", "cdi", "img", "pbp", "ccd", "mds", "mdf", "nrg", "cso",
+    )
+    // Pure cartridge extensions inside an archive that reliably name their console.
+    private val CART_ROM_EXTS = UNAMBIGUOUS_ROM_EXTS - DISC_CONTAINER_EXTS
+
     /**
-     * Peeks a .zip's entry list (central directory only — no decompression) to decide whether it
-     * is a real ROM: a recognisable console cartridge inside → that console; otherwise an arcade
-     * romset only if the archive is FLAT (no folders) and holds no software/media/doc files — which
-     * rejects source repos (nested with .md/.py/etc.) and normal archives. Else null.
+     * Classifies an archive from its entry names (shared by .zip and .7z):
+     *  1. a cartridge ROM inside reliably identifies the console by extension;
+     *  2. a disc image inside → a PS1 placeholder, so a post-extraction content sniff can
+     *     file it to its true system (Sega CD / Saturn / Dreamcast / 3DO / PSP / …);
+     *  3. otherwise a FLAT, clean romset is an arcade set for FBNeo — which rejects source
+     *     repos (nested, .md/.py/etc.) and normal archives. Else null.
      */
-    private fun classifyZip(zip: File): Console? {
-        val names = runCatching {
-            java.util.zip.ZipFile(zip).use { zf ->
-                zf.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
-            }
-        }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+    private fun classifyArchiveEntries(names: List<String>): Console? {
+        if (names.isEmpty()) return null
         val exts = names.map { it.substringAfterLast('/').substringAfterLast('.', "").lowercase() }
-        exts.firstNotNullOfOrNull { if (it in UNAMBIGUOUS_ROM_EXTS) Console.forExtension(it) else null }
+        exts.firstNotNullOfOrNull { if (it in CART_ROM_EXTS) Console.forExtension(it) else null }
             ?.let { return it }
+        if (exts.any { it in DISC_CONTAINER_EXTS }) return Console.PSX
         val flat = names.none { it.contains('/') }
         val clean = exts.none { it in NON_ROM_ZIP_EXTS }
         return if (flat && clean) Console.ARCADE else null
+    }
+
+    /** Entry names of a .zip (central directory only — no decompression), or null on error. */
+    private fun zipEntryNames(zip: File): List<String>? = runCatching {
+        java.util.zip.ZipFile(zip).use { zf ->
+            zf.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
+        }
+    }.getOrNull()
+
+    /** Entry names of a .7z archive, or null on error. */
+    private fun sevenZEntryNames(file: File): List<String>? = runCatching {
+        SevenZFile(file).use { sz ->
+            val out = mutableListOf<String>()
+            var e = sz.nextEntry
+            while (e != null) { if (!e.isDirectory) out.add(e.name); e = sz.nextEntry }
+            out
+        }
+    }.getOrNull()
+
+    private fun classifyZip(zip: File): Console? {
+        val names = zipEntryNames(zip) ?: return null
+        return classifyArchiveEntries(names)
+    }
+
+    private fun classify7z(file: File): Console? {
+        val names = sevenZEntryNames(file) ?: return null
+        return classifyArchiveEntries(names)
     }
 
     /**
@@ -710,6 +843,7 @@ object RomLibrary {
         // and .exe (a PS1 homebrew type that collides with Windows installers on shared storage).
         if (ext in PSX_SIDECAR_EXTENSIONS || ext == "bin" || ext == "exe") return null
         if (ext == "zip") return classifyZip(f)
+        if (ext == "7z") return classify7z(f)
         if (ext in SHARED_DISC_EXTS) {
             val hinted = folderHint(f.parentFile?.name)?.takeIf { it in DISC_CONSOLES }
             if (ext == "chd" || ext == "pbp") return hinted ?: Console.PSX
@@ -748,7 +882,12 @@ object RomLibrary {
                 // library — the cores read the raw ROM, not the archive. (Arcade romsets are
                 // the exception: FBNeo needs the .zip intact, so those fall through and are
                 // referenced/moved as-is.)
-                if (item.file.extension.equals("zip", true) && console !in ARCADE_ZIP_CONSOLES) {
+                val archiveExt = item.file.extension.lowercase()
+                if (archiveExt == "7z") {
+                    if (extractConsole7z(context, item.file)) count++
+                    continue
+                }
+                if (archiveExt == "zip" && console !in ARCADE_ZIP_CONSOLES) {
                     if (extractConsoleZip(context, item.file)) count++
                     continue
                 }
@@ -772,6 +911,10 @@ object RomLibrary {
             } catch (_: Exception) {}
         }
         addReferences(context, refs)
+        // Extracted disc images default to PS1; sniff their content and re-file to the true
+        // system (Sega CD / Saturn / Dreamcast / 3DO / PSP), then stitch multi-disc sets.
+        reclassifyDiscsByContent(context)
+        generateMultiDiscPlaylists(context)
         return count
     }
 }
