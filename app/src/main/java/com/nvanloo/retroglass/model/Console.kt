@@ -496,7 +496,10 @@ object ControllerDefs {
     /** Debug: serialize every console's default layout to JSON (ground truth for doc previews). */
     fun dumpLayoutsJson(): String {
         fun hex(c: Int): String =
-            if (Color.alpha(c) == 0) "transparent" else String.format("#%06X", 0xFFFFFF and c)
+            // Locale.ROOT: this JSON is read by the doc-preview scripts, and a locale with
+            // non-ASCII digits would render the hex unusable.
+            if (Color.alpha(c) == 0) "transparent"
+            else String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF and c)
         val sb = StringBuilder("[\n")
         val consoles = Console.entries
         consoles.forEachIndexed { ci, console ->
