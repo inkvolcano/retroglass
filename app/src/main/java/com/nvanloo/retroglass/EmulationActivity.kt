@@ -1632,11 +1632,20 @@ class EmulationActivity : AppCompatActivity() {
 
     // Tunable look-filter parameters. The UI keeps everything on a 0..1 slider and each
     // accessor maps it onto that filter's useful range (defaults reproduce the tuned values).
-    private fun bloomAmount() = layoutStore.filterParam("bloom", 0.40f) * 0.8f
-    private fun scanlineDepth() = layoutStore.filterParam("scanline", 0.47f) * 0.6f
-    private fun ntscBleed() = layoutStore.filterParam("ntsc", 0.50f) * 2.0f
-    private fun lcdGridDepth() = layoutStore.filterParam("lcdgrid", 0.55f) * 0.6f
-    private fun curveAmount() = layoutStore.filterParam("curve", 0.50f) * 2.0f
+    // One source of truth for the slider defaults — reading them anywhere else with a
+    // guessed fallback silently bakes the wrong value into saved looks.
+    private val paramDefaults = mapOf(
+        "bloom" to 0.40f, "scanline" to 0.47f, "ntsc" to 0.50f,
+        "lcdgrid" to 0.55f, "curve" to 0.50f,
+    )
+
+    private fun param(key: String) = layoutStore.filterParam(key, paramDefaults[key] ?: 0.5f)
+
+    private fun bloomAmount() = param("bloom") * 0.8f
+    private fun scanlineDepth() = param("scanline") * 0.6f
+    private fun ntscBleed() = param("ntsc") * 2.0f
+    private fun lcdGridDepth() = param("lcdgrid") * 0.6f
+    private fun curveAmount() = param("curve") * 2.0f
 
     /** One labelled 0..100 slider bound to a filter parameter. */
     private fun paramSlider(
@@ -1675,19 +1684,19 @@ class EmulationActivity : AppCompatActivity() {
         paramSlider(box, R.string.param_sharpness, layoutStore.filterSharpness()) {
             layoutStore.setFilterSharpness(it)
         }
-        paramSlider(box, R.string.param_bloom, layoutStore.filterParam("bloom", 0.40f)) {
+        paramSlider(box, R.string.param_bloom, param("bloom")) {
             layoutStore.setFilterParam("bloom", it)
         }
-        paramSlider(box, R.string.param_scanline, layoutStore.filterParam("scanline", 0.47f)) {
+        paramSlider(box, R.string.param_scanline, param("scanline")) {
             layoutStore.setFilterParam("scanline", it)
         }
-        paramSlider(box, R.string.param_ntsc, layoutStore.filterParam("ntsc", 0.50f)) {
+        paramSlider(box, R.string.param_ntsc, param("ntsc")) {
             layoutStore.setFilterParam("ntsc", it)
         }
-        paramSlider(box, R.string.param_lcdgrid, layoutStore.filterParam("lcdgrid", 0.55f)) {
+        paramSlider(box, R.string.param_lcdgrid, param("lcdgrid")) {
             layoutStore.setFilterParam("lcdgrid", it)
         }
-        paramSlider(box, R.string.param_curve, layoutStore.filterParam("curve", 0.50f)) {
+        paramSlider(box, R.string.param_curve, param("curve")) {
             layoutStore.setFilterParam("curve", it)
         }
         AlertDialog.Builder(this)
@@ -1696,11 +1705,7 @@ class EmulationActivity : AppCompatActivity() {
             .setPositiveButton(android.R.string.ok) { _, _ -> retroView?.shader = currentShaderConfig() }
             .setNeutralButton(R.string.param_reset) { _, _ ->
                 layoutStore.setFilterSharpness(0.5f)
-                layoutStore.setFilterParam("bloom", 0.40f)
-                layoutStore.setFilterParam("scanline", 0.47f)
-                layoutStore.setFilterParam("ntsc", 0.50f)
-                layoutStore.setFilterParam("lcdgrid", 0.55f)
-                layoutStore.setFilterParam("curve", 0.50f)
+                paramDefaults.forEach { (k, v) -> layoutStore.setFilterParam(k, v) }
                 retroView?.shader = currentShaderConfig()
                 Toast.makeText(this, R.string.param_reset_done, Toast.LENGTH_SHORT).show()
             }
@@ -1711,14 +1716,12 @@ class EmulationActivity : AppCompatActivity() {
     // A "look" is the whole filter state: the single filter, the chain, and every slider.
     // Serialised as key=value; pairs so new tunables can be added without breaking old saves.
 
-    private val tunableParams = listOf("bloom", "scanline", "ntsc", "lcdgrid", "curve")
-
     private fun currentLookBlob(): String {
         val parts = mutableListOf<String>()
         parts += "idx=" + layoutStore.shaderIndex(console)
         parts += "combo=" + layoutStore.comboFilters(console).joinToString(",")
         parts += "sharp=" + layoutStore.filterSharpness()
-        tunableParams.forEach { parts += "$it=" + layoutStore.filterParam(it, 0.5f) }
+        paramDefaults.keys.forEach { parts += "$it=" + param(it) }
         return parts.joinToString(";")
     }
 
@@ -1734,7 +1737,7 @@ class EmulationActivity : AppCompatActivity() {
                     console, value.split(",").filter { it.isNotBlank() }
                 )
                 "sharp" -> value.toFloatOrNull()?.let { layoutStore.setFilterSharpness(it) }
-                in tunableParams -> value.toFloatOrNull()?.let { layoutStore.setFilterParam(key, it) }
+                in paramDefaults -> value.toFloatOrNull()?.let { layoutStore.setFilterParam(key, it) }
             }
         }
         retroView?.shader = currentShaderConfig()
