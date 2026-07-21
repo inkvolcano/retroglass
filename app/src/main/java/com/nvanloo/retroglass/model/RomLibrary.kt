@@ -32,6 +32,9 @@ object RomLibrary {
     /** Index files that own a set of data/track files. */
     private val DISC_INDEX_EXTS = setOf("cue", "gdi", "ccd", "mds")
 
+    /** Below this, a ".md" really is Markdown; above it, it is a Mega Drive ROM. */
+    private const val MIN_MD_ROM_BYTES = 256L * 1024
+
     /** Trailing "(Track 3)" on a data file that belongs to a .gdi/.cue set. */
     private val TRACK_TOKEN = Regex("""\s*\(track\s*\d+\)$""", RegexOption.IGNORE_CASE)
 
@@ -810,30 +813,40 @@ object RomLibrary {
      *  3. otherwise a FLAT, clean romset is an arcade set for FBNeo — which rejects source
      *     repos (nested, .md/.py/etc.) and normal archives. Else null.
      */
-    private fun classifyArchiveEntries(names: List<String>): Console? {
-        if (names.isEmpty()) return null
+    private fun classifyArchiveEntries(entries: List<Pair<String, Long>>): Console? {
+        if (entries.isEmpty()) return null
+        val names = entries.map { it.first }
         val exts = names.map { it.substringAfterLast('/').substringAfterLast('.', "").lowercase() }
         exts.firstNotNullOfOrNull { if (it in CART_ROM_EXTS) Console.forExtension(it) else null }
             ?.let { return it }
+        // ".md" is normally ignored as Markdown, but a multi-megabyte one is a Mega Drive
+        // ROM — no README is 4 MB. Checked before the "clean archive" test below, which
+        // would otherwise reject the whole archive as a docs bundle.
+        if (entries.any {
+                it.first.substringAfterLast('.', "").equals("md", true) &&
+                    it.second >= MIN_MD_ROM_BYTES
+            }
+        ) return Console.MEGADRIVE
         if (exts.any { it in DISC_CONTAINER_EXTS }) return Console.PSX
         val flat = names.none { it.contains('/') }
         val clean = exts.none { it in NON_ROM_ZIP_EXTS }
         return if (flat && clean) Console.ARCADE else null
     }
 
-    /** Entry names of a .zip (central directory only — no decompression), or null on error. */
-    private fun zipEntryNames(zip: File): List<String>? = runCatching {
+    /** Entry name+size of a .zip (central directory only — no decompression), or null. */
+    private fun zipEntryNames(zip: File): List<Pair<String, Long>>? = runCatching {
         java.util.zip.ZipFile(zip).use { zf ->
-            zf.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
+            zf.entries().asSequence().filter { !it.isDirectory }
+                .map { it.name to it.size }.toList()
         }
     }.getOrNull()
 
-    /** Entry names of a .7z archive, or null on error. */
-    private fun sevenZEntryNames(file: File): List<String>? = runCatching {
+    /** Entry name+size of a .7z archive, or null on error. */
+    private fun sevenZEntryNames(file: File): List<Pair<String, Long>>? = runCatching {
         SevenZFile(file).use { sz ->
-            val out = mutableListOf<String>()
+            val out = mutableListOf<Pair<String, Long>>()
             var e = sz.nextEntry
-            while (e != null) { if (!e.isDirectory) out.add(e.name); e = sz.nextEntry }
+            while (e != null) { if (!e.isDirectory) out.add(e.name to e.size); e = sz.nextEntry }
             out
         }
     }.getOrNull()
@@ -928,7 +941,9 @@ object RomLibrary {
                     refs.add(console to item.file)
                 }
                 count++
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("RomLibrary", "Import failed for ${item.file.name}", e)
+            }
         }
         addReferences(context, refs)
         // Extracted disc images default to PS1; sniff their content and re-file to the true
