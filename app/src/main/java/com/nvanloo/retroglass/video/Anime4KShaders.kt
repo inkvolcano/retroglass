@@ -173,17 +173,26 @@ void main() {
 }
 """
 
-    /** The full 6-pass chain: 4 convs at native res, depth-to-space at 2x, bilinear blit. */
-    fun upscaleCnnX2S(): ShaderConfig = ShaderConfig.Custom(
-        passes = listOf(
-            ShaderConfig.CustomPass(fragment = PASS1, scale = 1.0f, linear = false, float16 = true),
-            ShaderConfig.CustomPass(fragment = PASS2, scale = 1.0f, linear = false, float16 = true),
-            ShaderConfig.CustomPass(fragment = PASS3, scale = 1.0f, linear = false, float16 = true),
-            ShaderConfig.CustomPass(fragment = PASS4, scale = 1.0f, linear = false, float16 = true),
-            ShaderConfig.CustomPass(fragment = PASS5, scale = 2.0f, linear = true, float16 = false),
-            ShaderConfig.CustomPass(fragment = PASS6, scale = 1.0f, linear = true, float16 = false),
-        ),
-        // Pass 5 relies on hardware bilinear filtering of the original frame for its base.
-        linearTexture = true,
-    )
+    /**
+     * The full 6-pass chain as a composable [FilterStack] stage: 4 convs at native res,
+     * depth-to-space at 2×, bilinear blit. Pass 5's residual sits on a bilinear upscale of
+     * `mainTexture` (the original frame), so this stage only makes sense **first** in a
+     * chain; downstream filters then read its 2× output via `previousPass`.
+     */
+    fun stage(): FilterStack.Builder = FilterStack.Builder { ctx ->
+        val s = ctx.inScale
+        FilterStack.Stage(
+            passes = listOf(
+                ShaderConfig.CustomPass(fragment = PASS1, scale = s, linear = false, float16 = true),
+                ShaderConfig.CustomPass(fragment = PASS2, scale = s, linear = false, float16 = true),
+                ShaderConfig.CustomPass(fragment = PASS3, scale = s, linear = false, float16 = true),
+                ShaderConfig.CustomPass(fragment = PASS4, scale = s, linear = false, float16 = true),
+                ShaderConfig.CustomPass(fragment = PASS5, scale = s * 2.0f, linear = true, float16 = false),
+                ShaderConfig.CustomPass(fragment = PASS6, scale = s * 2.0f, linear = true, float16 = false),
+            ),
+            outScale = 2.0f,
+        )
+    }
+
+    fun upscaleCnnX2S(): ShaderConfig = FilterStack.compose(listOf(stage()))
 }

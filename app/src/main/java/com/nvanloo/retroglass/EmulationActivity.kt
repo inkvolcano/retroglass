@@ -679,7 +679,7 @@ class EmulationActivity : AppCompatActivity() {
             savesDirectory = RomLibrary.savesDir(this@EmulationActivity).absolutePath
             preferLowLatencyAudio = true
             rumbleEventsEnabled = true
-            shader = shaderForIndex(layoutStore.shaderIndex())
+            shader = currentShaderConfig()
             sramFile().takeIf { it.exists() }?.let { saveRAMState = it.readBytes() }
             // User core-option overrides, then the system's forced variables (which win —
             // e.g. atari800_system selects 5200 vs 8-bit computer for the shared core).
@@ -1248,6 +1248,7 @@ class EmulationActivity : AppCompatActivity() {
         ) to { toggleFastForward() }
         actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
         actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
+        actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
         actions += getString(R.string.menu_core_options) to { showCoreOptions() }
         actions += getString(R.string.menu_cheats) to { showCheats() }
         actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
@@ -1450,7 +1451,62 @@ class EmulationActivity : AppCompatActivity() {
         // Our fork's custom end-phase chains (work on every system, 2D and 3D).
         5 -> com.nvanloo.retroglass.video.Anime4KShaders.upscaleCnnX2S()
         6 -> com.nvanloo.retroglass.video.RetroShaders.casSharpen()
+        7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1()
         else -> ShaderConfig.Default
+    }
+
+    // Composable filter building blocks, in the order they stack (scalers first, looks
+    // last). Anime4K must be first because its residual sits on the original frame.
+    private val comboOrder = listOf("anime4k", "fsr1", "cas", "crt", "grade")
+
+    private fun comboLabel(token: String): String = when (token) {
+        "anime4k" -> getString(R.string.filter_anime4k)
+        "fsr1" -> getString(R.string.filter_fsr1)
+        "cas" -> getString(R.string.filter_cas)
+        "crt" -> getString(R.string.combo_crt)
+        "grade" -> getString(R.string.combo_grade)
+        else -> token
+    }
+
+    private fun comboBuilder(token: String): com.nvanloo.retroglass.video.FilterStack.Builder? = when (token) {
+        "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
+        "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage()
+        "cas" -> com.nvanloo.retroglass.video.RetroShaders.casStage()
+        "crt" -> com.nvanloo.retroglass.video.RetroShaders.crtStage()
+        "grade" -> com.nvanloo.retroglass.video.RetroShaders.gradeStage()
+        else -> null
+    }
+
+    /** The active filter: a stacked combo if one is set, otherwise the single filter. */
+    private fun currentShaderConfig(): ShaderConfig {
+        val combo = layoutStore.comboFilters()
+        if (combo.isNotEmpty()) {
+            val builders = comboOrder.filter { it in combo }.mapNotNull { comboBuilder(it) }
+            if (builders.isNotEmpty()) return com.nvanloo.retroglass.video.FilterStack.compose(builders)
+        }
+        return shaderForIndex(layoutStore.shaderIndex())
+    }
+
+    private fun showComboFilterPicker() {
+        val tokens = comboOrder
+        val labels = tokens.map { comboLabel(it) }.toTypedArray()
+        val current = layoutStore.comboFilters().toMutableSet()
+        val checked = tokens.map { it in current }.toBooleanArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.menu_combine_filters)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (isChecked) current.add(tokens[which]) else current.remove(tokens[which])
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                layoutStore.setComboFilters(tokens.filter { it in current })
+                retroView?.shader = currentShaderConfig()
+            }
+            .setNeutralButton(R.string.combo_clear) { _, _ ->
+                layoutStore.setComboFilters(emptyList())
+                retroView?.shader = currentShaderConfig()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show().gamepadNavigable()
     }
 
     private fun showVideoFilterPicker() {
@@ -1462,11 +1518,13 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_upscale),
             getString(R.string.filter_anime4k),
             getString(R.string.filter_cas),
+            getString(R.string.filter_fsr1),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)
             .setSingleChoiceItems(names, layoutStore.shaderIndex()) { dialog, which ->
                 layoutStore.setShaderIndex(which)
+                layoutStore.setComboFilters(emptyList()) // a single filter overrides any combo
                 retroView?.shader = shaderForIndex(which)
                 dialog.dismiss()
             }

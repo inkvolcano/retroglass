@@ -116,6 +116,18 @@ class LayoutStore(context: Context) {
     fun shaderIndex(): Int = prefs.getInt("shader", 0)
     fun setShaderIndex(v: Int) { prefs.edit().putInt("shader", v).apply() }
 
+    /**
+     * A stacked video-filter combo as an ordered list of tokens (e.g. ["fsr1","crt"]).
+     * When non-empty it takes precedence over [shaderIndex]; empty means use the single
+     * filter. Stored comma-separated.
+     */
+    fun comboFilters(): List<String> =
+        prefs.getString("shader_combo", "")?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+
+    fun setComboFilters(tokens: List<String>) {
+        prefs.edit().putString("shader_combo", tokens.joinToString(",")).apply()
+    }
+
     /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
     fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)
     fun setLocalMultiplayer(v: Boolean) { prefs.edit().putBoolean("local_mp", v).apply() }

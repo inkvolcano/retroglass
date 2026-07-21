@@ -8,40 +8,38 @@ import java.util.Locale
  * [ShaderConfig.Custom] multi-pass pipeline. These run on the final blit, after the core
  * has rendered, so they work identically for every emulator (2D and 3D alike).
  *
- * Shader dialect is GLSL ES 3.00 to match the pipeline's default passthrough vertex
- * (mixing ESSL versions in one program fails to link). Each pass sees:
- *   uniform sampler2D mainTexture;   // the original core frame
- *   uniform sampler2D previousPass;  // previous pass output (from pass 1 on)
- *   uniform vec2 sourceSize;         // original frame size in texels
- *   in vec2 coords;                  // 0..1 UV
+ * Each filter is exposed both as a standalone [ShaderConfig] and as a composable
+ * [FilterStack] stage, so it can be layered after an upscaler (e.g. FSR1 + CRT scanlines).
+ * A stage reads its input from [FilterStack.Ctx.inputSampler] at `sourceSize*inScale`,
+ * which is `mainTexture` at native res when first in the chain, or the (possibly upscaled)
+ * `previousPass` when stacked.
+ *
+ * Shader dialect is GLSL ES 3.00 to match the pipeline's default passthrough vertex.
  */
 object RetroShaders {
 
     private const val HEADER = """#version 300 es
 precision highp float;
-uniform lowp sampler2D mainTexture;
-uniform lowp sampler2D previousPass;
+uniform highp sampler2D mainTexture;
+uniform highp sampler2D previousPass;
 uniform highp vec2 sourceSize;
 in highp vec2 coords;
 out vec4 fragColor;
 """
 
-    /**
-     * Contrast-Adaptive Sharpening (FidelityFX-CAS style, simplified). Single pass at
-     * output resolution: sharpens edges without ringing, adapting strength to local
-     * contrast. Good on 3D systems on top of their internal-resolution upscale.
-     */
-    fun casSharpen(sharpness: Float = 0.6f): ShaderConfig = ShaderConfig.Custom(
-        passes = listOf(
-            ShaderConfig.CustomPass(
-                fragment = HEADER + """
+    // ------------------------------------------------------------------------ CAS
+    // Contrast-Adaptive Sharpening (FidelityFX-CAS style, simplified): sharpens edges
+    // without ringing, adapting strength to local contrast. Reads `input` at inSize.
+
+    private fun casFragment(input: String, inScale: Float, sharpness: Float): String = HEADER + """
+const float IN_SCALE = ${"%.5f".format(Locale.US, inScale)};
 void main() {
-    vec2 px = 1.0 / sourceSize;
-    vec3 a = texture(mainTexture, coords + vec2(-px.x, 0.0)).rgb;
-    vec3 b = texture(mainTexture, coords + vec2(0.0, -px.y)).rgb;
-    vec3 c = texture(mainTexture, coords).rgb;
-    vec3 d = texture(mainTexture, coords + vec2(px.x, 0.0)).rgb;
-    vec3 e = texture(mainTexture, coords + vec2(0.0, px.y)).rgb;
+    vec2 px = 1.0 / (sourceSize * IN_SCALE);
+    vec3 a = texture($input, coords + vec2(-px.x, 0.0)).rgb;
+    vec3 b = texture($input, coords + vec2(0.0, -px.y)).rgb;
+    vec3 c = texture($input, coords).rgb;
+    vec3 d = texture($input, coords + vec2(px.x, 0.0)).rgb;
+    vec3 e = texture($input, coords + vec2(0.0, px.y)).rgb;
 
     vec3 minRGB = min(min(min(a, b), min(d, e)), c);
     vec3 maxRGB = max(max(max(a, b), max(d, e)), c);
@@ -56,11 +54,115 @@ void main() {
     vec3 result = (c + (a + b + d + e) * w) / (1.0 + 4.0 * w);
     fragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
 }
-""",
-                scale = 1.0f,
-                linear = true,
+"""
+
+    /** CAS as a composable stage (does not change resolution). */
+    fun casStage(sharpness: Float = 0.6f): FilterStack.Builder = FilterStack.Builder { ctx ->
+        FilterStack.Stage(
+            passes = listOf(
+                ShaderConfig.CustomPass(
+                    fragment = casFragment(ctx.inputSampler, ctx.inScale, sharpness),
+                    scale = ctx.inScale,
+                    linear = true,
+                )
+            ),
+            outScale = 1.0f,
+        )
+    }
+
+    fun casSharpen(sharpness: Float = 0.6f): ShaderConfig =
+        FilterStack.compose(listOf(casStage(sharpness)))
+
+    // ------------------------------------------------------------------------ CRT
+    // A composable CRT look: horizontal scanlines locked to the *source* line count (so a
+    // 240p game gets 240 scanlines regardless of upscale), plus a gentle RGB aperture
+    // grille at the panel's own pixels. Designed to layer on top of a scaler.
+
+    private fun crtFragment(input: String, scanDepth: Float, maskLow: Float): String {
+        // Preserve overall brightness after the triad mask darkens two of three subpixels.
+        val maskBoost = 3.0f / (1.0f + 2.0f * maskLow)
+        return HEADER + """
+const float SCAN_DEPTH = ${"%.4f".format(Locale.US, scanDepth)};
+const float MASK_LOW = ${"%.4f".format(Locale.US, maskLow)};
+const float MASK_BOOST = ${"%.4f".format(Locale.US, maskBoost)};
+void main() {
+    vec3 c = texture($input, coords).rgb;
+
+    // Scanlines at source-line resolution.
+    float pos = fract(coords.y * sourceSize.y);
+    float beam = sin(pos * 3.14159265);            // 1 at line centre, 0 at the gap
+    float scan = 1.0 - SCAN_DEPTH * (1.0 - beam);
+    c *= scan;
+
+    // Aperture grille over device pixels (one lit subpixel per triad).
+    vec3 mask = vec3(MASK_LOW);
+    int mi = int(mod(gl_FragCoord.x, 3.0));
+    if (mi == 0) mask.r = 1.0; else if (mi == 1) mask.g = 1.0; else mask.b = 1.0;
+    c *= mask * MASK_BOOST;
+
+    fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}
+"""
+    }
+
+    /** CRT scanlines + aperture grille as a composable stage. */
+    fun crtStage(scanDepth: Float = 0.35f, maskLow: Float = 0.88f): FilterStack.Builder =
+        FilterStack.Builder { ctx ->
+            FilterStack.Stage(
+                passes = listOf(
+                    ShaderConfig.CustomPass(
+                        fragment = crtFragment(ctx.inputSampler, scanDepth, maskLow),
+                        scale = ctx.inScale,
+                        linear = true,
+                    )
+                ),
+                outScale = 1.0f,
             )
-        ),
-        linearTexture = true,
-    )
+        }
+
+    fun crtScanlines(scanDepth: Float = 0.35f, maskLow: Float = 0.88f): ShaderConfig =
+        FilterStack.compose(listOf(crtStage(scanDepth, maskLow)))
+
+    // ----------------------------------------------------------------------- Grade
+    // A mild colour grade: contrast, saturation and gamma. Cheap, resolution-agnostic;
+    // handy as a final layer to make the picture pop.
+
+    private fun gradeFragment(input: String, contrast: Float, saturation: Float, gamma: Float): String =
+        HEADER + """
+const float CONTRAST = ${"%.4f".format(Locale.US, contrast)};
+const float SATURATION = ${"%.4f".format(Locale.US, saturation)};
+const float INV_GAMMA = ${"%.4f".format(Locale.US, 1.0f / gamma)};
+void main() {
+    vec3 c = texture($input, coords).rgb;
+    c = (c - 0.5) * CONTRAST + 0.5;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, SATURATION);
+    c = pow(max(c, 0.0), vec3(INV_GAMMA));
+    fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}
+"""
+
+    /** Colour grade as a composable stage (does not change resolution). */
+    fun gradeStage(
+        contrast: Float = 1.08f,
+        saturation: Float = 1.12f,
+        gamma: Float = 1.05f,
+    ): FilterStack.Builder = FilterStack.Builder { ctx ->
+        FilterStack.Stage(
+            passes = listOf(
+                ShaderConfig.CustomPass(
+                    fragment = gradeFragment(ctx.inputSampler, contrast, saturation, gamma),
+                    scale = ctx.inScale,
+                    linear = true,
+                )
+            ),
+            outScale = 1.0f,
+        )
+    }
+
+    fun colorGrade(
+        contrast: Float = 1.08f,
+        saturation: Float = 1.12f,
+        gamma: Float = 1.05f,
+    ): ShaderConfig = FilterStack.compose(listOf(gradeStage(contrast, saturation, gamma)))
 }

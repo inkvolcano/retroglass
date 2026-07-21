@@ -120,6 +120,7 @@
     <string name="menu_rumble_on">Rumble (vibration): On</string>
     <string name="menu_rumble_off">Rumble (vibration): Off</string>
     <string name="menu_video_filter">Video filter</string>
+    <string name="menu_combine_filters">Combine filters…</string>
     <string name="menu_core_options">Core options (system settings)</string>
     <string name="menu_cheats">Cheats</string>
     <string name="menu_screenshot">Screenshot</string>
@@ -174,6 +175,10 @@
     <string name="filter_upscale">Upscale (smooth edges)</string>
     <string name="filter_anime4k">AI upscale 2× (Anime4K CNN)</string>
     <string name="filter_cas">Adaptive sharpen (CAS)</string>
+    <string name="filter_fsr1">FSR 1 upscale (3D)</string>
+    <string name="combo_crt">CRT scanlines</string>
+    <string name="combo_grade">Colour grade</string>
+    <string name="combo_clear">Clear (use single filter)</string>
     <string name="edit_done">Done</string>
     <string name="edit_reset">Reset</string>
     <string name="edit_cancel">Cancel</string>
