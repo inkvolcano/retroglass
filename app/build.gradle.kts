@@ -55,4 +55,8 @@ dependencies {
     // 7-Zip / archive extraction for packed ROM sets (xz supplies the LZMA codec).
     implementation("org.apache.commons:commons-compress:1.26.2")
     implementation("org.tukaani:xz:1.9")
+
+    // The filter composer and the shader stages are plain Kotlin over ShaderConfig, so their
+    // contract can be tested on the JVM without a device or Robolectric.
+    testImplementation("junit:junit:4.13.2")
 }
