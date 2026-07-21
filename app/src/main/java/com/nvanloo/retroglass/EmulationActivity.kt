@@ -1458,6 +1458,7 @@ class EmulationActivity : AppCompatActivity() {
         10 -> com.nvanloo.retroglass.video.RetroShaders.dedither()
         11 -> com.nvanloo.retroglass.video.LanczosShaders.lanczos()
         12 -> com.nvanloo.retroglass.video.PixelAaShaders.pixelAa()
+        13 -> com.nvanloo.retroglass.video.NtscShaders.ntsc()
         else -> ShaderConfig.Default
     }
 
@@ -1465,10 +1466,11 @@ class EmulationActivity : AppCompatActivity() {
     // first, then scalers, then looks). Anime4K sits among the scalers because its residual
     // reads the original frame directly.
     private val comboOrder =
-        listOf("dedither", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa", "cas", "crt", "grade")
+        listOf("dedither", "ntsc", "anime4k", "fsr1", "sabr", "lanczos", "pixelaa", "cas", "crt", "grade")
 
     private fun comboLabel(token: String): String = when (token) {
         "dedither" -> getString(R.string.filter_dedither)
+        "ntsc" -> getString(R.string.filter_ntsc)
         "anime4k" -> getString(R.string.filter_anime4k)
         "fsr1" -> getString(R.string.filter_fsr1)
         "sabr" -> getString(R.string.filter_sabr)
@@ -1482,6 +1484,7 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun comboBuilder(token: String): com.nvanloo.retroglass.video.FilterStack.Builder? = when (token) {
         "dedither" -> com.nvanloo.retroglass.video.RetroShaders.deditherStage()
+        "ntsc" -> com.nvanloo.retroglass.video.NtscShaders.stage()
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
         "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
         "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
@@ -1589,6 +1592,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_dedither),
             getString(R.string.filter_lanczos),
             getString(R.string.filter_pixelaa),
+            getString(R.string.filter_ntsc),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)
