@@ -1455,14 +1455,17 @@ class EmulationActivity : AppCompatActivity() {
         7 -> com.nvanloo.retroglass.video.FsrShaders.fsr1(layoutStore.filterSharpness())
         8 -> com.nvanloo.retroglass.video.CrtLottesShaders.crtLottes()
         9 -> com.nvanloo.retroglass.video.SabrShaders.sabr()
+        10 -> com.nvanloo.retroglass.video.RetroShaders.dedither()
         else -> ShaderConfig.Default
     }
 
-    // Composable filter building blocks, in the order they stack (scalers first, looks
-    // last). Anime4K must be first because its residual sits on the original frame.
-    private val comboOrder = listOf("anime4k", "fsr1", "sabr", "cas", "crt", "grade")
+    // Composable filter building blocks, in the order they stack (a de-dither pre-pass
+    // first, then scalers, then looks). Anime4K sits among the scalers because its residual
+    // reads the original frame directly.
+    private val comboOrder = listOf("dedither", "anime4k", "fsr1", "sabr", "cas", "crt", "grade")
 
     private fun comboLabel(token: String): String = when (token) {
+        "dedither" -> getString(R.string.filter_dedither)
         "anime4k" -> getString(R.string.filter_anime4k)
         "fsr1" -> getString(R.string.filter_fsr1)
         "sabr" -> getString(R.string.filter_sabr)
@@ -1473,6 +1476,7 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun comboBuilder(token: String): com.nvanloo.retroglass.video.FilterStack.Builder? = when (token) {
+        "dedither" -> com.nvanloo.retroglass.video.RetroShaders.deditherStage()
         "anime4k" -> com.nvanloo.retroglass.video.Anime4KShaders.stage()
         "fsr1" -> com.nvanloo.retroglass.video.FsrShaders.stage(layoutStore.filterSharpness())
         "sabr" -> com.nvanloo.retroglass.video.SabrShaders.stage()
@@ -1560,6 +1564,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.filter_fsr1),
             getString(R.string.filter_crtlottes),
             getString(R.string.filter_sabr),
+            getString(R.string.filter_dedither),
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_video_filter)

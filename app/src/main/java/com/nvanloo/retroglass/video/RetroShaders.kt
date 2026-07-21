@@ -123,6 +123,51 @@ void main() {
     fun crtScanlines(scanDepth: Float = 0.35f, maskLow: Float = 0.88f): ShaderConfig =
         FilterStack.compose(listOf(crtStage(scanDepth, maskLow)))
 
+    // --------------------------------------------------------------------- De-dither
+    // A PS1 ordered-dither reducer: where a low-amplitude, high-frequency (dither) pattern
+    // is detected, blend toward the 3×3 local average; keep real edges. Meant as a pre-pass
+    // *before* an upscaler so it doesn't sharpen the dither cross-hatch into speckle.
+
+    private fun deditherFragment(input: String, inScale: Float, strength: Float): String = HEADER + """
+const float IN_SCALE = ${"%.5f".format(Locale.US, inScale)};
+const float STRENGTH = ${"%.4f".format(Locale.US, strength)};
+void main() {
+    vec2 px = 1.0 / (sourceSize * IN_SCALE);
+    vec3 c = texture($input, coords).rgb;
+    vec3 sum = c;
+    sum += texture($input, coords + vec2(-px.x, -px.y)).rgb;
+    sum += texture($input, coords + vec2( 0.0,  -px.y)).rgb;
+    sum += texture($input, coords + vec2( px.x, -px.y)).rgb;
+    sum += texture($input, coords + vec2(-px.x,  0.0)).rgb;
+    sum += texture($input, coords + vec2( px.x,  0.0)).rgb;
+    sum += texture($input, coords + vec2(-px.x,  px.y)).rgb;
+    sum += texture($input, coords + vec2( 0.0,   px.y)).rgb;
+    sum += texture($input, coords + vec2( px.x,  px.y)).rgb;
+    vec3 avg = sum / 9.0;
+    // Dither pixels deviate from the local average by a small amount; edges deviate a lot.
+    float dev = distance(c, avg);
+    float t = (1.0 - smoothstep(0.02, 0.12, dev)) * STRENGTH;
+    fragColor = vec4(mix(c, avg, t), 1.0);
+}
+"""
+
+    /** PS1 de-dither as a composable stage (a pre-pass; does not change resolution). */
+    fun deditherStage(strength: Float = 0.85f): FilterStack.Builder = FilterStack.Builder { ctx ->
+        FilterStack.Stage(
+            passes = listOf(
+                ShaderConfig.CustomPass(
+                    fragment = deditherFragment(ctx.inputSampler, ctx.inScale, strength),
+                    scale = ctx.inScale,
+                    linear = true,
+                )
+            ),
+            outScale = 1.0f,
+        )
+    }
+
+    fun dedither(strength: Float = 0.85f): ShaderConfig =
+        FilterStack.compose(listOf(deditherStage(strength)))
+
     // ----------------------------------------------------------------------- Grade
     // A mild colour grade: contrast, saturation and gamma. Cheap, resolution-agnostic;
     // handy as a final layer to make the picture pop.

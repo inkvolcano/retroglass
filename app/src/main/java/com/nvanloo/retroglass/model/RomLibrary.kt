@@ -744,6 +744,14 @@ object RomLibrary {
                     continue
                 }
                 val console = item.console ?: continue
+                // A .zip holding a console cartridge/disc ROM must be extracted into the
+                // library — the cores read the raw ROM, not the archive. (Arcade romsets are
+                // the exception: FBNeo needs the .zip intact, so those fall through and are
+                // referenced/moved as-is.)
+                if (item.file.extension.equals("zip", true) && console !in ARCADE_ZIP_CONSOLES) {
+                    if (extractConsoleZip(context, item.file)) count++
+                    continue
+                }
                 if (move) {
                     val destDir = File(unifiedDir(context), "roms/${console.prefKey}").apply { mkdirs() }
                     val base = item.file.nameWithoutExtension.lowercase()
