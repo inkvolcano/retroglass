@@ -206,6 +206,10 @@ class LayoutStore(context: Context) {
 
     /** Show a live FPS counter over the game. */
     fun fpsOverlay(): Boolean = prefs.getBoolean("fps_overlay", false)
+
+    /** Tilt-reactive drop shadows on the touch controls. */
+    fun tiltShadows(): Boolean = prefs.getBoolean("tilt_shadows", true)
+    fun setTiltShadows(v: Boolean) { prefs.edit().putBoolean("tilt_shadows", v).apply() }
     fun setFpsOverlay(v: Boolean) { prefs.edit().putBoolean("fps_overlay", v).apply() }
 
     /** What the phone shows while the game is on an external display. See PHONE_PANEL_* constants:

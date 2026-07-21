@@ -477,6 +477,25 @@ class EmulationActivity : AppCompatActivity() {
 
     private val sensorManager by lazy { getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager }
 
+    /**
+     * Tilt-reactive shadows on the touch controls. Registered only while the pad is actually
+     * on screen — in glasses mode the phone is a dashboard or a blank pad on a surface, so
+     * there is nothing to light and no reason to spend the samples or the battery.
+     */
+    private val tiltSource by lazy {
+        com.nvanloo.retroglass.controller.TiltSource(this) { x, y -> controllerView.setLight(x, y) }
+    }
+
+    private fun updateTiltShadows() {
+        val want = layoutStore.tiltShadows() &&
+            controllerView.visibility == View.VISIBLE &&
+            !controllerView.editMode &&
+            !pausedByDisconnect &&
+            tiltSource.isAvailable
+        controllerView.tiltShadows = want
+        if (want) tiltSource.start() else tiltSource.stop()
+    }
+
     private val gyroListener = object : android.hardware.SensorEventListener {
         override fun onSensorChanged(event: android.hardware.SensorEvent) {
             val v = retroView ?: return
@@ -490,6 +509,11 @@ class EmulationActivity : AppCompatActivity() {
         }
 
         override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+    }
+
+    private fun updateGyroAndTilt() {
+        updateGyro()
+        updateTiltShadows()
     }
 
     private fun updateGyro() {
@@ -990,6 +1014,8 @@ class EmulationActivity : AppCompatActivity() {
             return
         }
         if (!dashboardActive()) companionView.visibility = View.GONE
+        // The pad may have just appeared or gone; keep the tilt sensor in step with it.
+        controllerView.post { updateTiltShadows() }
         if (extendedMode) {
             floatingMenu.visibility = View.GONE
             gameContainer.visibility = View.GONE
@@ -2267,6 +2293,14 @@ class EmulationActivity : AppCompatActivity() {
                     addView(toggleRow(getString(R.string.menu_gyro_label), layoutStore.gyroAim()) {
                         toggleGyro(); gameMenu.refresh()
                     })
+                    if (tiltSource.isAvailable) {
+                        addView(toggleRow(
+                            getString(R.string.menu_tilt_shadows), layoutStore.tiltShadows(),
+                        ) { on ->
+                            layoutStore.setTiltShadows(on)
+                            updateTiltShadows()
+                        })
+                    }
                     if (layoutStore.gyroAim()) {
                         addView(slider(
                             getString(R.string.menu_gyro_sensitivity),
@@ -2646,6 +2680,7 @@ class EmulationActivity : AppCompatActivity() {
     private fun setEditMode(enabled: Boolean) {
         controllerView.editMode = enabled
         editBar.visibility = if (enabled) View.VISIBLE else View.GONE
+        updateTiltShadows()
     }
 
     private val manualSlots = listOf(1, 2, 3, 4)
@@ -2745,7 +2780,7 @@ class EmulationActivity : AppCompatActivity() {
         applyDisplayMode("onResume")
         // Keep a disconnect-pause in effect even after the lifecycle auto-resumed the view.
         if (pausedByDisconnect) retroView?.onPause()
-        updateGyro()
+        updateGyroAndTilt()
     }
 
     override fun onPause() {
@@ -2756,6 +2791,7 @@ class EmulationActivity : AppCompatActivity() {
             sensorManager.unregisterListener(gyroListener)
             gyroRegistered = false
         }
+        tiltSource.stop()
         persistSram()
         autoSaveState()
         super.onPause()

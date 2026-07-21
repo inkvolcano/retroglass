@@ -256,6 +256,7 @@
 
     <string name="menu_fps_label">FPS overlay</string>
     <string name="menu_gyro_label">Gyro aiming</string>
+    <string name="menu_tilt_shadows">3D tilt shadows</string>
     <string name="bios_present">present</string>
     <string name="bios_needs">needs %1$s</string>
     <string name="bios_missing_count">%1$d missing</string>
