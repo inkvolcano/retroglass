@@ -1261,8 +1261,9 @@ class MainActivity : AppCompatActivity() {
                     for (st in statuses) {
                         addView(infoRow(
                             st.system,
-                            if (st.present) getString(R.string.bios_present)
-                            else getString(R.string.bios_needs, st.filenames),
+                            // A column of the word "present" says nothing; the tick carries the
+                            // state and the words are kept for what is actually missing.
+                            if (st.present) "✓" else getString(R.string.bios_needs, st.filenames),
                             ok = st.present,
                         ))
                     }

@@ -75,4 +75,36 @@ object MenuTheme {
 
     fun alpha(color: Int, a: Int): Int =
         Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
+
+    /** Nudge a fill toward light, for the pressed state. */
+    fun lighten(color: Int, amount: Int = 22): Int = Color.argb(
+        Color.alpha(color),
+        (Color.red(color) + amount).coerceAtMost(255),
+        (Color.green(color) + amount).coerceAtMost(255),
+        (Color.blue(color) + amount).coerceAtMost(255),
+    )
+
+    /**
+     * Background for any interactive row, as a state list rather than a focus listener:
+     * pressed → lighter fill, focused → accent ring, otherwise the resting tile.
+     *
+     * Doing it declaratively matters. Swapping the drawable in `onFocusChange` covered focus
+     * but left touch with no feedback at all — you tapped a row and nothing acknowledged the
+     * contact until the screen changed.
+     */
+    fun Context.rowBackground(
+        fill: Int = TILE,
+        stroke: Int = STROKE,
+        radius: Float = RADIUS,
+    ) = android.graphics.drawable.StateListDrawable().apply {
+        addState(
+            intArrayOf(android.R.attr.state_pressed),
+            tile(fill = lighten(fill), stroke = stroke, radius = radius),
+        )
+        addState(
+            intArrayOf(android.R.attr.state_focused),
+            focusedTile(fill = fill, radius = radius),
+        )
+        addState(intArrayOf(), tile(fill = fill, stroke = stroke, radius = radius))
+    }
 }

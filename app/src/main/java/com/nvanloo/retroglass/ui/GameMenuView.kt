@@ -19,6 +19,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.nvanloo.retroglass.R
 import com.nvanloo.retroglass.ui.MenuTheme.focusedTile
+import com.nvanloo.retroglass.ui.MenuTheme.rowBackground
 import com.nvanloo.retroglass.ui.MenuTheme.tile
 import com.nvanloo.retroglass.ui.MenuTheme.tintedTile
 
@@ -224,9 +225,16 @@ class GameMenuView(context: Context) : FrameLayout(context) {
     private fun glyphButton(glyph: String, onClick: () -> Unit) = TextView(context).apply {
         text = glyph
         setTextColor(MenuTheme.DIM)
-        textSize = 16f
-        setPadding(dp(4f), dp(2f), dp(8f), dp(2f))
+        textSize = 18f
+        gravity = Gravity.CENTER
+        // These two are the most-used controls in the menu and were under the 48dp floor.
+        minWidth = dp(48f)
+        minHeight = dp(48f)
         isClickable = true
+        isFocusable = true
+        background = context.rowBackground(
+            fill = Color.TRANSPARENT, stroke = Color.TRANSPARENT, radius = 24f,
+        )
         setOnClickListener { onClick() }
     }
 
@@ -244,6 +252,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
     /** Uppercase monospace section label ("PLAY", "SETTINGS"). */
     fun group(text: String, trailing: String? = null, trailingLive: Boolean = false): View =
         LinearLayout(context).apply {
+            tag = TAG_GROUP
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2f), dp(6f), dp(2f), dp(2f))
@@ -275,19 +284,17 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = dp(heightDp)
-        val resting = if (strokeTint != null) {
-            context.tile(fill = fill, stroke = MenuTheme.alpha(strokeTint, 0x66))
+        val strokeColor =
+            if (strokeTint != null) MenuTheme.alpha(strokeTint, 0x66) else MenuTheme.STROKE
+        background = if (onClick != null) {
+            context.rowBackground(fill = fill, stroke = strokeColor)
         } else {
-            context.tile(fill = fill)
+            context.tile(fill = fill, stroke = strokeColor)
         }
-        background = resting
         if (onClick != null) {
             isFocusable = true
             tag = TAG_FOCUSABLE
             setOnClickListener { onClick() }
-            setOnFocusChangeListener { v, has ->
-                v.background = if (has) context.focusedTile(fill) else resting
-            }
         }
     }
 
@@ -296,6 +303,8 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             this.text = text
             setTextColor(color)
             textSize = size
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
             if (bold) typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
@@ -319,7 +328,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
                 value, size = 13f,
                 color = if (valueIsLive) MenuTheme.ACCENT else MenuTheme.DIM,
                 bold = valueIsLive,
-            ),
+            ).apply { maxWidth = dp(170f) },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { marginEnd = dp(8f) },
@@ -511,8 +520,12 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             setBackgroundColor(MenuTheme.BG)
             setPadding(dp(padSides), dp(2f), dp(padSides), dp(14f))
             build()
-            for (i in 0 until childCount) {
-                (getChildAt(i).layoutParams as? LinearLayout.LayoutParams)?.topMargin = dp(9f)
+            // Start at 1: margining the first child left a stray gap under the header.
+            // Group labels take more air above so sections actually read as sections.
+            for (i in 1 until childCount) {
+                val child = getChildAt(i)
+                val lp = child.layoutParams as? LinearLayout.LayoutParams ?: continue
+                lp.topMargin = if (child.tag == TAG_GROUP) dp(18f) else dp(9f)
             }
         }
         return ScrollView(context).apply {
@@ -653,25 +666,44 @@ class GameMenuView(context: Context) : FrameLayout(context) {
     private class ToggleView(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val d = context.resources.displayMetrics.density
+        /** 0 = off, 1 = on. Animated, so flipping reads as movement rather than a redraw. */
+        private var t = 0f
         var isOn: Boolean = false
-            set(v) { field = v; invalidate() }
+            set(v) {
+                if (field == v) return
+                field = v
+                android.animation.ValueAnimator.ofFloat(t, if (v) 1f else 0f).apply {
+                    duration = 150L
+                    addUpdateListener { a -> t = a.animatedValue as Float; invalidate() }
+                }.start()
+            }
 
         override fun onDraw(canvas: Canvas) {
             val h = height.toFloat()
             val r = h / 2f
-            paint.color = if (isOn) MenuTheme.alpha(MenuTheme.ACCENT, 0x47) else MenuTheme.STROKE
+            paint.color = blend(MenuTheme.STROKE, MenuTheme.alpha(MenuTheme.ACCENT, 0x47), t)
             canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), h), r, r, paint)
             val knob = 20f * d
             val inset = 3f * d
-            val cx = if (isOn) width - inset - knob / 2f else inset + knob / 2f
-            paint.color = if (isOn) MenuTheme.ACCENT else MenuTheme.DIM
+            val left = inset + knob / 2f
+            val cx = left + (width - inset - knob / 2f - left) * t
+            paint.color = blend(MenuTheme.DIM, MenuTheme.ACCENT, t)
             canvas.drawCircle(cx, h / 2f, knob / 2f, paint)
         }
+
+        private fun blend(a: Int, b: Int, f: Float): Int = Color.argb(
+            (Color.alpha(a) + (Color.alpha(b) - Color.alpha(a)) * f).toInt(),
+            (Color.red(a) + (Color.red(b) - Color.red(a)) * f).toInt(),
+            (Color.green(a) + (Color.green(b) - Color.green(a)) * f).toInt(),
+            (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * f).toInt(),
+        )
     }
 
     /** Track + fill + ringed knob, matching the design's slider exactly. */
     private class SliderView(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        init { setLayerType(LAYER_TYPE_SOFTWARE, null) }  // setShadowLayer needs software layers
         private val d = context.resources.displayMetrics.density
         var value: Float = 0f
             set(v) { field = v.coerceIn(0f, 1f); invalidate() }
@@ -694,9 +726,11 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             val kx = left + usableWidth() * value
             paint.color = MenuTheme.ACCENT
             canvas.drawRoundRect(RectF(left, cy - th / 2, kx.coerceAtLeast(left), cy + th / 2), th / 2, th / 2, paint)
-            // Knob: light disc with an accent ring.
+            // Knob: light disc with an accent ring, lifted off the track by a soft shadow.
+            paint.setShadowLayer(4f * d, 0f, 2f * d, MenuTheme.alpha(Color.BLACK, 0x88))
             paint.color = MenuTheme.ACCENT
             canvas.drawCircle(kx, cy, KNOB_D * d / 2f, paint)
+            paint.clearShadowLayer()
             paint.color = MenuTheme.FG
             canvas.drawCircle(kx, cy, (KNOB_D / 2f - 3f) * d, paint)
         }
@@ -724,6 +758,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
 
     private companion object {
         const val TAG_FOCUSABLE = "menu-focusable"
+        const val TAG_GROUP = "menu-group"
         const val STEP = 0.05f
     }
 }

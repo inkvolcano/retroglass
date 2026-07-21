@@ -420,7 +420,9 @@ class EmulationActivity : AppCompatActivity() {
                 // The counter also feeds the companion dashboard's stats; keep the game overlay
                 // hidden while the dashboard is up (it would draw over the empty game container).
                 // The menu is a full-screen surface; fpsView.bringToFront() would punch through it.
-                if (layoutStore.fpsOverlay() && !dashboardActive() && !gameMenu.isOpen) {
+                if (layoutStore.fpsOverlay() && !dashboardActive() &&
+                    !(::gameMenu.isInitialized && gameMenu.isOpen)
+                ) {
                     fpsView.visibility = View.VISIBLE
                     fpsView.text = getString(R.string.fps_value, frameCounter)
                     fpsView.bringToFront()
@@ -635,15 +637,16 @@ class EmulationActivity : AppCompatActivity() {
                 Gravity.CENTER,
             ),
         )
-        rootLayout.addView(pauseOverlay, matchParent())
-        // The menu sits above everything but the pause overlay; its own background is
-        // transparent so a filter screen's preview window shows the live game underneath.
+        // The menu sits above everything but the pause overlay - a display disconnect has to
+        // stay visible even with the menu open, so pauseOverlay is added last. Its own
+        // background is transparent so a filter screen's preview window shows the live game.
         gameMenu = GameMenuView(this).apply {
             visibility = View.GONE
             consoleTint = console.accentColor
             consoleName = console.displayName
         }
         rootLayout.addView(gameMenu, matchParent())
+        rootLayout.addView(pauseOverlay, matchParent())
         applyCutoutInsets()
         setContentView(rootLayout)
     }
@@ -1287,6 +1290,7 @@ class EmulationActivity : AppCompatActivity() {
         menuDialog?.dismiss()
         gameMenu.consoleTint = console.accentColor
         gameMenu.consoleName = console.displayName
+        gameMenu.rootStatus = getString(R.string.menu_console_running, console.displayName)
         gameMenu.open { menuRootScreen() }
     }
 
@@ -1312,7 +1316,11 @@ class EmulationActivity : AppCompatActivity() {
         val controls = navRow("◎", getString(R.string.menu_controls_input)) {
             push(getString(R.string.menu_controls_input)) { menuControlsScreen() }
         }
-        val core = navRow("⚙", getString(R.string.menu_core_options)) { showCoreOptions() }
+        val changedCount = coreOptions.overrides(consoleKey).size
+        val core = navRow(
+            "⚙", getString(R.string.menu_core_options),
+            if (changedCount > 0) getString(R.string.menu_core_changed_count, changedCount) else null,
+        ) { showCoreOptions() }
         val cheats = navRow("✦", getString(R.string.menu_cheats)) { showCheats() }
         val shot = bigButton(getString(R.string.menu_screenshot)) { takeScreenshot() }
         val exit = bigButton(getString(R.string.menu_exit), danger = true) { exitGame() }
@@ -2108,7 +2116,6 @@ class EmulationActivity : AppCompatActivity() {
                     addView(selectRow(label, value == current) {
                         applyCoreOption(opt.key, value)
                         pop()
-                        gameMenu.refresh()
                     })
                 }
             }
