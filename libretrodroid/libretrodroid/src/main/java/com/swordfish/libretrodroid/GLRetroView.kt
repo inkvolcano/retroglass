@@ -511,8 +511,13 @@ class GLRetroView(
      *
      * The view is usually larger than the picture — the renderer letterboxes inside it — so
      * anything drawn around the picture needs this to find its edges.
+     *
+     * Read directly rather than hopped onto the emulation thread. It only reads the geometry
+     * fields, touching neither GL nor the core lock, and the caller is usually the UI thread
+     * mid-layout — where a blocking hand-off stalls until the GL thread comes round, once per
+     * layout pass and once per frame of a slider drag.
      */
-    fun aspectRatio(): Float = runOnEmulationThread(true) { LibretroDroid.getAspectRatio() }
+    fun aspectRatio(): Float = LibretroDroid.getAspectRatio()
 
     /**
      * Colour drawn around the picture when it does not fill the view.
@@ -524,9 +529,9 @@ class GLRetroView(
         val r = ((color shr 16) and 0xFF) / 255f
         val g = ((color shr 8) and 0xFF) / 255f
         val b = (color and 0xFF) / 255f
-        runOnEmulationThread(true) {
-            LibretroDroid.setBackgroundColor(r, g, b)
-        }
+        // Same reasoning: this stores three floats for the next frame to clear with, so there
+        // is nothing to synchronise and no reason to block the caller.
+        LibretroDroid.setBackgroundColor(r, g, b)
     }
 
     private fun refreshAspectRatio() {
