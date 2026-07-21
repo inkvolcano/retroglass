@@ -1519,18 +1519,18 @@ class EmulationActivity : AppCompatActivity() {
 
     /** The active filter: a stacked combo if one is set, otherwise the single filter. */
     private fun currentShaderConfig(): ShaderConfig {
-        val combo = layoutStore.comboFilters()
+        val combo = layoutStore.comboFilters(console)
         if (combo.isNotEmpty()) {
             val builders = comboOrder.filter { it in combo }.mapNotNull { comboBuilder(it) }
             if (builders.isNotEmpty()) return com.nvanloo.retroglass.video.FilterStack.compose(builders)
         }
-        return shaderForIndex(layoutStore.shaderIndex())
+        return shaderForIndex(layoutStore.shaderIndex(console))
     }
 
     private fun showComboFilterPicker() {
         val tokens = comboOrder
         val labels = tokens.map { comboLabel(it) }.toTypedArray()
-        val current = layoutStore.comboFilters().toMutableSet()
+        val current = layoutStore.comboFilters(console).toMutableSet()
         val checked = tokens.map { it in current }.toBooleanArray()
         AlertDialog.Builder(this)
             .setTitle(R.string.menu_combine_filters)
@@ -1538,11 +1538,11 @@ class EmulationActivity : AppCompatActivity() {
                 if (isChecked) current.add(tokens[which]) else current.remove(tokens[which])
             }
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                layoutStore.setComboFilters(tokens.filter { it in current })
+                layoutStore.setComboFilters(console, tokens.filter { it in current })
                 retroView?.shader = currentShaderConfig()
             }
             .setNeutralButton(R.string.combo_clear) { _, _ ->
-                layoutStore.setComboFilters(emptyList())
+                layoutStore.setComboFilters(console, emptyList())
                 retroView?.shader = currentShaderConfig()
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -1613,8 +1613,8 @@ class EmulationActivity : AppCompatActivity() {
     )
 
     private fun applySingleFilter(index: Int) {
-        layoutStore.setShaderIndex(index)
-        layoutStore.setComboFilters(emptyList()) // a single filter overrides any combo
+        layoutStore.setShaderIndex(console, index)
+        layoutStore.setComboFilters(console, emptyList()) // a single filter overrides any combo
         retroView?.shader = shaderForIndex(index)
     }
 
@@ -1623,7 +1623,7 @@ class EmulationActivity : AppCompatActivity() {
         val names = indices.map { filterName(it) }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(titleRes)
-            .setSingleChoiceItems(names, indices.indexOf(layoutStore.shaderIndex())) { dialog, which ->
+            .setSingleChoiceItems(names, indices.indexOf(layoutStore.shaderIndex(console))) { dialog, which ->
                 applySingleFilter(indices[which])
                 dialog.dismiss()
             }
@@ -1656,7 +1656,7 @@ class EmulationActivity : AppCompatActivity() {
 
     /** One-tap best chain for this system (de-dither+FSR1 / FSR1 / SABR). */
     private fun applyRecommended() {
-        layoutStore.setComboFilters(recommendedCombo(console))
+        layoutStore.setComboFilters(console, recommendedCombo(console))
         retroView?.shader = currentShaderConfig()
         Toast.makeText(this, R.string.filter_recommended_applied, Toast.LENGTH_SHORT).show()
     }

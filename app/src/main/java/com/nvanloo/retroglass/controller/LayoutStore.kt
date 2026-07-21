@@ -128,6 +128,27 @@ class LayoutStore(context: Context) {
         prefs.edit().putString("shader_combo", tokens.joinToString(",")).apply()
     }
 
+    // Per-console filter settings. Each system remembers its own look (SNES keeps SABR while
+    // PS1 keeps de-dither+FSR1); the old global value is the fallback so existing installs
+    // carry their current choice over to every system on first use.
+
+    fun shaderIndex(console: Console): Int =
+        prefs.getInt("shader/${console.prefKey}", prefs.getInt("shader", 0))
+
+    fun setShaderIndex(console: Console, v: Int) {
+        prefs.edit().putInt("shader/${console.prefKey}", v).apply()
+    }
+
+    fun comboFilters(console: Console): List<String> {
+        val stored = prefs.getString("shader_combo/${console.prefKey}", null)
+            ?: prefs.getString("shader_combo", "")
+        return stored?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+    }
+
+    fun setComboFilters(console: Console, tokens: List<String>) {
+        prefs.edit().putString("shader_combo/${console.prefKey}", tokens.joinToString(",")).apply()
+    }
+
     /** Sharpen amount for the CAS / FSR1 filters, 0..1 (higher = sharper). */
     fun filterSharpness(): Float = prefs.getFloat("filter_sharpness", 0.5f).coerceIn(0f, 1f)
     fun setFilterSharpness(v: Float) {
