@@ -1489,6 +1489,21 @@ class EmulationActivity : AppCompatActivity() {
         else -> null
     }
 
+    // Systems whose games are polygonal 3D — they want a spatial upscaler (FSR1); 2D
+    // cartridge/pixel systems want the pattern scaler (SABR).
+    private val consoles3D = setOf(
+        Console.PSX, Console.PS2, Console.N64, Console.DREAMCAST, Console.SATURN,
+        Console.PSP, Console.THREEDO, Console.NAOMI, Console.ATOMISWAVE,
+    )
+
+    /** The best filter chain for a console (the §6 per-system recipe): PS1 de-dithers before
+     *  the upscale, other 3D systems get FSR1, 2D pixel-art gets SABR. */
+    private fun recommendedCombo(c: Console): List<String> = when {
+        c == Console.PSX -> listOf("dedither", "fsr1")
+        c in consoles3D -> listOf("fsr1")
+        else -> listOf("sabr")
+    }
+
     /** The active filter: a stacked combo if one is set, otherwise the single filter. */
     private fun currentShaderConfig(): ShaderConfig {
         val combo = layoutStore.comboFilters()
@@ -1577,6 +1592,12 @@ class EmulationActivity : AppCompatActivity() {
                 layoutStore.setComboFilters(emptyList()) // a single filter overrides any combo
                 retroView?.shader = shaderForIndex(which)
                 dialog.dismiss()
+            }
+            // One-tap best chain for this system (de-dither+FSR1 / FSR1 / SABR).
+            .setNeutralButton(getString(R.string.filter_recommended, console.displayName)) { _, _ ->
+                layoutStore.setComboFilters(recommendedCombo(console))
+                retroView?.shader = currentShaderConfig()
+                Toast.makeText(this, R.string.filter_recommended_applied, Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show().gamepadNavigable()

@@ -182,6 +182,8 @@
     <string name="filter_sabr">SABR HD (2D pixel-art)</string>
     <string name="filter_dedither">De-dither (PS1 pre-pass)</string>
     <string name="filter_lanczos">Lanczos sharp scale</string>
+    <string name="filter_recommended">★ Best for %1$s</string>
+    <string name="filter_recommended_applied">Applied the recommended filter chain</string>
     <string name="combo_crt">CRT scanlines</string>
     <string name="combo_grade">Colour grade</string>
     <string name="combo_clear">Clear (use single filter)</string>
