@@ -32,6 +32,39 @@ problem: audio has to be muted on the discarded frames or it doubles up.
 **Verdict.** Highest value on the list. Worth prototyping on a light core (NES) first, where a
 mistake is obvious and cheap.
 
+### Where it would go (scoped 2026-07-22)
+
+`LibretroDroid::step()` in `libretrodroid.cpp:449` is the whole loop, and it is small:
+
+```cpp
+for (size_t i = 0; i < frames * frameSpeed; i++)
+    core->retro_run();
+if (video && !video->rendersInVideoCallback()) video->renderFrame();
+```
+
+Run-ahead slots in around that, using the state calls that already exist —
+`serializeState()` (:585) and `unserializeState()` (:147):
+
+1. `retro_run()` once with the current input — this is the frame the player will *see*.
+2. `serializeState()`.
+3. `retro_run()` N more times, discarding video and audio.
+4. Render the last frame, then `unserializeState()` back to step 2's snapshot.
+
+Three things to get right, in the order they will bite:
+
+- **Audio must be muted on the discarded runs.** Everything funnels through one
+  `audio->write` (:555), so a single "suppress" flag around the inner loop covers it. Skip this
+  and every frame plays N+1 times.
+- **Input has to be sampled once** and replayed for the extra runs, or the run-ahead frames see
+  different input than the visible one and the picture jitters.
+- **Cost is (N+1)× CPU**, and all our measured headroom is GPU — the 60fps figures for
+  five-stage shader chains at 4× say nothing about this. Measure separately, on PS1/N64 first
+  since those are the CPU-heaviest cores we ship.
+
+Worth knowing before starting: `serializeState()` allocates and copies the whole state every
+frame. For PS1 that is ~1–2 MB per call at 60Hz. A reusable buffer is likely a prerequisite
+rather than an optimisation, and it is the same buffer rewind wants.
+
 ## 2. Rewind
 
 Ring buffer of save states, held button walks time backwards. Same primitive as run-ahead, far

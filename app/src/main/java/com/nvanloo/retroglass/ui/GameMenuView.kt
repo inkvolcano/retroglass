@@ -566,6 +566,30 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             addView(label("›", color = MenuTheme.CHEVRON))
         }
 
+    /**
+     * Single-select row carrying a thumbnail — the controller-layout picker, where the picture
+     * is the thing being chosen and the name is only a label for it.
+     */
+    fun previewRow(
+        image: android.graphics.Bitmap,
+        text: String,
+        selected: Boolean,
+        onClick: () -> Unit,
+    ): View = rowShell(0f, onClick = onClick).apply {
+        setPadding(dp(10f), dp(10f), dp(14f), dp(10f))
+        addView(ImageView(context).apply {
+            setImageBitmap(image)
+            background = context.tile(fill = MenuTheme.alpha(Color.BLACK, 0x33), radius = 8f)
+        }, LinearLayout.LayoutParams(image.width, image.height))
+        addView(
+            label(text, color = if (selected) MenuTheme.ACCENT else MenuTheme.FG, bold = selected),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(14f)
+            },
+        )
+        if (selected) addView(label("✓", color = MenuTheme.ACCENT, bold = true))
+    }
+
     /** Single-select row: the chosen one is ticked and tinted. */
     fun selectRow(text: String, selected: Boolean, onClick: () -> Unit): View =
         rowShell(MenuTheme.ROW_H, onClick = onClick).apply {

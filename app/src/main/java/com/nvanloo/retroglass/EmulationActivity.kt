@@ -2579,70 +2579,34 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun showLayoutPicker() {
+        ensureMenu()
+        gameMenu.push(menuTitle(R.string.menu_choose_layout)) { menuLayoutScreen() }
+    }
+
+    /**
+     * Controller layouts, each shown as a rendered thumbnail. The picture is what you are
+     * actually choosing between — the names ("Default", "Z in D-pad") only make sense once you
+     * have seen the arrangement they describe.
+     */
+    private fun menuLayoutScreen(): View = with(gameMenu) {
         val presets = controllerView.availablePresets()
-        val current = presets.indexOfFirst { it.id == controllerView.currentPresetId() }
-            .coerceAtLeast(0)
-
-        val density = resources.displayMetrics.density
-        fun dp(v: Float) = (v * density).toInt()
-        val previewW = dp(76f)
-        val previewH = (previewW * com.nvanloo.retroglass.controller.LayoutPreview.ASPECT).toInt()
-
-        val list = android.widget.ListView(this).apply {
-            choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
-            divider = null
-            dividerHeight = 0
-            setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
-        }
-        val adapter = object : android.widget.BaseAdapter() {
-            override fun getCount() = presets.size
-            override fun getItem(position: Int) = presets[position]
-            override fun getItemId(position: Int) = position.toLong()
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-                val row = (convertView as? LinearLayout) ?: LinearLayout(this@EmulationActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(6f), dp(6f), dp(6f), dp(6f))
-                    addView(android.widget.ImageView(this@EmulationActivity).apply {
-                        id = android.R.id.icon
-                        layoutParams = LinearLayout.LayoutParams(previewW, previewH)
-                        setBackgroundColor(Color.parseColor("#11000000"))
-                    })
-                    addView(TextView(this@EmulationActivity).apply {
-                        id = android.R.id.text1
-                        textSize = 17f
-                        setPadding(dp(16f), 0, 0, 0)
-                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    })
-                }
-                val preset = presets[position]
-                val img = row.findViewById<android.widget.ImageView>(android.R.id.icon)
-                img.setImageBitmap(
-                    com.nvanloo.retroglass.controller.LayoutPreview.render(
-                        console, preset.controls, previewW, previewH,
-                    )
+        val currentId = controllerView.currentPresetId()
+        val w = (76 * resources.displayMetrics.density).toInt()
+        val h = (w * com.nvanloo.retroglass.controller.LayoutPreview.ASPECT).toInt()
+        body {
+            for (preset in presets) {
+                val shot = com.nvanloo.retroglass.controller.LayoutPreview.render(
+                    console, preset.controls, w, h,
                 )
-                val label = row.findViewById<TextView>(android.R.id.text1)
-                label.text = if (position == current) "${preset.name}  ✓" else preset.name
-                return row
+                addView(previewRow(shot, preset.name, preset.id == currentId) {
+                    // setPreset persists the choice itself; nothing to do here but go back.
+                    controllerView.setPreset(preset.id)
+                    pop()
+                })
             }
         }
-        list.adapter = adapter
-        list.setItemChecked(current, true)
-        list.setSelection(current)
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.menu_choose_layout)
-            .setView(list)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-        list.setOnItemClickListener { _, _, which, _ ->
-            controllerView.setPreset(presets[which].id)
-            dialog.dismiss()
-        }
-        dialog.show()
-        dialog.gamepadNavigable()
     }
+
 
     private fun showScreenSizeDialog() {
         ensureMenu()
