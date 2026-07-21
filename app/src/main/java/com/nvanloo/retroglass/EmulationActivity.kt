@@ -628,7 +628,33 @@ class EmulationActivity : AppCompatActivity() {
             ),
         )
         rootLayout.addView(pauseOverlay, matchParent())
+        applyCutoutInsets()
         setContentView(rootLayout)
+    }
+
+    /**
+     * Pushes the top overlays clear of a display cutout. We draw edge-to-edge behind the
+     * status bar, so on a phone with a centred punch-hole the FPS readout (TOP|CENTER) lands
+     * squarely under the camera and the "≡" button can clip the corner on a notched device.
+     * The cutout inset is the only one that matters here — the overlays are meant to sit over
+     * the game, so system-bar insets are deliberately ignored.
+     */
+    private fun applyCutoutInsets() {
+        val baseTop = mapOf(
+            fpsView to 8, floatingMenu to 16, editBar to 16,
+        )
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { _, insets ->
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top
+            for ((view, base) in baseTop) {
+                val lp = view.layoutParams as? FrameLayout.LayoutParams ?: continue
+                val want = base + cutout
+                if (lp.topMargin != want) {
+                    lp.topMargin = want
+                    view.layoutParams = lp
+                }
+            }
+            insets
+        }
     }
 
     private fun buildEditBar(): LinearLayout {
