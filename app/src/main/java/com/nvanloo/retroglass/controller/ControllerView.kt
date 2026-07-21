@@ -42,7 +42,7 @@ class ControllerView @JvmOverloads constructor(
          * The D-pad wears a thinner rim. Its arms are only ~0.62r wide, so a rim scaled off the
          * full radius eats most of an arm and the cross reads as outlined rather than moulded.
          */
-        const val BEZEL_WIDTH_CROSS = 0.075f
+        const val BEZEL_WIDTH_CROSS = 0.0375f
         /** How far the body is pushed off the glass, as a fraction of radius. */
         const val EXTRUDE_DEPTH = 0.10f
         /** Contact shadow on the screen underneath. */
