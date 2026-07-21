@@ -781,6 +781,13 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * A screen's heading, from the label of the row that opens it — same rule as the in-game
+     * menu: rows announce what they do, headings are already the answer.
+     */
+    private fun menuTitle(res: Int): String =
+        getString(res).substringBefore(" (").trimEnd('…', '.', ' ')
+
     /** Opens the library overlay at its root when a screen is reached from outside the gear. */
     private fun openLibraryMenuIfNeeded() {
         if (libraryMenu.isOpen) return
@@ -1023,7 +1030,7 @@ class MainActivity : AppCompatActivity() {
         val modes = availableScreenModes()
         openLibraryMenuIfNeeded()
         libraryMenu.pushSelect(
-            getString(R.string.screen_mode_title),
+            menuTitle(R.string.screen_mode_title),
             modes.map { screenModeLabel(it) },
             modes.indexOf(layoutStore.screenMode()).coerceAtLeast(0),
         ) { which ->
@@ -1072,83 +1079,110 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onPlayerSlotTap(port: Int, onPort: List<Surface>) {
-        val opts = mutableListOf<String>()
-        onPort.forEach { opts.add(getString(R.string.configure_surface, it.name)) }
-        opts.add(getString(R.string.assign_to_player, port + 1))
-        AlertDialog.Builder(this)
-            .setItems(opts.toTypedArray()) { _, which ->
-                if (which < onPort.size) showSurfaceConfig(onPort[which]) else assignToPort(port)
+        // Straight to the surface when there is only one on this port - an intermediate list
+        // of one item is a tap that asks a question it already knows the answer to.
+        if (onPort.size == 1) {
+            showSurfaceConfig(onPort.first())
+            return
+        }
+        openLibraryMenuIfNeeded()
+        libraryMenu.push(getString(R.string.player_n, port + 1)) {
+            with(libraryMenu) {
+                body {
+                    for (surface in onPort) {
+                        addView(navRow(null, surface.name, portLabel(port), valueIsLive = false) {
+                            showSurfaceConfig(surface)
+                        })
+                    }
+                    addView(navRow(null, getString(R.string.assign_to_player, port + 1)) {
+                        assignToPort(port)
+                    })
+                }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun assignToPort(port: Int) {
         val surfaces = availableSurfaces()
-        val labels = surfaces.map { it.name }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.assign_to_player, port + 1))
-            .setItems(labels) { _, which ->
-                inputConfig.setPort(surfaces[which].key, port); buildControllerBar()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        openLibraryMenuIfNeeded()
+        libraryMenu.pushActions(
+            getString(R.string.assign_to_player, port + 1),
+            surfaces.map { surface ->
+                surface.name to {
+                    inputConfig.setPort(surface.key, port)
+                    buildControllerBar()
+                    libraryMenu.close()
+                }
+            },
+        )
     }
 
     private fun showSurfaceConfig(s: Surface) {
         // The touchscreen only has a player assignment — go straight to it.
         if (!s.isGamepad) { showPlayerPicker(s); return }
-        val opts = mutableListOf(getString(R.string.ctrl_set_player))
-        run {
-            opts += getString(if (inputConfig.leftStickAsDpad(s.key)) R.string.ctrl_stick_dpad_on else R.string.ctrl_stick_dpad_off)
-            opts += getString(R.string.ctrl_remap)
-            opts += getString(R.string.ctrl_stick_tuning)
-            opts += getString(R.string.ctrl_reset_map)
-        }
-        AlertDialog.Builder(this)
-            .setTitle(s.name)
-            .setItems(opts.toTypedArray()) { _, which ->
-                when (opts[which]) {
-                    getString(R.string.ctrl_set_player) -> showPlayerPicker(s)
-                    getString(R.string.ctrl_remap) -> showRemap(s.key, s.name)
-                    getString(R.string.ctrl_stick_tuning) -> showStickTuning(s.key, s.name)
-                    getString(R.string.ctrl_reset_map) -> {
+        openLibraryMenuIfNeeded()
+        libraryMenu.push(s.name) {
+            with(libraryMenu) {
+                body {
+                    addView(navRow(null, getString(R.string.ctrl_set_player),
+                        portLabel(portFor(s.key, s.device)), valueIsLive = false) {
+                        showPlayerPicker(s)
+                    })
+                    // A switch, not a list item whose label rewrites itself.
+                    addView(toggleRow(
+                        getString(R.string.ctrl_stick_dpad), inputConfig.leftStickAsDpad(s.key),
+                    ) { on ->
+                        inputConfig.setLeftStickAsDpad(s.key, on)
+                        buildControllerBar()
+                    })
+                    addView(navRow(null, getString(R.string.ctrl_remap)) {
+                        libraryMenu.close(); showRemap(s.key, s.name)
+                    })
+                    addView(navRow(null, getString(R.string.ctrl_stick_tuning)) {
+                        showStickTuning(s.key, s.name)
+                    })
+                    addView(spacer())
+                    addView(bigButton(getString(R.string.ctrl_reset_map), danger = true) {
                         inputConfig.clearBindings(s.key)
-                        Toast.makeText(this, R.string.ctrl_map_reset, Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        inputConfig.setLeftStickAsDpad(s.key, !inputConfig.leftStickAsDpad(s.key)); buildControllerBar()
-                    }
+                        Toast.makeText(this@MainActivity, R.string.ctrl_map_reset, Toast.LENGTH_SHORT).show()
+                    })
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        }
     }
 
     private fun showPlayerPicker(s: Surface) {
         val ports = listOf(0, 1, 2, 3, InputConfig.PORT_OFF)
-        val labels = ports.map { portLabel(it) }.toTypedArray()
-        val current = ports.indexOf(portFor(s.key, s.device)).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.ctrl_set_player))
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                inputConfig.setPort(s.key, ports[which]); buildControllerBar(); dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        openLibraryMenuIfNeeded()
+        libraryMenu.pushSelect(
+            menuTitle(R.string.ctrl_set_player),
+            ports.map { portLabel(it) },
+            ports.indexOf(portFor(s.key, s.device)).coerceAtLeast(0),
+        ) { which ->
+            inputConfig.setPort(s.key, ports[which])
+            buildControllerBar()
+        }
     }
 
     private fun showStickTuning(key: String, name: String) {
-        val d = resources.displayMetrics.density
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; val p = (20 * d).toInt(); setPadding(p, p, p, 0)
+        openLibraryMenuIfNeeded()
+        libraryMenu.push(name) {
+            with(libraryMenu) {
+                body(padSides = 18f) {
+                    // Dead zone 0..0.5, sensitivity 0.5..2.0, each printing its own unit.
+                    addView(slider(
+                        getString(R.string.ctrl_deadzone),
+                        (inputConfig.deadzone(key) / 0.5f).coerceIn(0f, 1f),
+                        format = { "${(it * 50).toInt()}%" },
+                    ) { inputConfig.setDeadzone(key, it * 0.5f) })
+                    addView(slider(
+                        getString(R.string.ctrl_sensitivity),
+                        ((inputConfig.sensitivity(key) - 0.5f) / 1.5f).coerceIn(0f, 1f),
+                        format = { "%.2f×".format(0.5f + it * 1.5f) },
+                    ) { inputConfig.setSensitivity(key, 0.5f + it * 1.5f) })
+                }
+            }
         }
-        addSlider(container, 50, (inputConfig.deadzone(key) * 100f).toInt(),
-            { getString(R.string.ctrl_deadzone_value, it) }) { p -> inputConfig.setDeadzone(key, p / 100f) }
-        addSlider(container, 150, ((inputConfig.sensitivity(key) - 0.5f) * 100f).toInt(),
-            { getString(R.string.ctrl_sensitivity_value, String.format("%.2f", 0.5f + it / 100f)) }) { p -> inputConfig.setSensitivity(key, 0.5f + p / 100f) }
-        AlertDialog.Builder(this).setTitle(name).setView(container)
-            .setPositiveButton(android.R.string.ok, null).show().gamepadNavigable()
     }
 
     private fun showRemap(key: String, name: String) {
@@ -1174,17 +1208,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> bindingCapture = null; bindingCaptureDevice = null }
             .show().gamepadNavigable()
-    }
-
-    private fun addSlider(parent: LinearLayout, maxProgress: Int, initialProgress: Int, labelFor: (Int) -> String, onChange: (Int) -> Unit) {
-        val label = TextView(this).apply { text = labelFor(initialProgress); textSize = 14f }
-        val seek = SeekBar(this).apply { max = maxProgress; progress = initialProgress.coerceIn(0, maxProgress) }
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) { label.text = labelFor(p); onChange(p) }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
-        parent.addView(label); parent.addView(seek)
     }
 
     private val deviceListener = object : InputManager.InputDeviceListener {
@@ -1246,7 +1269,7 @@ class MainActivity : AppCompatActivity() {
     private fun showBiosStatus() {
         val statuses = BiosCatalog.status(this)
         openLibraryMenuIfNeeded()
-        libraryMenu.push(getString(R.string.bios_status_title)) {
+        libraryMenu.push(menuTitle(R.string.bios_status_title)) {
             with(libraryMenu) {
                 body {
                     val missing = statuses.count { !it.present }

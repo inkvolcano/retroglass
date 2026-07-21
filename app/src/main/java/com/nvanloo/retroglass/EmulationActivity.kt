@@ -1653,28 +1653,24 @@ class EmulationActivity : AppCompatActivity() {
 
     /** Dead-zone and sensitivity sliders for a gamepad's analog sticks. */
     private fun showStickTuning(key: String, name: String) {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val p = (20 * resources.displayMetrics.density).toInt()
-            setPadding(p, p, p, 0)
+        ensureMenu()
+        gameMenu.push(name) {
+            with(gameMenu) {
+                body(padSides = 18f) {
+                    // Dead zone 0..0.5, sensitivity 0.5..2.0, each printing its own unit.
+                    addView(slider(
+                        getString(R.string.ctrl_deadzone),
+                        (inputConfig.deadzone(key) / 0.5f).coerceIn(0f, 1f),
+                        format = { "${(it * 50).toInt()}%" },
+                    ) { inputConfig.setDeadzone(key, it * 0.5f) })
+                    addView(slider(
+                        getString(R.string.ctrl_sensitivity),
+                        ((inputConfig.sensitivity(key) - 0.5f) / 1.5f).coerceIn(0f, 1f),
+                        format = { "%.2f×".format(0.5f + it * 1.5f) },
+                    ) { inputConfig.setSensitivity(key, 0.5f + it * 1.5f) })
+                }
+            }
         }
-        // Dead zone 0..0.5 → 0..50.
-        addSlider(
-            container, maxProgress = 50,
-            initialProgress = (inputConfig.deadzone(key) * 100f).toInt(),
-            labelFor = { getString(R.string.ctrl_deadzone_value, it) },
-        ) { p -> inputConfig.setDeadzone(key, p / 100f) }
-        // Sensitivity 0.5..2.0 → 0..150.
-        addSlider(
-            container, maxProgress = 150,
-            initialProgress = ((inputConfig.sensitivity(key) - 0.5f) * 100f).toInt(),
-            labelFor = { getString(R.string.ctrl_sensitivity_value, String.format("%.2f", 0.5f + it / 100f)) },
-        ) { p -> inputConfig.setSensitivity(key, 0.5f + p / 100f) }
-        AlertDialog.Builder(this)
-            .setTitle(name)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok, null)
-            .show().gamepadNavigable()
     }
 
     private fun showPlayerPicker(key: String, name: String, device: InputDevice?) {
@@ -2646,31 +2642,6 @@ class EmulationActivity : AppCompatActivity() {
         }
         dialog.show()
         dialog.gamepadNavigable()
-    }
-
-    /** Adds a labelled slider to [parent]; [onChange] receives the raw progress. */
-    private fun addSlider(
-        parent: LinearLayout,
-        maxProgress: Int,
-        initialProgress: Int,
-        labelFor: (Int) -> String,
-        onChange: (Int) -> Unit,
-    ) {
-        val label = TextView(this).apply { text = labelFor(initialProgress); textSize = 14f }
-        val seek = SeekBar(this).apply {
-            max = maxProgress
-            progress = initialProgress.coerceIn(0, maxProgress)
-        }
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
-                label.text = labelFor(p)
-                onChange(p)
-            }
-            override fun onStartTrackingTouch(sb: SeekBar) {}
-            override fun onStopTrackingTouch(sb: SeekBar) {}
-        })
-        parent.addView(label)
-        parent.addView(seek)
     }
 
     private fun showScreenSizeDialog() {

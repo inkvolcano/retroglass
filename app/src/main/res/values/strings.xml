@@ -83,6 +83,9 @@
     <string name="ctrl_remap">Remap buttons…</string>
     <string name="ctrl_stick_dpad_on">Left stick as D-pad: On</string>
     <string name="ctrl_stick_dpad_off">Left stick as D-pad: Off</string>
+    <string name="ctrl_stick_dpad">Left stick as D-pad</string>
+    <string name="ctrl_deadzone">Dead zone</string>
+    <string name="ctrl_sensitivity">Stick sensitivity</string>
     <string name="ctrl_reset_map">Reset button mapping</string>
     <string name="ctrl_map_reset">Button mapping reset</string>
     <string name="remap_title">Remap: %1$s</string>
