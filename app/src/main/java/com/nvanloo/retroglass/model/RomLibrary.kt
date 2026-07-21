@@ -26,6 +26,9 @@ object RomLibrary {
     /** Non-playable companion files copied next to PS1 discs (LibCrypt subchannel). */
     private val PSX_SIDECAR_EXTENSIONS = setOf("sbi", "sub", "m3u")
 
+    /** Disc data/track files that a .cue sheet of the same name owns — never listed alone. */
+    private val DISC_DATA_EXTS = setOf("iso", "bin", "img", "mdf", "nrg")
+
     fun romsDir(context: Context, console: Console): File =
         File(context.filesDir, "roms/${console.prefKey}").apply { mkdirs() }
 
@@ -44,6 +47,10 @@ object RomLibrary {
             val dir = romsDir(context, console)
             val files = dir.listFiles()?.sortedBy { it.name.lowercase() } ?: continue
             val hasAnyCue = files.any { it.extension.equals("cue", true) }
+            // Base names of .cue sheets: their data files (.iso/.bin/.img/…) are part of the
+            // same disc and must not appear as separate library entries.
+            val cueBases = files.filter { it.extension.equals("cue", true) }
+                .mapTo(HashSet()) { it.nameWithoutExtension.lowercase() }
             // Discs named inside an .m3u are hidden — the playlist is the single entry.
             val playlistRefs = files.filter { it.extension.equals("m3u", true) }
                 .flatMap { runCatching { it.readLines() }.getOrDefault(emptyList()) }
@@ -53,6 +60,9 @@ object RomLibrary {
             for (f in files) {
                 val ext = f.extension.lowercase()
                 if (ext != "m3u" && f.name.lowercase() in playlistRefs) continue
+                // A data file belonging to a .cue of the same name is that disc, not a game
+                // of its own (e.g. "Game.cue" + "Game.iso" must list once).
+                if (ext in DISC_DATA_EXTS && f.nameWithoutExtension.lowercase() in cueBases) continue
                 val playable = when {
                     ext in console.romExtensions -> true
                     // .bin: always playable on Mega Drive; on PS1 only when it isn't
