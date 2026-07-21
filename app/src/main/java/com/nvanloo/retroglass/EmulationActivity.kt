@@ -39,6 +39,8 @@ import com.nvanloo.retroglass.controller.ControllerView
 import com.nvanloo.retroglass.controller.LayoutStore
 import com.nvanloo.retroglass.model.Console
 import com.nvanloo.retroglass.model.RomLibrary
+import com.nvanloo.retroglass.ui.GameMenuView
+import com.nvanloo.retroglass.ui.MenuTheme
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
@@ -88,6 +90,7 @@ class EmulationActivity : AppCompatActivity() {
     private var retroView: GLRetroView? = null
     private var presentation: GamePresentation? = null
     private var menuDialog: AlertDialog? = null
+    private lateinit var gameMenu: GameMenuView
     private lateinit var layoutStore: LayoutStore
     private lateinit var inputConfig: com.nvanloo.retroglass.controller.InputConfig
     private lateinit var coreOptions: com.nvanloo.retroglass.controller.CoreOptions
@@ -363,7 +366,11 @@ class EmulationActivity : AppCompatActivity() {
         gameContainer.addView(view, matchParent())
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() = showMenu()
+            override fun handleOnBackPressed() {
+                // Back walks the menu's own stack first, so a sub-screen returns to the root
+                // rather than dropping straight out to the game.
+                if (!gameMenu.onBack()) showMenu()
+            }
         })
 
         applyDisplayMode("onCreate")
@@ -628,6 +635,14 @@ class EmulationActivity : AppCompatActivity() {
             ),
         )
         rootLayout.addView(pauseOverlay, matchParent())
+        // The menu sits above everything but the pause overlay; its own background is
+        // transparent so a filter screen's preview window shows the live game underneath.
+        gameMenu = GameMenuView(this).apply {
+            visibility = View.GONE
+            consoleTint = console.accentColor
+            consoleName = console.displayName
+        }
+        rootLayout.addView(gameMenu, matchParent())
         applyCutoutInsets()
         setContentView(rootLayout)
     }
@@ -1264,55 +1279,195 @@ class EmulationActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------ menu
 
+    // ------------------------------------------------- in-game menu (overlay)
+
+    private fun isLandscape() =
+        resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    /** Opens the custom in-game menu. See [GameMenuView] and docs/menu-design-brief.md. */
     private fun showMenu() {
         if (controllerView.editMode) return
-        val actions = mutableListOf<Pair<String, () -> Unit>>()
-        actions += getString(R.string.menu_save_state) to { saveState() }
-        actions += getString(R.string.menu_load_state) to { loadState() }
-        actions += getString(
-            if (fastForward) R.string.menu_fast_forward_on else R.string.menu_fast_forward_off,
-        ) to { toggleFastForward() }
-        actions += getString(R.string.menu_screen_size) to { showScreenSizeDialog() }
-        actions += getString(R.string.menu_video_filter) to { showVideoFilterPicker() }
-        actions += getString(R.string.menu_combine_filters) to { showComboFilterPicker() }
-        actions += getString(R.string.menu_upscale_factor) to { showUpscaleFactorPicker() }
-        actions += getString(R.string.menu_filter_settings) to { showFilterSettings() }
-        actions += getString(R.string.menu_filter_presets) to { showFilterPresets() }
-        actions += getString(R.string.menu_res_boost) to { toggleInternalResolution() }
-        actions += getString(R.string.menu_core_options) to { showCoreOptions() }
-        actions += getString(R.string.menu_cheats) to { showCheats() }
-        actions += getString(R.string.menu_screenshot) to { takeScreenshot() }
-        if ((retroView?.getAvailableDisks() ?: 0) > 1) {
-            actions += getString(R.string.menu_swap_disc) to { showDiscSwap() }
-        }
-        // Touch-controller layout options only matter when the phone shows the pad.
-        if (controllerView.visibility == View.VISIBLE) {
-            actions += getString(R.string.menu_choose_layout) to { showLayoutPicker() }
-            actions += getString(R.string.menu_edit_layout) to { setEditMode(true) }
-            actions += getString(R.string.menu_turbo) to { showTurboConfig() }
-        }
-        // On an external display the phone can be the touch pad or a stats + mapping dashboard.
-        if (extendedMode) {
-            actions += getString(R.string.menu_phone_panel) to { showPhonePanelPicker() }
-        }
-        actions += getString(
-            if (layoutStore.rumbleEnabled()) R.string.menu_rumble_on else R.string.menu_rumble_off,
-        ) to { layoutStore.setRumbleEnabled(!layoutStore.rumbleEnabled()) }
-        actions += getString(R.string.menu_controllers) to { showControllers() }
-        if (hasControllerTypeChoices()) {
-            actions += getString(R.string.menu_controller_type) to { showControllerTypes() }
-        }
-        actions += getString(R.string.menu_display_extras) to { showDisplayExtras() }
-        actions += getString(R.string.menu_reset) to { retroView?.reset(); Unit }
-        actions += getString(R.string.menu_exit) to { exitGame() }
-
-        val names = actions.map { it.first }.toTypedArray()
         menuDialog?.dismiss()
-        menuDialog = AlertDialog.Builder(this)
-            .setTitle(romFile.nameWithoutExtension)
-            .setItems(names) { _, which -> actions[which].second() }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        gameMenu.consoleTint = console.accentColor
+        gameMenu.consoleName = console.displayName
+        gameMenu.open { menuRootScreen() }
+    }
+
+    /** The single filter name shown on the "Filters & look" row, or the chain length. */
+    private fun filterSummary(): String {
+        val combo = layoutStore.comboFilters(console)
+        if (combo.isNotEmpty()) return getString(R.string.menu_combo_count, combo.size)
+        val idx = layoutStore.shaderIndex(console)
+        return if (idx == 0) getString(R.string.menu_filters_none) else filterName(idx)
+    }
+
+    private fun menuRootScreen(): View = with(gameMenu) {
+        val save = actionTile(
+            getString(R.string.menu_save_short), getString(R.string.menu_state_sub),
+        ) { saveState(); gameMenu.close() }
+        val load = actionTile(
+            getString(R.string.menu_load_short), getString(R.string.menu_state_sub),
+        ) { loadState(); gameMenu.close() }
+        val ff = toggleRow(getString(R.string.menu_fast_forward), fastForward) { toggleFastForward() }
+        val filters = navRow("▷", getString(R.string.menu_filters_look), filterSummary()) {
+            push(getString(R.string.menu_filters_look)) { menuVideoScreen() }
+        }
+        val controls = navRow("◎", getString(R.string.menu_controls_input)) {
+            push(getString(R.string.menu_controls_input)) { menuControlsScreen() }
+        }
+        val core = navRow("⚙", getString(R.string.menu_core_options)) { showCoreOptions() }
+        val cheats = navRow("✦", getString(R.string.menu_cheats)) { showCheats() }
+        val shot = bigButton(getString(R.string.menu_screenshot)) { takeScreenshot() }
+        val exit = bigButton(getString(R.string.menu_exit), danger = true) { exitGame() }
+
+        // Landscape gets the design's four category columns instead of a scrolling list.
+        if (isLandscape()) {
+            return columns(
+                columnOf(getString(R.string.menu_group_play), save, load, ff),
+                columnOf(getString(R.string.menu_group_video), filters, shot),
+                columnOf(getString(R.string.menu_group_controls), controls, cheats),
+                columnOf(getString(R.string.menu_group_system), core, exit),
+            )
+        }
+        body {
+            addView(group(getString(R.string.menu_group_play)))
+            addView(pair(save, load))
+            addView(ff)
+            addView(group(getString(R.string.menu_group_settings)))
+            addView(filters)
+            addView(controls)
+            addView(core)
+            addView(cheats)
+            addView(spacer())
+            addView(pair(shot, exit))
+        }
+    }
+
+    private fun menuVideoScreen(): View = with(gameMenu) {
+        body {
+            addView(navRow(null, getString(R.string.menu_video_filter), filterSummary()) {
+                showVideoFilterPicker()
+            })
+            addView(navRow(null, getString(R.string.menu_combine_filters)) {
+                push(getString(R.string.menu_combine_filters)) { menuChainScreen() }
+            })
+            addView(navRow(null, getString(R.string.menu_filter_settings)) {
+                push(getString(R.string.menu_filter_settings)) { menuFilterSettingsScreen() }
+            })
+            addView(navRow(null, getString(R.string.menu_upscale_factor), upscaleLabel()) {
+                showUpscaleFactorPicker()
+            })
+            addView(navRow(null, getString(R.string.menu_filter_presets)) { showFilterPresets() })
+            addView(navRow(null, getString(R.string.menu_screen_size)) { showScreenSizeDialog() })
+            addView(navRow(null, getString(R.string.menu_res_boost)) { toggleInternalResolution() })
+            addView(navRow(null, getString(R.string.menu_display_extras)) { showDisplayExtras() })
+        }
+    }
+
+    private fun upscaleLabel(): String {
+        val stored = layoutStore.upscaleFactor()
+        return if (stored == LayoutStore.UPSCALE_AUTO) "×${autoUpscale()}" else "×$stored"
+    }
+
+    private fun menuControlsScreen(): View = with(gameMenu) {
+        body {
+            if (controllerView.visibility == View.VISIBLE) {
+                addView(navRow(null, getString(R.string.menu_choose_layout)) { showLayoutPicker() })
+                addView(navRow(null, getString(R.string.menu_edit_layout)) {
+                    gameMenu.close(); setEditMode(true)
+                })
+                addView(navRow(null, getString(R.string.menu_turbo)) { showTurboConfig() })
+            }
+            if (extendedMode) {
+                addView(navRow(null, getString(R.string.menu_phone_panel)) { showPhonePanelPicker() })
+            }
+            addView(toggleRow(getString(R.string.menu_rumble_label), layoutStore.rumbleEnabled()) {
+                layoutStore.setRumbleEnabled(it)
+            })
+            addView(navRow(null, getString(R.string.menu_controllers)) { showControllers() })
+            if (hasControllerTypeChoices()) {
+                addView(navRow(null, getString(R.string.menu_controller_type)) { showControllerTypes() })
+            }
+            if ((retroView?.getAvailableDisks() ?: 0) > 1) {
+                addView(navRow(null, getString(R.string.menu_swap_disc)) { showDiscSwap() })
+            }
+            addView(navRow(null, getString(R.string.menu_reset)) { retroView?.reset(); gameMenu.close() })
+        }
+    }
+
+    /**
+     * Sliders over a live window onto the running game. The preview is a transparent gap, not a
+     * capture, so dragging a slider changes what you are looking at in real time.
+     */
+    private fun menuFilterSettingsScreen(): View = with(gameMenu) {
+        fun live(key: String, label: Int) = slider(getString(label), param(key)) {
+            layoutStore.setFilterParam(key, it)
+            retroView?.shader = currentShaderConfig()
+        }
+        LinearLayout(this@EmulationActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(previewWindow(96f, getString(R.string.menu_live_caption, filterSummary())))
+            addView(body(padSides = 18f) {
+                addView(slider(getString(R.string.menu_slider_sharpness), layoutStore.filterSharpness()) {
+                    layoutStore.setFilterSharpness(it)
+                    retroView?.shader = currentShaderConfig()
+                })
+                addView(live("scanline", R.string.menu_slider_scanline))
+                addView(live("bloom", R.string.menu_slider_bloom))
+                addView(live("ntsc", R.string.menu_slider_ntsc))
+                addView(live("lcdgrid", R.string.menu_slider_lcdgrid))
+                addView(live("curve", R.string.menu_slider_curve))
+                addView(pair(
+                    bigButton(getString(R.string.menu_reset_params)) {
+                        paramDefaults.forEach { (k, v) -> layoutStore.setFilterParam(k, v) }
+                        retroView?.shader = currentShaderConfig()
+                        gameMenu.refresh()
+                    },
+                    bigButton(getString(R.string.menu_save_look), tint = true) { showFilterPresets() },
+                ))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+    }
+
+    /**
+     * "Combine filters" as the signal chain it actually is. The ordinals are the point: the
+     * composer runs stages in [comboOrder], so a checklist would misrepresent it.
+     */
+    private fun menuChainScreen(): View = with(gameMenu) {
+        val combo = layoutStore.comboFilters(console).toMutableList()
+        fun apply() {
+            layoutStore.setComboFilters(console, comboOrder.filter { it in combo })
+            retroView?.shader = currentShaderConfig()
+            gameMenu.refresh()
+        }
+        body(padSides = 16f) {
+            addView(TextView(this@EmulationActivity).apply {
+                text = getString(R.string.menu_chain_hint)
+                setTextColor(MenuTheme.GROUP)
+                textSize = 11f
+            })
+            addView(TextView(this@EmulationActivity).apply {
+                text = getString(R.string.menu_chain_in)
+                setTextColor(MenuTheme.GROUP)
+                textSize = 11f
+            })
+            var n = 0
+            for (token in comboOrder) {
+                if (token !in combo) continue
+                n++
+                addView(pipelineRow(n, comboLabel(token), true) { combo.remove(token); apply() })
+            }
+            addView(TextView(this@EmulationActivity).apply {
+                text = getString(R.string.menu_chain_out)
+                setTextColor(MenuTheme.GROUP)
+                textSize = 11f
+            })
+            addView(group(getString(R.string.menu_chain_off)))
+            for (token in comboOrder) {
+                if (token in combo) continue
+                addView(addRow(comboLabel(token)) { combo.add(token); apply() })
+            }
+        }
     }
 
     private fun showDiscSwap() {

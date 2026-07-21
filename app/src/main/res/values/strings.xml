@@ -117,6 +117,7 @@
     <string name="screen_pos_h">Horizontal position</string>
     <string name="screen_pos_v">Vertical position</string>
     <string name="screen_reset">Reset</string>
+    <string name="menu_rumble_label">Rumble (vibration)</string>
     <string name="menu_rumble_on">Rumble (vibration): On</string>
     <string name="menu_rumble_off">Rumble (vibration): Off</string>
     <string name="menu_video_filter">Video filter</string>
@@ -213,6 +214,35 @@
     <string name="param_ntsc">NTSC colour bleed: %1$d%%</string>
     <string name="param_lcdgrid">LCD grid depth: %1$d%%</string>
     <string name="param_curve">Screen curvature: %1$d%%</string>
+
+    <!-- In-game menu (custom overlay) -->
+    <string name="menu_console_running">%1$s · running</string>
+    <string name="menu_group_play">Play</string>
+    <string name="menu_group_settings">Settings</string>
+    <string name="menu_group_video">Video</string>
+    <string name="menu_group_controls">Controls</string>
+    <string name="menu_group_system">System</string>
+    <string name="menu_save_short">Save</string>
+    <string name="menu_load_short">Load</string>
+    <string name="menu_state_sub">state</string>
+    <string name="menu_fast_forward">Fast forward</string>
+    <string name="menu_filters_look">Filters &amp; look</string>
+    <string name="menu_controls_input">Controls &amp; input</string>
+    <string name="menu_live_caption">◉ LIVE · %1$s</string>
+    <string name="menu_reset_params">Reset</string>
+    <string name="menu_save_look">Save as look</string>
+    <string name="menu_chain_hint">Signal chain · runs top to bottom</string>
+    <string name="menu_chain_in">▸ raw frame</string>
+    <string name="menu_chain_out">▸ to screen</string>
+    <string name="menu_chain_off">Off · tap to add</string>
+    <string name="menu_slider_sharpness">Sharpness</string>
+    <string name="menu_slider_bloom">Bloom</string>
+    <string name="menu_slider_scanline">Scanline strength</string>
+    <string name="menu_slider_ntsc">NTSC bleed</string>
+    <string name="menu_slider_lcdgrid">LCD grid</string>
+    <string name="menu_slider_curve">Curvature</string>
+    <string name="menu_filters_none">None</string>
+    <string name="menu_combo_count">%1$d in chain</string>
 
     <string name="filtercat_scale">Scale &amp; sharpen</string>
     <string name="filtercat_upscale">Upscalers (AI / 3D / pixel-art)</string>
