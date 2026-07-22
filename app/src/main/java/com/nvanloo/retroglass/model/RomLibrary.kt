@@ -301,8 +301,6 @@ object RomLibrary {
             "naomi" in n -> Console.NAOMI
             "atomiswave" in n -> Console.ATOMISWAVE
             "ps1" in n || "psx" in n || "playstation" in n -> Console.PSX
-            // Not a disc system, but .cas is shared and a folder name is the only hint.
-            "atari800" in n || "atari 800" in n || "atari8" in n || "a800" in n -> Console.ATARI8BIT
             else -> null
         }
     }
@@ -399,8 +397,8 @@ object RomLibrary {
     ): Console? {
         // A folder that names a system wins whenever that system actually claims the
         // extension. Without this, anything two consoles share is decided by whichever is
-        // declared first in the enum: every ".elf" went to Dreamcast (never PS2) and every
-        // ".cas" to Atari 8-bit (never MSX), silently and with no way to tell from the file.
+        // declared first in the enum: every ".elf" went to Dreamcast and never to PS2,
+        // silently and with no way to tell from the file.
         if (folderHint != null && ext in folderHint.romExtensions) return folderHint
         if (folderHint != null && folderHint in DISC_CONSOLES && ext in SHARED_DISC_EXTS) return folderHint
         return Console.forExtension(

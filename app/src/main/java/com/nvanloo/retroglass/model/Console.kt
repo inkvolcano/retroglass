@@ -228,13 +228,6 @@ enum class Console(
         bodyColor = Color.parseColor("#232327"),
         accentColor = Color.parseColor("#16A085"),
     ),
-    ATARI8BIT(
-        displayName = "Atari 8-bit",
-        coreLibName = "libatari800.so",
-        romExtensions = setOf("atr", "xex", "atx", "cas"),
-        bodyColor = Color.parseColor("#7A5C3A"),
-        accentColor = Color.parseColor("#C8102E"),
-    ),
     SEGACD(
         displayName = "Sega CD",
         coreLibName = "libgenesis_plus_gx.so",
@@ -307,7 +300,6 @@ enum class Console(
      *  computers, selected by the atari800_system option. */
     val forcedCoreVariables: List<Pair<String, String>> get() = when (this) {
         ATARI5200 -> listOf("atari800_system" to "5200")
-        ATARI8BIT -> listOf("atari800_system" to "800XL (64K)")
         else -> emptyList()
     }
 
@@ -327,7 +319,7 @@ enum class Console(
     /** Approximate hardware release year, for sorting the library by release date. */
     val year: Int get() = when (this) {
         ATARI2600 -> 1977
-        INTELLIVISION, ATARI8BIT -> 1979
+        INTELLIVISION -> 1979
         ATARI5200, COLECO, VECTREX -> 1982
         NES -> 1983
         MASTERSYSTEM -> 1985
@@ -366,7 +358,7 @@ enum class Console(
         PSX, PS2, PSP -> "Sony"
         PCENGINE, PCECD -> "NEC"
         NGP, NEOGEOCD -> "SNK"
-        LYNX, ATARI2600, ATARI5200, ATARI7800, ATARI8BIT -> "Atari"
+        LYNX, ATARI2600, ATARI5200, ATARI7800 -> "Atari"
         WONDERSWAN -> "Bandai"
         THREEDO -> "3DO / Panasonic"
         COLECO -> "Coleco"
@@ -551,7 +543,6 @@ object ControllerDefs {
         Console.ATARI5200 -> atari5200()
         Console.ARCADE -> arcade()
         Console.MASTERSYSTEM, Console.GAMEGEAR -> sms()
-        Console.ATARI8BIT -> computerJoystick(console.accentColor)
         Console.SEGACD -> megadrive()
         Console.PCECD -> pcengine()
         Console.NEOGEOCD -> neogeo()
@@ -1157,23 +1148,6 @@ object ControllerDefs {
     // ------------------------------------------------------------- Arcade / Neo Geo
 
     /** Arcade: D-pad, six buttons (SF layout), Coin (=Select), Start. */
-    /**
-     * Joystick + fire layout for the Atari 8-bit. It is a keyboard computer like the
-     * systems dropped in this commit, and shares their limitation: joystick games play,
-     * anything needing typing does not.
-     */
-    private fun computerJoystick(accent: Int): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("jump", ControlType.BUTTON, "▲", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.70f, y = 0.60f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
-        ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.87f, y = 0.47f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
-    )
 
     private fun arcade(): List<ControlDef> {
         val punch = Color.parseColor("#2E86C1")

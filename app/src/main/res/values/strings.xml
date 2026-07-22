@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RetroGlass</string>
-    <string name="main_subtitle">35 systems — Arcade/Neo Geo · NAOMI · Atomiswave · PSP · PS2* · PS1 · Dreamcast · Saturn · Sega CD · 32X · Master System · Game Gear · N64 · 3DO · SNES · NES · Mega Drive · Nintendo DS · GB/GBC · GBA · PC Engine (+CD) · Neo Geo Pocket · Neo Geo CD · Atari 2600/5200/7800/8-bit/Lynx · WonderSwan · Virtual Boy · ColecoVision · Intellivision · Vectrex · Pokémon Mini — game on any external display (USB-C glasses, monitor, TV), phone is the controller. (*PS2 experimental)</string>
+    <string name="main_subtitle">34 systems — Arcade/Neo Geo · NAOMI · Atomiswave · PSP · PS2* · PS1 · Dreamcast · Saturn · Sega CD · 32X · Master System · Game Gear · N64 · 3DO · SNES · NES · Mega Drive · Nintendo DS · GB/GBC · GBA · PC Engine (+CD) · Neo Geo Pocket · Neo Geo CD · Atari 2600/5200/7800/Lynx · WonderSwan · Virtual Boy · ColecoVision · Intellivision · Vectrex · Pokémon Mini — game on any external display (USB-C glasses, monitor, TV), phone is the controller. (*PS2 experimental)</string>
     <string name="add_roms">Add ROMs</string>
     <string name="add_files">Pick files</string>
     <string name="add_folder">Scan a folder (with subfolders)</string>

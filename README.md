@@ -11,11 +11,11 @@ Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with offi
 ## Features
 
 - **Extended display mode** — game on the glasses, controller on the phone; seamless plug/unplug (the emulator is never restarted, the view is reparented), foldable cover-screen exclusion.
-- **35 systems** — Arcade/Neo Geo, NAOMI, Atomiswave, PSP, PS2*, PS1, Dreamcast, Saturn, Sega CD, 32X, Master System, Game Gear, N64, 3DO, SNES, NES, Mega Drive, Nintendo DS, Game Boy/Color, GBA, PC Engine (+CD), Neo Geo Pocket, Neo Geo CD, Atari 2600/5200/7800/8-bit/Lynx, WonderSwan, Virtual Boy, ColecoVision, Intellivision, Vectrex, Pokémon Mini. *(PS2 via Play! is experimental.)*
+- **34 systems** — Arcade/Neo Geo, NAOMI, Atomiswave, PSP, PS2*, PS1, Dreamcast, Saturn, Sega CD, 32X, Master System, Game Gear, N64, 3DO, SNES, NES, Mega Drive, Nintendo DS, Game Boy/Color, GBA, PC Engine (+CD), Neo Geo Pocket, Neo Geo CD, Atari 2600/5200/7800/Lynx, WonderSwan, Virtual Boy, ColecoVision, Intellivision, Vectrex, Pokémon Mini. *(PS2 via Play! is experimental.)*
 - **Per-system touch controllers** drawn natively to match each **real pad** — NES's horizontal B–A, the SNES colour diamond, the Genesis A/B/C arc, the DualShock shape-diamond + twin sticks, the **N64 pad** (one centred analog + four yellow C-buttons + A/B), GBA's slanted B–A, etc. Every default layout stays fully on-screen with **no overlapping buttons**, and button glyphs are a uniform size. Multiple selectable presets per system + a drag/resize editor.
 - **N64 "Z in D-pad" alt layout** — an optional preset with Z seated in the centre of an enlarged D-pad, so one thumb can hold a direction and Z at the same time (slide onto/off the centre to latch Z).
 - **Intellivision keypad** — the full hand-controller: 16-way disc, three side action buttons, and the 12-key numeric keypad (1-9, Clear, 0, Enter) that games use with overlay cards, mapped to FreeIntv (keys 1-9 drive the right-analog disc).
-- **Visual layout picker** — the "Choose controller layout" menu shows a live rendered thumbnail of every preset (Default, Large, Compact, Wide, Bottom-heavy, Left-handed, and any system-specific ones) so you can see the arrangement before you pick it. The HTML readme also has a **Controller layouts** gallery rendered from the app's real coordinates (31 distinct pads across the 35 systems).
+- **Visual layout picker** — the "Choose controller layout" menu shows a live rendered thumbnail of every preset (Default, Large, Compact, Wide, Bottom-heavy, Left-handed, and any system-specific ones) so you can see the arrangement before you pick it. The HTML readme also has a **Controller layouts** gallery rendered from the app's real coordinates (30 distinct pads across the 34 systems).
 - **Turbo / autofire** — mark any face/shoulder button to auto-repeat while held (per system); toggled from the in-game "Turbo / autofire buttons…" menu.
 - **Portrait & landscape** — in portrait the game sits across the top with the controller below; rotate freely.
 - **Screen size, rotation (0/90/180/270°) and position** controls.
@@ -69,6 +69,7 @@ and rendered a black screen. Re-running `fetch_cores.sh` fixed it; the newer nig
 
 - [`docs/ui.md`](docs/ui.md) — the menu overlay's pattern library, and the tilt-lit 3D pad
 - [`docs/filters.md`](docs/filters.md) — shader pipeline contract, every filter, the Auto factor
+- [`docs/input-audit.md`](docs/input-audit.md) — every system checked against its real controller; the two keypad gaps
 - [`docs/feature-ideas.md`](docs/feature-ideas.md) — candidates with enough analysis to reject cheaply
 - [`docs/menu-design-brief.md`](docs/menu-design-brief.md) — the brief the menu was designed from
 
@@ -106,7 +107,7 @@ Save-state slots, load, fast-forward, **screen size / rotation / position**, **v
 ## Known limitations
 
 - **PS2** (Play! core) is experimental — low compatibility on phones. The good PS2 emulator (ARMSX2) is a standalone app, not a libretro core, so it can't be embedded.
-- **Keyboard computers are not supported.** MSX, C64, Amiga, ZX Spectrum and Amstrad CPC were dropped: LibretroDroid has no keyboard-device path, so anything needing typing (`LOAD "*",8,1`, in-game text entry, most disk software) simply cannot be played. A joystick-only subset is not worth shipping as a whole system. **Atari 8-bit** is the same kind of machine and has the same limitation, but is kept for now — its cartridge library is largely joystick-driven.
+- **Keyboard computers are not supported.** MSX, C64, Amiga, ZX Spectrum, Amstrad CPC and the Atari 8-bit were dropped: LibretroDroid has no keyboard-device path, so anything needing typing (`LOAD "*",8,1`, in-game text entry, most disk software) simply cannot be played. A joystick-only subset is not worth shipping as a whole system. Every remaining system shipped with a controller, not a keyboard — see `docs/input-audit.md` for the check.
 - **Arcade** romsets must match FBNeo's expected versions; Neo Geo needs `neogeo.zip`.
 - While the glasses occupy the USB-C port the phone can't charge — use a USB-C hub with power passthrough for long sessions.
 - **Wireless displays add lag.** A wired external display (USB-C/DisplayPort/HDMI) is near-zero latency and is the intended experience. **Miracast / "Smart View" wireless displays work** (they register as a normal external display), but add ~100–300 ms of input latency, which is noticeable in fast games. **Chromecast via Google Cast is not supported** — Cast streams pre-encoded media, not a live game surface, so there is no display to render onto; only wired displays and Miracast-style wireless displays appear as real external screens.

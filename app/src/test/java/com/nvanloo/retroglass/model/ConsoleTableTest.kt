@@ -63,10 +63,9 @@ class ConsoleTableTest {
             "cue", "iso", "chd", "gdi", "cdi", "img", "pbp", "ccd", "mds", "mdf", "nrg", "cso",
             "bin", "zip", "7z", "m3u",
             // Genuinely shared and not resolvable from the bytes: Dreamcast and PS2 homebrew
-            // are both ELF executables, and MSX and Atari 8-bit both use .cas tapes. A folder
-            // naming the system decides; failing that, enum order picks and the user can move
-            // the game with "Change system".
-            "elf", "cas",
+            // are both ELF executables. A folder naming the system decides; failing that, enum
+            // order picks and the user can move the game with "Change system".
+            "elf",
         )
         val owners = mutableMapOf<String, MutableList<String>>()
         for (c in Console.entries) {
