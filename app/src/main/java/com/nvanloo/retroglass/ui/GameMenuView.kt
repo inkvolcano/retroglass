@@ -92,7 +92,12 @@ class GameMenuView(context: Context) : FrameLayout(context) {
     }
 
     fun push(title: String, builder: ScreenBuilder) {
+        // Show, don't assume open() got there first. A picker reached from a hotkey calls
+        // showMenu() to open the root, and showMenu() declines while the layout editor is up -
+        // leaving the pushed screen rendering into a GONE view, invisible and with isOpen
+        // false, so back would leave the game instead of returning here.
         stack.add(Entry(title, builder))
+        visibility = View.VISIBLE
         render()
     }
 

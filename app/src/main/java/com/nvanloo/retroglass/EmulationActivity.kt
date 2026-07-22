@@ -396,6 +396,10 @@ class EmulationActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         hideSystemBars()
         arrangeLayout()
+        // The root menu is a scrolling list in portrait and four columns in landscape, chosen
+        // when the screen is built - so rotating with it open otherwise leaves the old shape on
+        // screen until you navigate somewhere else.
+        if (::gameMenu.isInitialized && gameMenu.isOpen) gameMenu.refresh()
     }
 
     @Suppress("DEPRECATION")
