@@ -69,6 +69,7 @@ and rendered a black screen. Re-running `fetch_cores.sh` fixed it; the newer nig
 
 - [`docs/ui.md`](docs/ui.md) — the menu overlay's pattern library, and the tilt-lit 3D pad
 - [`docs/filters.md`](docs/filters.md) — shader pipeline contract, every filter, the Auto factor
+- [`docs/gap-analysis.md`](docs/gap-analysis.md) — whole-app audit: what is broken, unverified, or untraceable
 - [`docs/input-audit.md`](docs/input-audit.md) — every system checked against its real controller; the two keypad gaps
 - [`docs/feature-ideas.md`](docs/feature-ideas.md) — candidates with enough analysis to reject cheaply
 - [`docs/menu-design-brief.md`](docs/menu-design-brief.md) — the brief the menu was designed from
