@@ -10,6 +10,39 @@ confirmed — usually because it needs a device.
 
 ---
 
+## Closed on 2026-07-22
+
+Worked through in four batches, after the audit above. Each entry keeps its original wording
+below; this is the index.
+
+| Batch | Closed | Commit |
+|---|---|---|
+| Saves | C1 collision, C2 atomic writes, H4 + H8 silent failures | `008c22e` |
+| Input/UI | H1 stuck input, H2 preset overlap, H13 back in editor, H14 focus, M21 target, M27 units | `7f5998f` |
+| Import | C4 dead classifier, C5 `.exe`, H5 free space, H6 overwrite, M7 inconsistency | `0f58015` |
+| Release | C6 signing, H16 committed binaries, H18 traceability, H19 CI | this commit |
+| Earlier | H17 artwork marks, and `GameCovers.load` from pattern 5 | `05a05bf`, `bc94157` |
+
+Three things came out differently than the audit assumed, and are worth keeping:
+
+- **H2 had two root causes, not one.** Both were "spread past the edge, then clamp back onto
+  what you spread away from" — `spreadToEdges` clamping each control separately (which pins
+  distinct columns to the *same* x, unrecoverable by shrinking), and `scaled` not checking the
+  edge at all. The size-trim pass alone would not have fixed Saturn.
+- **The obvious test for H2 was wrong.** Written as "no preset overlaps", it failed on the SNES
+  diamond, which overlaps on the x-axis by design. y cannot be compared against size at the
+  model layer — one is a fraction of height, the other of width. The honest invariant is *a
+  preset introduces no overlap the authored layout does not already have*.
+- **C1 is fixed without migrating.** Old saves are still read when no new-key file exists, so
+  nothing that already works stops working. Deleting the two `legacy*` helpers makes it a clean
+  break whenever that is wanted.
+
+Still open and unchanged: **C3** (the glasses GL trap) needs a device, and remains the single
+highest-value thing to test. H3, H7, H9-H12, H15, H19's core-build reproducibility, H20, and
+the Medium/Low list below are untouched.
+
+---
+
 ## The five patterns underneath
 
 Most individual findings are instances of five root causes. Fixing the pattern is worth more

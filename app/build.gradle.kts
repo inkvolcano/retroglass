@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,6 +14,9 @@ android {
         applicationId = "com.nvanloo.retroglass"
         minSdk = 26
         targetSdk = 35
+        // Play rejects an upload whose versionCode has not moved, so this must be bumped
+        // for every release. There are no git tags yet either, which means a shipped APK
+        // cannot be traced back to the commit and core versions that produced it.
         versionCode = 1
         versionName = "1.0"
         ndk {
@@ -25,10 +31,32 @@ android {
         }
     }
 
+    // Release signing comes from keystore.properties, which is git-ignored and never
+    // committed. Without it the release build stays unsigned rather than silently falling
+    // back to the debug certificate - an AOSP-signed upload is rejected by Play, and it is
+    // better to fail at build time than to discover that at submission.
+    //
+    // To set up:  cp keystore.properties.example keystore.properties  and fill it in.
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("keystore.properties")
+        if (f.exists()) FileInputStream(f).use { load(it) }
+    }
+
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

@@ -22,8 +22,30 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Pure JVM, no cores needed, so they run first and fail fast. CI used to prove only that
+      # a debug APK compiles: the suite existed and nothing ever ran it.
+      - name: Unit tests
+        run: ./gradlew test --no-daemon
+
       - name: Fetch libretro cores
         run: bash scripts/fetch_cores.sh
+
+      # Reported, not enforced. These are buildbot nightlies and are usually 4 KB-aligned; the
+      # 16 KB set Play needs comes from build_cores_ndk.sh on a machine with the NDK. Failing
+      # here would only ever say "you used the fetch script", which is already known - but the
+      # count has to be visible rather than assumed, because it has silently regressed before.
+      - name: Report 16 KB alignment
+        continue-on-error: true
+        run: python3 scripts/check_16k.py
+
+      # Records which core binaries this build actually contains. The buildbot keeps no archive,
+      # so without this an APK cannot be traced back to the binaries that went into it.
+      - name: Upload core manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-manifest
+          path: scripts/core-manifest.txt
+          if-no-files-found: warn
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon

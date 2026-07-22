@@ -116,3 +116,11 @@ bios/
 system/
 *bios*.zip
 scph*
+
+# Release signing — never commit
+keystore.properties
+*.jks
+*.keystore
+
+# GPL core binaries that rode in with the vendored fork demo app (never built here)
+libretrodroid/app/src/main/jniLibs/

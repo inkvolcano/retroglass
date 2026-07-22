@@ -39,6 +39,8 @@ Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with offi
 
 Requires JDK 17 and the Android SDK (platform 35). Cores are **not committed** (they are GPL binaries); fetch them first.
 
+A **release** build needs signing details in `keystore.properties` (git-ignored — copy `keystore.properties.example`). Without it `assembleRelease` produces an *unsigned* APK on purpose: it used to fall back to the debug certificate, which Play rejects, and a build that fails plainly beats a submission that does.
+
 ```bash
 git clone https://github.com/<you>/retroglass.git
 cd retroglass
