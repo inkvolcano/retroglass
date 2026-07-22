@@ -661,7 +661,6 @@ class MainActivity : AppCompatActivity() {
             Console.THREEDO -> "3DO"
             Console.COLECO -> "ColecoVision"
             Console.INTELLIVISION -> "Intellivision"
-            Console.AMIGA -> "Amiga (Kickstart)"
             Console.SEGACD -> "Sega CD / Mega-CD"
             Console.PCECD -> "PC Engine CD"
             Console.NEOGEOCD -> "Neo Geo CD"

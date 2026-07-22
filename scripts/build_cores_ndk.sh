@@ -45,7 +45,6 @@ CORES=(
   "mednafen_wswan|https://github.com/libretro/beetle-wswan-libretro|."
   "mednafen_vb|https://github.com/libretro/beetle-vb-libretro|."
   "atari800|https://github.com/libretro/libretro-atari800|."
-  "cap32|https://github.com/libretro/libretro-cap32|."
   "opera|https://github.com/libretro/opera-libretro|."
   "pokemini|https://github.com/libretro/PokeMini|."
   "stella2023|https://github.com/libretro/stella|."
@@ -54,16 +53,11 @@ CORES=(
   # variant, which renders black.
   "mupen64plus_next|https://github.com/libretro/mupen64plus-libretro-nx|."
   "picodrive|https://github.com/libretro/picodrive|."
-  "puae|https://github.com/libretro/libretro-uae|."
   "gearcoleco|https://github.com/drhelius/Gearcoleco|."
 )
 # => 20/32 build with the plain loop above. Four more need extra flags/prep — run
 # them by hand with APP_SHORT_COMMANDS=true (all verified 16 KB-aligned):
-#   vice_x64  (github.com/libretro/vice-libretro):   APP_CPPFLAGS="-std=gnu++14 -fpermissive"
-#   bluemsx   (github.com/libretro/blueMSX-libretro): APP_CFLAGS="-Wno-implicit-function-declaration \
 #                -Wno-incompatible-function-pointer-types -Wno-int-conversion"
-#   fuse      (github.com/libretro/fuse-libretro):    first copy the config headers the Makefile's
-#                `cp` can't create on Windows: src/config_fuse.h -> fuse/config.h and
 #                src/config_libspectrum.h -> libspectrum/config.h
 # => 28/32 systems Play-ready total.
 

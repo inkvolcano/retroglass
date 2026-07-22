@@ -36,11 +36,6 @@ declare -A CORES=(
   [vecx]=vecx
   [pokemini]=pokemini
   [atari800]=atari800
-  [bluemsx]=bluemsx
-  [vice_x64]=vice_x64
-  [puae]=puae
-  [fuse]=fuse
-  [cap32]=cap32
   [fbneo]=fbneo
 )
 

@@ -301,9 +301,7 @@ object RomLibrary {
             "naomi" in n -> Console.NAOMI
             "atomiswave" in n -> Console.ATOMISWAVE
             "ps1" in n || "psx" in n || "playstation" in n -> Console.PSX
-            // Not disc systems, but they share cassette/executable extensions with others and
-            // a folder name is the only hint a blind scan gets.
-            "msx" in n -> Console.MSX
+            // Not a disc system, but .cas is shared and a folder name is the only hint.
             "atari800" in n || "atari 800" in n || "atari8" in n || "a800" in n -> Console.ATARI8BIT
             else -> null
         }

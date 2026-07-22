@@ -206,41 +206,6 @@ enum class Console(
         bodyColor = Color.parseColor("#1E1E1E"),
         accentColor = Color.parseColor("#D24A2C"),
     ),
-    MSX(
-        displayName = "MSX",
-        coreLibName = "libbluemsx.so",
-        romExtensions = setOf("mx1", "mx2", "cas", "dsk"),
-        bodyColor = Color.parseColor("#1A1A22"),
-        accentColor = Color.parseColor("#2E86C1"),
-    ),
-    C64(
-        displayName = "Commodore 64",
-        coreLibName = "libvice_x64.so",
-        romExtensions = setOf("d64", "t64", "prg", "crt", "g64"),
-        bodyColor = Color.parseColor("#3A3226"),
-        accentColor = Color.parseColor("#8B7355"),
-    ),
-    AMIGA(
-        displayName = "Amiga",
-        coreLibName = "libpuae.so",
-        romExtensions = setOf("adf", "hdf", "lha", "ipf", "uae"),
-        bodyColor = Color.parseColor("#20242A"),
-        accentColor = Color.parseColor("#E64A19"),
-    ),
-    SPECTRUM(
-        displayName = "ZX Spectrum",
-        coreLibName = "libfuse.so",
-        romExtensions = setOf("tzx", "tap", "z80"),
-        bodyColor = Color.parseColor("#181818"),
-        accentColor = Color.parseColor("#D81E5B"),
-    ),
-    AMSTRAD(
-        displayName = "Amstrad CPC",
-        coreLibName = "libcap32.so",
-        romExtensions = setOf("cdt", "sna", "cpr"),
-        bodyColor = Color.parseColor("#1A1A1A"),
-        accentColor = Color.parseColor("#F1C40F"),
-    ),
     ARCADE(
         displayName = "Arcade / Neo Geo",
         coreLibName = "libfbneo.so",
@@ -326,12 +291,9 @@ enum class Console(
             GAMEBOY, GAMEGEAR, WONDERSWAN -> 144
             NGP -> 152
             GBA -> 160
-            MASTERSYSTEM, COLECO, INTELLIVISION, SPECTRUM -> 192
-            C64, AMSTRAD -> 200
+            MASTERSYSTEM, COLECO, INTELLIVISION -> 192
             ATARI2600 -> 210
-            MSX -> 212
             SNES, MEGADRIVE, SATURN, SEGA32X, SEGACD, NEOGEOCD, ARCADE, VIRTUALBOY -> 224
-            AMIGA -> 256
             PSP -> 272
             NDS -> 384 // two 192-line screens stacked
             PS2 -> 448
@@ -366,10 +328,9 @@ enum class Console(
     val year: Int get() = when (this) {
         ATARI2600 -> 1977
         INTELLIVISION, ATARI8BIT -> 1979
-        ATARI5200, COLECO, VECTREX, C64, SPECTRUM -> 1982
-        NES, MSX -> 1983
-        AMSTRAD -> 1984
-        MASTERSYSTEM, AMIGA -> 1985
+        ATARI5200, COLECO, VECTREX -> 1982
+        NES -> 1983
+        MASTERSYSTEM -> 1985
         ATARI7800 -> 1986
         PCENGINE -> 1987
         MEGADRIVE, PCECD -> 1988
@@ -411,10 +372,6 @@ enum class Console(
         COLECO -> "Coleco"
         INTELLIVISION -> "Mattel"
         VECTREX -> "GCE"
-        MSX -> "MSX"
-        C64, AMIGA -> "Commodore"
-        SPECTRUM -> "Sinclair"
-        AMSTRAD -> "Amstrad"
         ARCADE -> "Arcade"
     }
 
@@ -592,8 +549,6 @@ object ControllerDefs {
         Console.VECTREX -> vectrex()
         Console.POKEMONMINI -> pokemonMini()
         Console.ATARI5200 -> atari5200()
-        Console.MSX, Console.C64, Console.AMIGA, Console.SPECTRUM, Console.AMSTRAD ->
-            computerJoystick(console.accentColor)
         Console.ARCADE -> arcade()
         Console.MASTERSYSTEM, Console.GAMEGEAR -> sms()
         Console.ATARI8BIT -> computerJoystick(console.accentColor)
@@ -1202,6 +1157,24 @@ object ControllerDefs {
     // ------------------------------------------------------------- Arcade / Neo Geo
 
     /** Arcade: D-pad, six buttons (SF layout), Coin (=Select), Start. */
+    /**
+     * Joystick + fire layout for the Atari 8-bit. It is a keyboard computer like the
+     * systems dropped in this commit, and shares their limitation: joystick games play,
+     * anything needing typing does not.
+     */
+    private fun computerJoystick(accent: Int): List<ControlDef> = listOf(
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
+            x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+            x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+        ControlDef("jump", ControlType.BUTTON, "▲", KeyEvent.KEYCODE_BUTTON_A,
+            x = 0.70f, y = 0.60f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
+        ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
+            x = 0.87f, y = 0.47f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
+    )
+
     private fun arcade(): List<ControlDef> {
         val punch = Color.parseColor("#2E86C1")
         val kick = Color.parseColor("#E67E22")
@@ -1281,23 +1254,6 @@ object ControllerDefs {
 
     // ---------------------------------------------- Home computers (joystick)
 
-    /**
-     * Joystick + fire layout shared by the keyboard computers (MSX, C64, Amiga,
-     * ZX Spectrum, Amstrad). Covers joystick games; a full virtual keyboard is a
-     * separate feature still to come.
-     */
-    private fun computerJoystick(accent: Int): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("jump", ControlType.BUTTON, "▲", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.70f, y = 0.60f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
-        ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.87f, y = 0.47f, size = 0.24f, shape = ControlShape.CIRCLE, fillColor = accent, labelColor = LIGHT_TEXT),
-    )
 
     // ------------------------------------------------------------- Dreamcast
 

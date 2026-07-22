@@ -16,8 +16,6 @@ $cores = [ordered]@{
   "mednafen_vb" = "mednafen_vb"; "ppsspp" = "ppsspp"; "melonds" = "melonds"; "opera" = "opera"
   "mednafen_saturn" = "mednafen_saturn"; "picodrive" = "picodrive"; "gearcoleco" = "gearcoleco"
   "freeintv" = "freeintv"; "vecx" = "vecx"; "pokemini" = "pokemini"; "atari800" = "atari800"
-  "bluemsx" = "bluemsx"; "vice_x64" = "vice_x64"; "puae" = "puae"; "fuse" = "fuse"
-  "cap32" = "cap32"; "fbneo" = "fbneo"
 }
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("cores_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8))
