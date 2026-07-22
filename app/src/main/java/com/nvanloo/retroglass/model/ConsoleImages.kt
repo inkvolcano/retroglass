@@ -28,7 +28,7 @@ object ConsoleImages {
         ).forEachIndexed { i, c -> put(c, Cell(R.drawable.console_photos, i)) }
         // Sheet 2 — remaining 20 systems, in that image's order.
         listOf(
-            Console.ATARI2600, Console.ATARI5200, Console.ATARI7800, Console.LYNX,
+            Console.ATARI2600, Console.ATARI8BIT, Console.ATARI5200, Console.ATARI7800, Console.LYNX,
             Console.PCENGINE, Console.PCECD, Console.THREEDO, Console.NGP, Console.INTELLIVISION, Console.COLECO, Console.VECTREX, Console.NEOGEOCD, Console.ARCADE, Console.WONDERSWAN,
         ).forEachIndexed { i, c -> put(c, Cell(R.drawable.console_photos2, i)) }
     }

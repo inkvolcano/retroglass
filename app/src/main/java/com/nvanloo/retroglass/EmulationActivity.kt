@@ -1356,6 +1356,8 @@ class EmulationActivity : AppCompatActivity() {
         override fun onStick(id: String, x: Float, y: Float) {
             // "cbuttons" (N64 C-cluster) and "intvkp" (Intellivision keypad 1-9) both drive
             // the right analog, which those cores read for the C-buttons / numeric disc.
+            // "colecokp" (ColecoVision keypad 0 and 9) deliberately falls through to the left
+            // analog, which is where gearcoleco declares those two keys.
             val source = if (id == "stick_r" || id == "cbuttons" || id == "intvkp") {
                 GLRetroView.MOTION_SOURCE_ANALOG_RIGHT
             } else {

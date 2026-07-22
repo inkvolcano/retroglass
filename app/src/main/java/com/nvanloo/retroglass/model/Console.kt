@@ -206,6 +206,19 @@ enum class Console(
         bodyColor = Color.parseColor("#1E1E1E"),
         accentColor = Color.parseColor("#D24A2C"),
     ),
+
+    /**
+     * A keyboard computer, and the one exception to the rule that dropped the others: atari800
+     * draws its own on-screen keyboard into the framebuffer, raised by L3. So typing does not
+     * need a keyboard device we do not have - the pad navigates the core's own overlay.
+     */
+    ATARI8BIT(
+        displayName = "Atari 8-bit",
+        coreLibName = "libatari800.so",
+        romExtensions = setOf("atr", "xex", "atx", "cas"),
+        bodyColor = Color.parseColor("#7A5C3A"),
+        accentColor = Color.parseColor("#C8102E"),
+    ),
     ARCADE(
         displayName = "Arcade / Neo Geo",
         coreLibName = "libfbneo.so",
@@ -300,6 +313,7 @@ enum class Console(
      *  computers, selected by the atari800_system option. */
     val forcedCoreVariables: List<Pair<String, String>> get() = when (this) {
         ATARI5200 -> listOf("atari800_system" to "5200")
+        ATARI8BIT -> listOf("atari800_system" to "800XL (64K)")
         else -> emptyList()
     }
 
@@ -319,7 +333,7 @@ enum class Console(
     /** Approximate hardware release year, for sorting the library by release date. */
     val year: Int get() = when (this) {
         ATARI2600 -> 1977
-        INTELLIVISION -> 1979
+        INTELLIVISION, ATARI8BIT -> 1979
         ATARI5200, COLECO, VECTREX -> 1982
         NES -> 1983
         MASTERSYSTEM -> 1985
@@ -358,7 +372,7 @@ enum class Console(
         PSX, PS2, PSP -> "Sony"
         PCENGINE, PCECD -> "NEC"
         NGP, NEOGEOCD -> "SNK"
-        LYNX, ATARI2600, ATARI5200, ATARI7800 -> "Atari"
+        LYNX, ATARI2600, ATARI5200, ATARI7800, ATARI8BIT -> "Atari"
         WONDERSWAN -> "Bandai"
         THREEDO -> "3DO / Panasonic"
         COLECO -> "Coleco"
@@ -541,6 +555,7 @@ object ControllerDefs {
         Console.VECTREX -> vectrex()
         Console.POKEMONMINI -> pokemonMini()
         Console.ATARI5200 -> atari5200()
+        Console.ATARI8BIT -> atari8bit()
         Console.ARCADE -> arcade()
         Console.MASTERSYSTEM, Console.GAMEGEAR -> sms()
         Console.SEGACD -> megadrive()
@@ -1039,20 +1054,42 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- ColecoVision
 
-    private fun coleco(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.274f, y = 0.54f, size = 0.49f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("k1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_X,
-            x = 0.60f, y = 0.68f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
-        ControlDef("k2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_Y,
-            x = 0.60f, y = 0.45f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
-        ControlDef("lfire", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.78f, y = 0.62f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-        ControlDef("rfire", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.92f, y = 0.48f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-    )
+    /**
+     * ColecoVision: joystick, two fire buttons, 12-key keypad. The keypad is not a garnish -
+     * games use it at the title screen to choose game mode and skill level, so a pad without
+     * it cannot start much of the library.
+     *
+     * Bindings come from gearcoleco's own input descriptors rather than guesswork: 1=Y, 2=X,
+     * 3=L, 4=R, 5=L2, 6=R2, 7=L3, 8=R3, *=START, #=SELECT. Keys 0 and 9 have no RetroPad
+     * button left over, so the core reads them off the left analog axes - see
+     * ControllerView.COLECO_KEYPAD. The previous layout bound "1" to X and "2" to Y, which
+     * are the codes for 2 and 1: the two keys most games use, swapped.
+     */
+    private fun coleco(): List<ControlDef> {
+        val key = Color.parseColor("#2E2E33")
+        val ksz = 0.115f
+        return listOf(
+            ControlDef("dpad", ControlType.DPAD, "", x = 0.252f, y = 0.32f, size = 0.45f,
+                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
+            ControlDef("lfire", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
+                x = 0.13f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            ControlDef("rfire", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
+                x = 0.36f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
+            ControlDef("kp_1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_Y, x = 0.62f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_X, x = 0.76f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_3", ControlType.BUTTON, "3", KeyEvent.KEYCODE_BUTTON_L1, x = 0.90f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_4", ControlType.BUTTON, "4", KeyEvent.KEYCODE_BUTTON_R1, x = 0.62f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_5", ControlType.BUTTON, "5", KeyEvent.KEYCODE_BUTTON_L2, x = 0.76f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_6", ControlType.BUTTON, "6", KeyEvent.KEYCODE_BUTTON_R2, x = 0.90f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_7", ControlType.BUTTON, "7", KeyEvent.KEYCODE_BUTTON_THUMBL, x = 0.62f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_8", ControlType.BUTTON, "8", KeyEvent.KEYCODE_BUTTON_THUMBR, x = 0.76f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            // 9 and 0 carry no keycode: ControllerView routes them to the left analog instead.
+            ControlDef("kp_9", ControlType.BUTTON, "9", x = 0.90f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_star", ControlType.BUTTON, "*", KeyEvent.KEYCODE_BUTTON_START, x = 0.62f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_0", ControlType.BUTTON, "0", x = 0.76f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+            ControlDef("kp_hash", ControlType.BUTTON, "#", KeyEvent.KEYCODE_BUTTON_SELECT, x = 0.90f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
+        )
+    }
 
     // ------------------------------------------------------------- Intellivision
 
@@ -1132,6 +1169,31 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Atari 5200
 
+    /**
+     * Atari 8-bit. START/SELECT/OPTION are real keys on the machine, so they are real buttons
+     * here. KBD raises atari800's own on-screen keyboard (L3), and that button is the reason
+     * this system is supported at all: everything needing typing goes through the overlay.
+     */
+    private fun atari8bit(): List<ControlDef> = listOf(
+        ControlDef("dpad", ControlType.DPAD, "", x = 0.28f, y = 0.50f, size = 0.52f,
+            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#2A2018"), labelColor = LIGHT_TEXT),
+        ControlDef("fire1", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
+            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C8102E"), labelColor = LIGHT_TEXT),
+        ControlDef("fire2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
+            x = 0.69f, y = 0.60f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#8A3A2A"), labelColor = LIGHT_TEXT),
+        ControlDef("ret", ControlType.BUTTON, "RET", KeyEvent.KEYCODE_BUTTON_X,
+            x = 0.69f, y = 0.31f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#3A3A40"), labelColor = LIGHT_TEXT),
+        ControlDef("kbd", ControlType.BUTTON, "KBD", KeyEvent.KEYCODE_BUTTON_THUMBL,
+            x = 0.87f, y = 0.22f, size = 0.13f, shape = ControlShape.PILL,
+            fillColor = Color.parseColor("#C8102E"), labelColor = LIGHT_TEXT),
+        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
+            x = 0.20f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
+            x = 0.40f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+        ControlDef("option", ControlType.BUTTON, "OPTION", KeyEvent.KEYCODE_BUTTON_L1,
+            x = 0.60f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
+    )
+
     private fun atari5200(): List<ControlDef> = listOf(
         ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
             shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
@@ -1143,6 +1205,12 @@ object ControllerDefs {
             x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
         ControlDef("fire1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
             x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
+        // The 5200 pad has a 12-key keypad, and atari800 puts it on the host keyboard
+        // ("Keyboard 0-9" in its own docs) - a device this fork does not implement. R3 raises
+        // the core's on-screen keyboard instead: drawn into the frame, driven by the pad.
+        ControlDef("kbd", ControlType.BUTTON, "KEYS", KeyEvent.KEYCODE_BUTTON_THUMBR,
+            x = 0.53f, y = 0.30f, size = 0.12f, shape = ControlShape.PILL,
+            fillColor = Color.parseColor("#3A3A40"), labelColor = LIGHT_TEXT),
     )
 
     // ------------------------------------------------------------- Arcade / Neo Geo

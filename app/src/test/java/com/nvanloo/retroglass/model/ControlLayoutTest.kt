@@ -1,6 +1,9 @@
 package com.nvanloo.retroglass.model
 
+import android.view.KeyEvent
 import com.nvanloo.retroglass.controller.ControlType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,11 +62,13 @@ class ControlLayoutTest {
 
     @Test
     fun `every plain button reports a key`() {
-        // Two families are deliberately key-less because they are not plain buttons: the N64
-        // C-cluster ("c_") and the Intellivision keypad ("kp_") are read as directions from
-        // where inside the cluster you touch, the same way a D-pad is, so they carry no key
-        // code of their own. ControllerView excludes them by the same prefixes. Anything else
-        // pressable must send something or it is a button that visibly does nothing.
+        // Two prefixes are exempt because some of their members are not plain buttons: the
+        // N64 C-cluster ("c_") and the keypads ("kp_"). Those are read as analog directions
+        // rather than key presses, so they carry no key code of their own - the whole
+        // Intellivision keypad, and ColecoVision's 0 and 9, which are the two keys gearcoleco
+        // had no RetroPad button left for. ControllerView excludes them by the same prefixes.
+        // Anything else pressable must send something or it is a button that visibly does
+        // nothing. Per-key bindings are checked below, where the exact codes matter.
         for ((console, controls) in layouts()) {
             val plain = controls.filter {
                 it.type == ControlType.BUTTON &&
@@ -101,4 +106,54 @@ class ControlLayoutTest {
             }
         }
     }
+
+    @Test
+    fun `the ColecoVision keypad matches gearcoleco's declared bindings`() {
+        // Read out of the shipped libgearcoleco.so's retro_input_descriptor table, not from
+        // upstream source or memory. This test exists because the first version bound "1" to
+        // BUTTON_X and "2" to BUTTON_Y - which are the codes for keypad 2 and keypad 1. The
+        // two keys nearly every Coleco game uses to start, silently swapped, and nothing in
+        // the app could tell: both are valid keypad presses, just the wrong ones.
+        val expected = mapOf(
+            "kp_1" to KeyEvent.KEYCODE_BUTTON_Y,
+            "kp_2" to KeyEvent.KEYCODE_BUTTON_X,
+            "kp_3" to KeyEvent.KEYCODE_BUTTON_L1,
+            "kp_4" to KeyEvent.KEYCODE_BUTTON_R1,
+            "kp_5" to KeyEvent.KEYCODE_BUTTON_L2,
+            "kp_6" to KeyEvent.KEYCODE_BUTTON_R2,
+            "kp_7" to KeyEvent.KEYCODE_BUTTON_THUMBL,
+            "kp_8" to KeyEvent.KEYCODE_BUTTON_THUMBR,
+            "kp_star" to KeyEvent.KEYCODE_BUTTON_START,
+            "kp_hash" to KeyEvent.KEYCODE_BUTTON_SELECT,
+        )
+        val byId = ControllerDefs.controlsFor(Console.COLECO).associateBy { it.id }
+        for ((id, code) in expected) {
+            val def = byId[id]
+            assertNotNull("ColecoVision layout is missing $id", def)
+            assertEquals("ColecoVision $id is bound to the wrong RetroPad button", code, def!!.keyCode)
+        }
+        // 0 and 9 are the two the RetroPad has no button left for: gearcoleco reads them off
+        // the left analog, so they must carry no keycode or they would send a button as well.
+        for (id in listOf("kp_0", "kp_9")) {
+            assertEquals("ColecoVision $id must ride the analog, not a button", 0, byId[id]!!.keyCode)
+        }
+    }
+
+    @Test
+    fun `the systems whose keyboard lives in the core expose the button that raises it`() {
+        // atari800 draws its own on-screen keyboard, toggled by L3 in 8-bit mode and R3 in
+        // 5200 mode. Those buttons are the only way to reach a keyboard or the 5200 keypad at
+        // all, so losing one silently makes the whole system unplayable rather than degraded.
+        val eightBit = ControllerDefs.controlsFor(Console.ATARI8BIT)
+        assertTrue(
+            "Atari 8-bit has no L3 button, so its on-screen keyboard cannot be raised",
+            eightBit.any { it.keyCode == KeyEvent.KEYCODE_BUTTON_THUMBL },
+        )
+        val a5200 = ControllerDefs.controlsFor(Console.ATARI5200)
+        assertTrue(
+            "Atari 5200 has no R3 button, so its keypad is unreachable",
+            a5200.any { it.keyCode == KeyEvent.KEYCODE_BUTTON_THUMBR },
+        )
+    }
+
 }

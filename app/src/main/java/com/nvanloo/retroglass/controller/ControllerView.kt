@@ -626,29 +626,47 @@ class ControllerView @JvmOverloads constructor(
         listener?.onStick("cbuttons", nx.coerceIn(-1f, 1f), ny.coerceIn(-1f, 1f))
     }
 
-    // The Intellivision keypad's numbers 1-4 and 6-9 map to the right analog (a 3x3 disc);
+    // Two systems put part of their keypad on an analog stick, because the RetroPad runs out
+    // of buttons before a 12-key pad runs out of keys. The two disagree about which stick and
+    // about what a given key means, so the map has to be chosen by console: "kp_9" is a
+    // diagonal on the Intellivision disc and a raw axis push on the ColecoVision.
+
+    // Intellivision: 1-4 and 6-9 are the eight directions of a 3x3 disc on the right analog;
     // 5/0/Clear/Enter are ordinary buttons (R3/L3/L2/R2). See FreeIntv's RetroPad mapping.
-    private val KEYPAD_DIRS: Map<String, Pair<Float, Float>> = mapOf(
+    private val INTV_KEYPAD: Map<String, Pair<Float, Float>> = mapOf(
         "kp_1" to (-0.7f to -0.7f), "kp_2" to (0f to -1f), "kp_3" to (0.7f to -0.7f),
         "kp_4" to (-1f to 0f), /* 5 = R3 thumb */          "kp_6" to (1f to 0f),
         "kp_7" to (-0.7f to 0.7f), "kp_8" to (0f to 1f), "kp_9" to (0.7f to 0.7f),
     )
 
+    // ColecoVision: gearcoleco spends every RetroPad button on keys 1-8, * and #, then hangs
+    // the last two off the left analog - keypad 0 on X, keypad 9 on Y (its descriptors declare
+    // them as ANALOG index 0, ids 0 and 1). Full deflection, sign unverified on device.
+    private val COLECO_KEYPAD: Map<String, Pair<Float, Float>> = mapOf(
+        "kp_0" to (1f to 0f), "kp_9" to (0f to 1f),
+    )
+
     private fun isKeypad(id: String): Boolean = id.startsWith("kp_")
 
-    private fun isKeypadDir(id: String): Boolean = id in KEYPAD_DIRS
+    private fun keypadAxis(id: String): Pair<Float, Float>? = when (console) {
+        Console.INTELLIVISION -> INTV_KEYPAD[id]
+        Console.COLECO -> COLECO_KEYPAD[id]
+        else -> null
+    }
+
+    private fun isKeypadDir(id: String): Boolean = keypadAxis(id) != null
 
     private fun sendKeypad() {
         var nx = 0f
         var ny = 0f
         for (s in controls) {
-            if (s.pressed && isKeypadDir(s.def.id)) {
-                val (dx, dy) = KEYPAD_DIRS.getValue(s.def.id)
-                nx += dx
-                ny += dy
-            }
+            if (!s.pressed) continue
+            val (dx, dy) = keypadAxis(s.def.id) ?: continue
+            nx += dx
+            ny += dy
         }
-        listener?.onStick("intvkp", nx.coerceIn(-1f, 1f), ny.coerceIn(-1f, 1f))
+        val stick = if (console == Console.COLECO) "colecokp" else "intvkp"
+        listener?.onStick(stick, nx.coerceIn(-1f, 1f), ny.coerceIn(-1f, 1f))
     }
 
     // ---------------------------------------------------------------- edit mode
