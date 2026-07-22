@@ -1380,11 +1380,9 @@ class MainActivity : AppCompatActivity() {
                         (3 * d).toInt(), (3 * d).toInt(), (3 * d).toInt(), (3 * d).toInt(),
                     )
                     holder.chip.text = ""
-                    holder.chipBox.background = GradientDrawable().apply {
-                        cornerRadius = 12f * d
-                        setColor(MenuTheme.TILE)
-                        setStroke((1 * d).toInt().coerceAtLeast(1), MenuTheme.STROKE)
-                    }
+                    // No tile behind it and no border: the drawing is already an outline, so a
+                    // second outline around it just reads as a box the artwork is trapped in.
+                    holder.chipBox.background = null
                 }
                 else -> {
                     holder.chipImage.setImageDrawable(null)

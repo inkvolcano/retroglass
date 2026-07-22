@@ -69,7 +69,32 @@ object ConsoleImages {
             val h = boxH.coerceAtMost(sh.height - y)
             if (w <= 0 || h <= 0) return null
 
-            return Bitmap.createBitmap(sh, x, y, w, h).also { cache[console] = it }
+            return keyOutBlack(Bitmap.createBitmap(sh, x, y, w, h)).also { cache[console] = it }
+        }
+
+        /**
+         * Turns the sheet's black into transparency, so a crop is strokes on nothing rather
+         * than a black tile. Without this every icon carries a faint dark rectangle wherever
+         * the surface behind it is not exactly the sheet's own black - which it never is.
+         *
+         * Alpha comes from the pixel's own brightness, so the soft glow along each stroke
+         * fades out instead of ending on a hard edge. Colour is left alone: the art is already
+         * the accent green, and re-tinting would throw away that gradient.
+         */
+        private fun keyOutBlack(src: Bitmap): Bitmap {
+            val w = src.width
+            val h = src.height
+            val px = IntArray(w * h)
+            src.getPixels(px, 0, w, 0, 0, w, h)
+            for (i in px.indices) {
+                val p = px[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                val a = maxOf(r, g, b)
+                px[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+            }
+            return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
         }
     }
 
