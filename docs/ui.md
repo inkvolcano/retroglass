@@ -168,23 +168,32 @@ the full screen and a rim on its edges is off-screen.
 
 ---
 
-## Pending on-device verification
+## Verified on device — 2026-07-22
 
-Built, committed and building clean, but never seen running — the phone was folded shut and
-locked for the stretch in which these landed. Each notes what to look for.
+- **Texture upscaling** — the row appears on N64 with the core's real choice list
+  (None / As Is / X2 / X2SAI / HQ2X… / 2xBRZ…6xBRZ), so the option lookup found the right
+  key. 2xBRZ set, persisted, and **held 60fps** — the cost I had flagged as unmeasured is
+  not visible on this hardware at 2×. 6× on a large-texture game is still untested.
+- **Layout picker** — thumbnails render each pad, current one ticked. The reason for the
+  picture is immediately obvious: "Z in D-pad" shows Z inside the cross, "Default" above it.
+- **Rotation refresh** — rotating with the menu open rebuilds the root from the portrait list
+  into the landscape four-column layout.
+- **Console identity line** — "Nintendo 64 · running" is back under the logo.
+- **SAF-only import** — scan-all is gone from Add ROMs, the folder picker opens and cancels
+  cleanly, and the existing library is untouched. Confirmed on the built APK that the only
+  permissions requested are legacy READ (maxSdk 32) and VIBRATE.
 
-- **Layout picker thumbnails** (`menuLayoutScreen`) — *Controls & input → Choose controller
-  layout*. Each preset should render its own pad as a thumbnail with the current one ticked.
-- **Rumble** — the `VIBRATE` permission was never declared, so core-driven rumble did nothing
-  while the touch pad still buzzed (`performHapticFeedback` needs no permission). Needs a game
-  that actually sends rumble events, with *Rumble (vibration)* on.
-- **Texture upscaling** (`textureUpscaleOption`) — *Filters & look → Texture upscaling (3D)*,
-  N64/Dreamcast/PSP only. The option keys are from memory with a title-match fallback; if the
-  row appears, the fallback may be what found it. Cost is unmeasured — xBRZ at 6× on a
-  large-texture game is the case most likely to hurt.
+**Android will not grant the storage root.** The picker answers "choose a different folder to
+protect your privacy" if you select the top of internal storage — so users must pick a
+subfolder (Download, or a ROMs folder). There is now a note under *Add ROMs* saying so.
+
+## Still pending
+
+- **Rumble** — the VIBRATE permission is granted (checked with `dumpsys package`), but proving
+  it needs a game that actually sends rumble events.
+- **The Add ROMs hint** — written and building, but the device dropped off wireless ADB before
+  I could see it drawn.
 - **push() visibility fix** — open the layout editor, then trigger a picker from the menu
   hotkey. The screen should be visible and B should return to the menu, not the game.
-- **Rotation refresh** — open the in-game menu, rotate. The root should switch between the
-  portrait list and the landscape four-column layout.
-- **Core-options search** re-inflates all ~83 rows per keystroke on N64. Self-limiting since
-  typing narrows quickly, but worth watching for jank before deciding whether to fix.
+- **Core-options search** re-inflates ~83 rows per keystroke on N64. Watch for jank before
+  deciding whether it needs fixing.

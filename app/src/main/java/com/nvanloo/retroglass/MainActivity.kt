@@ -778,6 +778,9 @@ class MainActivity : AppCompatActivity() {
             addView(navRow(null, getString(R.string.add_folder)) {
                 libraryMenu.close(); pickFolder.launch(null)
             })
+            // Android refuses to grant the root of internal storage ("choose a different
+            // folder to protect your privacy"), so say so before the picker does.
+            addView(note(getString(R.string.add_folder_hint)))
         }
     }
 

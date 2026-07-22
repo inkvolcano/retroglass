@@ -5,6 +5,7 @@
     <string name="add_roms">Add ROMs</string>
     <string name="add_files">Pick files</string>
     <string name="add_folder">Scan a folder (with subfolders)</string>
+    <string name="add_folder_hint">Pick the folder your games are in — Download, or a ROMs folder. Android won’t grant access to the whole phone, so choose a folder rather than the storage root.</string>
     <string name="scan_cta">Scan storage for games</string>
     <string name="scanning_folder">Scanning folder…</string>
     <string name="set_cover">Set cover image…</string>

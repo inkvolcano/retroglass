@@ -1393,6 +1393,9 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun menuRootScreen(): View = with(gameMenu) {
+        // Landscape lays the root out in four narrow columns, where a label and its value do
+        // not fit on one line - those rows stack instead.
+        val tall = isLandscape()
         val save = actionTile(
             getString(R.string.menu_save_short), getString(R.string.menu_state_sub),
         ) { saveState(); gameMenu.close() }
@@ -1400,7 +1403,7 @@ class EmulationActivity : AppCompatActivity() {
             getString(R.string.menu_load_short), getString(R.string.menu_state_sub),
         ) { loadState(); gameMenu.close() }
         val ff = toggleRow(getString(R.string.menu_fast_forward), fastForward) { toggleFastForward() }
-        val filters = navRow("▷", getString(R.string.menu_filters_look), filterSummary()) {
+        val filters = navRow("▷", getString(R.string.menu_filters_look), filterSummary(), stacked = tall) {
             push(menuTitle(R.string.menu_filters_look)) { menuVideoScreen() }
         }
         val controls = navRow("◎", getString(R.string.menu_controls_input)) {
@@ -1408,8 +1411,12 @@ class EmulationActivity : AppCompatActivity() {
         }
         val changedCount = coreOptions.overrides(consoleKey).size
         val core = navRow(
-            "⚙", getString(R.string.menu_core_options),
+            // In the columns the row sits under a "SYSTEM" heading, so the "(system settings)"
+            // qualifier the portrait list needs is redundant - and it is what pushed the label
+            // past the column width.
+            "⚙", if (tall) menuTitle(R.string.menu_core_options) else getString(R.string.menu_core_options),
             if (changedCount > 0) getString(R.string.menu_core_changed_count, changedCount) else null,
+            stacked = tall,
         ) { showCoreOptions() }
         val cheats = navRow("✦", getString(R.string.menu_cheats)) { showCheats() }
         val shot = bigButton(getString(R.string.menu_screenshot)) { takeScreenshot() }

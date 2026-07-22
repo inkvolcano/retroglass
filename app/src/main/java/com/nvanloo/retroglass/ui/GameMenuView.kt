@@ -320,24 +320,49 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         value: String? = null,
         valueIsLive: Boolean = true,
         chevron: Boolean = true,
+        /** Put the value under the label instead of beside it — for narrow, tall rows. */
+        stacked: Boolean = false,
         onClick: () -> Unit,
     ): View = rowShell(MenuTheme.ROW_H, onClick = onClick).apply {
         setPadding(dp(14f), 0, dp(14f), 0)
         if (icon != null) addView(label(icon, color = MenuTheme.DIM), LinearLayout.LayoutParams(
             dp(20f), ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
+        if (stacked && value != null) {
+            // The landscape root's columns are ~230dp wide and two rows tall: side by side,
+            // "Filters & look" and "FSR 1 upscale (3D)" truncate each other to nonsense.
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(text))
+                addView(label(
+                    value, size = 13f,
+                    color = if (valueIsLive) MenuTheme.ACCENT else MenuTheme.DIM,
+                    bold = valueIsLive,
+                ), LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(2f) })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = if (icon != null) dp(6f) else 0
+            })
+            if (chevron) addView(label("›", color = MenuTheme.CHEVRON))
+            return@apply
+        }
         addView(label(text), LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 3f,
         ).apply { marginStart = if (icon != null) dp(6f) else 0 })
         if (value != null) addView(
             label(
                 value, size = 13f,
                 color = if (valueIsLive) MenuTheme.ACCENT else MenuTheme.DIM,
                 bold = valueIsLive,
-            ).apply { maxWidth = dp(170f) },
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { marginEnd = dp(8f) },
+            ).apply { textAlignment = View.TEXT_ALIGNMENT_VIEW_END },
+            // Label and value share the row by weight rather than the value taking what it
+            // wants first. A fixed cap works until the row is narrow - in the landscape root's
+            // four columns a 170dp value left the label about 40dp, so "Filters & look" came
+            // out as "Fil...". Weighted, the long side gives way instead.
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f).apply {
+                marginEnd = dp(8f)
+            },
         )
         if (chevron) addView(label("›", color = MenuTheme.CHEVRON))
     }
@@ -603,6 +628,15 @@ class GameMenuView(context: Context) : FrameLayout(context) {
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (selected) addView(label("✓", color = MenuTheme.ACCENT, bold = true))
         }
+
+    /** A wrapped explanatory line. Not a row - no tile, no tap, just prose. */
+    fun note(text: String): View = TextView(context).apply {
+        this.text = text
+        setTextColor(MenuTheme.DIM)
+        textSize = 12f
+        setLineSpacing(0f, 1.15f)
+        setPadding(dp(4f), dp(2f), dp(4f), dp(2f))
+    }
 
     /** Non-interactive status line (BIOS present/missing, disc info). */
     fun infoRow(text: String, value: String, ok: Boolean? = null): View =
