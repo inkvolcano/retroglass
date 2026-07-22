@@ -1452,6 +1452,14 @@ class EmulationActivity : AppCompatActivity() {
             addView(navRow(null, getString(R.string.menu_upscale_factor), upscaleLabel()) {
                 showUpscaleFactorPicker()
             })
+            // Only the 3D cores expose this, so the row appears with them and not otherwise.
+            textureUpscaleOption()?.let { opt ->
+                addView(navRow(null, getString(R.string.menu_texture_upscale), textureUpscaleValue(opt)) {
+                    push(menuTitle(R.string.menu_texture_upscale)) {
+                        menuCoreValueScreen(opt, textureUpscaleValue(opt))
+                    }
+                })
+            }
             addView(navRow(null, getString(R.string.menu_filter_presets)) { showFilterPresets() })
             addView(navRow(null, getString(R.string.menu_screen_size)) { showScreenSizeDialog() })
             addView(navRow(null, getString(R.string.menu_res_boost)) { toggleInternalResolution() })
@@ -2081,6 +2089,47 @@ class EmulationActivity : AppCompatActivity() {
     // recovers *real* detail, and is the single biggest quality win on 3D systems. The
     // right option key differs per core, so pick whichever one this core actually exposes.
     // label -> (key, "boosted" value, native value)
+    /**
+     * Core options that upscale *textures*, as opposed to the finished frame.
+     *
+     * A different axis from the shader chain and complementary to it: these run before
+     * rasterisation, so a 3D game gets sharper surfaces rather than a sharper picture of blurry
+     * surfaces. Only the 3D cores have anything to offer here, and they each name it
+     * differently, so the menu shows whichever one the running core actually exposes and hides
+     * the row entirely when there is none.
+     */
+    private val textureUpscaleKeys = listOf(
+        "mupen64plus-txEnhancementMode",   // N64: xBRZ / HQnX family
+        "flycast_texupscale",              // Dreamcast / NAOMI: xBRZ
+        "ppsspp_texture_scaling_type",     // PSP: xBRZ / hybrid
+    )
+
+    /**
+     * The texture-upscaling option this core exposes, if any.
+     *
+     * Matched by key where we know it, and otherwise by what the core calls it — a wrong or
+     * renamed key would just make the row silently never appear, which is a worse failure than
+     * a slightly loose match. "Texture filter" is smoothing rather than upscaling and is
+     * deliberately not caught by the title test.
+     */
+    private fun textureUpscaleOption(): CoreOpt? {
+        val vars = retroView?.getVariables() ?: return null
+        val v = vars.firstOrNull { it.key in textureUpscaleKeys }
+            ?: vars.firstOrNull { candidate ->
+                val title = (candidate.description ?: "").substringBefore(';').lowercase()
+                "texture" in title &&
+                    ("enhance" in title || "upscal" in title || "scaling" in title)
+            }
+            ?: return null
+        return parseCoreOpt(v.key ?: "", v.description ?: "")
+    }
+
+    private fun textureUpscaleValue(opt: CoreOpt): String {
+        val stored = coreOptions.override(consoleKey, opt.key)
+        val live = retroView?.getVariables()?.firstOrNull { it.key == opt.key }?.value
+        return valueLabel(opt.key, stored ?: live ?: opt.choices.firstOrNull() ?: "")
+    }
+
     private val resolutionOptions = listOf(
         Triple("pcsx_rearmed_neon_enhancement_enable", "enabled", "disabled"),
         Triple("ppsspp_internal_resolution", "960x544", "480x272"),

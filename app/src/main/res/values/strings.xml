@@ -231,6 +231,7 @@
     <string name="menu_state_sub">state</string>
     <string name="menu_fast_forward">Fast forward</string>
     <string name="menu_filters_look">Filters &amp; look</string>
+    <string name="menu_texture_upscale">Texture upscaling (3D)</string>
     <string name="menu_controls_input">Controls &amp; input</string>
     <string name="menu_live_caption">◉ LIVE · %1$s</string>
     <string name="menu_reset_params">Reset</string>

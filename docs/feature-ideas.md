@@ -94,13 +94,22 @@ has none of it. Realistically out of scope unless it becomes the point of the ap
 
 ## Things specific to this app
 
-### Texture-level upscaling (already half-discovered)
+### Texture-level upscaling — **done 2026-07-22**
 
-The N64 core exposes `Texture Enhancement` (2xBRZ…6xBRZ, HQ2X/HQ4X) and `Texture filter`,
-which upscale textures *before* rasterisation — a different axis from our post-process chain and
-complementary to it. Flycast and PPSSPP expose similar. Since core options are now a proper
-pick-list, surfacing "texture enhancement" as a first-class item in the Video menu is mostly
-presentation work over machinery that already exists.
+Surfaced as *Filters & look → Texture upscaling (3D)*, appearing only on cores that offer it
+(N64, Dreamcast/NAOMI, PSP) and hidden everywhere else. It reuses the core-option pick-list, so
+the choices come from the core rather than a hardcoded list.
+
+Worth keeping in mind now that it exists: this is a **different axis** from the shader chain.
+Texture upscaling runs before rasterisation, so a 3D game gets genuinely sharper surfaces
+rather than a sharper picture of blurry ones — and it stacks with FSR1 rather than competing.
+The cost lands on texture memory and cache, not fill rate, so the frame-rate headroom measured
+for the shader chain says nothing about it. **Unmeasured**: xBRZ at 6× on a large-texture game
+is the case most likely to hurt.
+
+Still unexposed and probably worth a look: the same cores' *high-res texture pack* options
+(`Use High-Res textures`), which load replacement art from disk. That is a content feature
+rather than a rendering one — it needs somewhere to put the packs and a way to install them.
 
 ### Per-game settings
 
