@@ -26,12 +26,10 @@ jobs:
         run: bash scripts/fetch_cores.sh
 
       - name: Build debug APK
-        run: ./gradlew assembleSideloadDebug assemblePlayDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: retroglass-debug
-          path: |
-            app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
-            app/build/outputs/apk/play/debug/app-play-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk

@@ -189,79 +189,14 @@ class MainActivity : AppCompatActivity() {
 
     // ---- All-storage auto-scan (internal + SD + USB) --------------------------------
 
-    private var pendingScan: (() -> Unit)? = null
-
-    private val allFilesPerm = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) {
-        val go = pendingScan; pendingScan = null
-        if (RomLibrary.hasAllFilesAccess()) go?.invoke()
-        else Toast.makeText(this, R.string.scan_perm_needed, Toast.LENGTH_LONG).show()
-    }
-
-    private val readPerm = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        val go = pendingScan; pendingScan = null
-        if (granted) go?.invoke()
-        else Toast.makeText(this, R.string.scan_perm_needed, Toast.LENGTH_LONG).show()
-    }
-
-    private fun ensureStorageAccess(then: () -> Unit) {
-        if (RomLibrary.hasAllFilesAccess()) { then(); return }
-        pendingScan = then
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            val uri = android.net.Uri.parse("package:$packageName")
-            val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, uri)
-            runCatching { allFilesPerm.launch(intent) }.onFailure {
-                allFilesPerm.launch(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-            }
-        } else {
-            readPerm.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-    }
-
+    /**
+     * "Scan storage" is the SAF folder picker: point it at the ROMs folder once and the
+     * recursive import does the rest. There is no whole-filesystem walk any more - it needed
+     * MANAGE_EXTERNAL_STORAGE, which Play does not grant to emulators, and the picker covers
+     * the same job with one extra tap.
+     */
     private fun startStorageScan() {
-        // The play flavour has no MANAGE_EXTERNAL_STORAGE (Play policy), so "scan storage"
-        // becomes the SAF folder picker: point it at the ROMs folder once and the recursive
-        // import does the rest. Same downstream pipeline, files copied instead of referenced.
-        if (!com.nvanloo.retroglass.BuildConfig.ALL_FILES_SCAN) {
-            pickFolder.launch(null)
-            return
-        }
-        ensureStorageAccess {
-            Toast.makeText(this, R.string.scanning_storage, Toast.LENGTH_SHORT).show()
-            Thread {
-                val found = runCatching { RomLibrary.scanAllStorage(this) }.getOrDefault(emptyList())
-                runOnUiThread { showScanResults(found) }
-            }.start()
-        }
-    }
-
-    private fun showScanResults(found: List<RomLibrary.Found>) {
-        if (found.isEmpty()) {
-            Toast.makeText(this, R.string.scan_none, Toast.LENGTH_LONG).show()
-            return
-        }
-        val roms = found.count { !it.isBios }
-        val bios = found.count { it.isBios }
-        fun apply(move: Boolean) {
-            Toast.makeText(this, R.string.scan_adding, Toast.LENGTH_SHORT).show()
-            Thread {
-                val n = RomLibrary.applyScan(this, found, move)
-                runOnUiThread {
-                    Toast.makeText(this, getString(R.string.scan_added, n), Toast.LENGTH_LONG).show()
-                    refresh()
-                }
-            }.start()
-        }
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.scan_found, roms, bios))
-            .setMessage(R.string.scan_choose)
-            .setPositiveButton(R.string.scan_keep) { _, _ -> apply(move = false) }
-            .setNeutralButton(R.string.scan_move) { _, _ -> apply(move = true) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show().gamepadNavigable()
+        pickFolder.launch(null)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -837,9 +772,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun addSourceScreen(): View = with(libraryMenu) {
         body {
-            addView(navRow(null, getString(R.string.scan_all)) {
-                libraryMenu.close(); startStorageScan()
-            })
             addView(navRow(null, getString(R.string.add_files)) {
                 libraryMenu.close(); pickRoms.launch(arrayOf("*/*"))
             })

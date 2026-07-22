@@ -750,56 +750,8 @@ object RomLibrary {
         f.writeText(f.readLines().filter { it.substringAfter('\t') != path }.joinToString("\n"))
     }
 
-    /** True when we can read the raw filesystem (All-files access on R+, legacy storage below). */
-    fun hasAllFilesAccess(): Boolean =
-        if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
 
-    /** Readable storage volume roots: internal shared storage plus any SD card / USB drive. */
-    fun storageRoots(context: Context): List<File> {
-        val roots = LinkedHashSet<File>()
-        val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
-        sm?.storageVolumes?.forEach { v ->
-            val dir = if (Build.VERSION.SDK_INT >= 30) v.directory
-                      else runCatching { v.javaClass.getMethod("getPathFile").invoke(v) as? File }.getOrNull()
-            if (dir != null && dir.isDirectory && dir.canRead()) roots.add(dir)
-        }
-        if (roots.isEmpty()) Environment.getExternalStorageDirectory()?.takeIf { it.isDirectory }?.let { roots.add(it) }
-        return roots.toList()
-    }
 
-    data class Found(val file: File, val console: Console?, val isBios: Boolean)
-
-    /** Walks every readable storage volume for ROMs / BIOS that aren't already in the library. */
-    fun scanAllStorage(context: Context): List<Found> {
-        val appPath = context.filesDir.absolutePath
-        // "name:size" of everything already known, so we don't re-offer what's already imported.
-        val known = HashSet<String>()
-        fun key(f: File) = f.name.lowercase() + ":" + runCatching { f.length() }.getOrDefault(0L)
-        Console.entries.forEach { c -> romsDir(context, c).listFiles()?.forEach { known.add(key(it)) } }
-        systemDir(context).listFiles()?.forEach { known.add(key(it)) }
-        references(context).forEach { known.add(key(it.file)) }
-
-        val out = ArrayList<Found>()
-        val seenPaths = HashSet<String>()
-        for (root in storageRoots(context)) {
-            root.walkTopDown()
-                .onEnter { dir -> !dir.absolutePath.startsWith(appPath) && dir.name != "Android" && !dir.name.startsWith(".") }
-                .onFail { _, _ -> } // skip unreadable directories rather than aborting the scan
-                .forEach { f ->
-                    if (!f.isFile) return@forEach
-                    if (f.absolutePath.startsWith(appPath)) return@forEach
-                    if (!seenPaths.add(f.absolutePath)) return@forEach
-                    val ext = f.extension.lowercase()
-                    val bios = BiosCatalog.isBios(f.name)
-                    val isRom = ext == "zip" || ext == "7z" || ext in ALL_ROM_EXTENSIONS
-                    if (!bios && !isRom) return@forEach
-                    if (key(f) in known) return@forEach
-                    val console = if (bios) null else classifyFile(context, f) ?: return@forEach
-                    out.add(Found(f, console, bios))
-                }
-        }
-        return out
-    }
 
     // Cartridge ROM extensions that unambiguously mark a console ROM inside a .zip (the broad
     // CONSOLE_ROM_EXTENSIONS is unusable here — it includes bin/iso/cue, which are arcade chips
@@ -926,69 +878,5 @@ object RomLibrary {
         val cueStems = f.parentFile?.listFiles()
             ?.filter { it.extension.equals("cue", true) }?.map { it.nameWithoutExtension.lowercase() } ?: emptyList()
         return classify(ext, f.name, cueStems, f.length(), folderHint(f.parentFile?.name))
-    }
-
-    /** Unified consolidation folder on primary storage: <sd>/RetroGlass/roms/<console>/. */
-    fun unifiedDir(context: Context): File = File(Environment.getExternalStorageDirectory(), "RetroGlass")
-
-    /**
-     * Adds scanned items to the library. BIOS files are always copied into the app's system dir
-     * (that's where the cores look). ROMs are either MOVED into the unified RetroGlass folder
-     * (move=true) or REFERENCED in place. Returns how many were added.
-     */
-    fun applyScan(context: Context, found: List<Found>, move: Boolean): Int {
-        var count = 0
-        val refs = ArrayList<Pair<Console, File>>()
-        for (item in found) {
-            try {
-                if (item.isBios) {
-                    val dest = File(systemDir(context), item.file.name)
-                    if (dest.absolutePath != item.file.absolutePath && !dest.exists()) {
-                        item.file.copyTo(dest, overwrite = true)
-                    }
-                    count++
-                    continue
-                }
-                val console = item.console ?: continue
-                // A .zip holding a console cartridge/disc ROM must be extracted into the
-                // library — the cores read the raw ROM, not the archive. (Arcade romsets are
-                // the exception: FBNeo needs the .zip intact, so those fall through and are
-                // referenced/moved as-is.)
-                val archiveExt = item.file.extension.lowercase()
-                if (archiveExt == "7z") {
-                    if (extractConsole7z(context, item.file)) count++
-                    continue
-                }
-                if (archiveExt == "zip" && console !in ARCADE_ZIP_CONSOLES) {
-                    if (extractConsoleZip(context, item.file)) count++
-                    continue
-                }
-                if (move) {
-                    val destDir = File(unifiedDir(context), "roms/${console.prefKey}").apply { mkdirs() }
-                    val base = item.file.nameWithoutExtension.lowercase()
-                    // Move the ROM and its same-basename companions (.bin tracks, .sbi, etc.).
-                    item.file.parentFile?.listFiles()
-                        ?.filter { it.nameWithoutExtension.lowercase() == base }
-                        ?.forEach { comp ->
-                            val d = File(destDir, comp.name)
-                            if (comp.absolutePath != d.absolutePath && !comp.renameTo(d)) {
-                                comp.copyTo(d, overwrite = true); comp.delete()
-                            }
-                        }
-                    refs.add(console to File(destDir, item.file.name))
-                } else {
-                    refs.add(console to item.file)
-                }
-                count++
-            } catch (e: Exception) {
-                android.util.Log.w("RomLibrary", "Import failed for ${item.file.name}", e)
-            }
-        }
-        addReferences(context, refs)
-        // Extracted disc images default to PS1; sniff their content and re-file to the true
-        // system (Sega CD / Saturn / Dreamcast / 3DO / PSP), then stitch multi-disc sets.
-        reclassifyDiscsByContent(context)
-        generateMultiDiscPlaylists(context)
-        return count
     }
 }

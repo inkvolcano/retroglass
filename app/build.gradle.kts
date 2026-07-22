@@ -18,33 +18,6 @@ android {
         }
     }
 
-    // Two distributions of the same app:
-    //  - sideload (default): whole-storage ROM scanning via MANAGE_EXTERNAL_STORAGE.
-    //    GitHub Releases / F-Droid.
-    //  - play: that permission is restricted to app categories that do not include
-    //    emulators, so this flavour removes it and routes "scan storage" to the SAF
-    //    folder picker instead. One extra tap (pick the folder once); imports copy
-    //    into the library rather than referencing in place.
-    flavorDimensions += "distribution"
-    productFlavors {
-        create("sideload") {
-            dimension = "distribution"
-            isDefault = true
-        }
-        create("play") {
-            dimension = "distribution"
-            // Distinct suffix so both can be installed side by side while testing.
-            applicationIdSuffix = ".play"
-            buildConfigField("boolean", "ALL_FILES_SCAN", "false")
-        }
-    }
-    defaultConfig {
-        buildConfigField("boolean", "ALL_FILES_SCAN", "true")
-    }
-    buildFeatures {
-        buildConfig = true
-    }
-
     packaging {
         jniLibs {
             // Cores are dlopen()ed by absolute path, so they must be extracted to disk.

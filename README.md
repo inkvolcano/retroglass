@@ -6,7 +6,7 @@ It uses Android's `DisplayManager` + `Presentation`, which treats every external
 
 Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with official [libretro](https://www.libretro.com/) cores.
 
-> ⚠️ **Personal-use / sideload project.** Distribute via GitHub Releases or F-Droid. GPL is *not* what stops a Play listing — [Lemuroid](https://play.google.com/store/apps/details?id=com.swordfish.lemuroid) is GPL-3.0, libretro-based and on Play. The blocker is `MANAGE_EXTERNAL_STORAGE`, which Play restricts to a handful of app categories that do not include emulators; see [Licensing & distribution](#licensing--distribution).
+> Distribute via GitHub Releases, F-Droid, **or Google Play**. GPL is not a Play blocker ([Lemuroid](https://play.google.com/store/apps/details?id=com.swordfish.lemuroid) is GPL-3.0, libretro-based and listed), and the app requests no restricted permissions — ROM import is SAF-only. See [Licensing & distribution](#licensing--distribution).
 
 ## Features
 
@@ -43,15 +43,13 @@ Requires JDK 17 and the Android SDK (platform 35). Cores are **not committed** (
 git clone https://github.com/<you>/retroglass.git
 cd retroglass
 bash scripts/fetch_cores.sh              # or: pwsh scripts/fetch_cores.ps1
-./gradlew assembleSideloadDebug          # APK in app/build/outputs/apk/sideload/debug/
+./gradlew assembleDebug                  # APK in app/build/outputs/apk/debug/
 ```
 
-Two flavours: **`sideload`** (default — whole-storage ROM scanning via all-files access) and
-**`play`** (`assemblePlayDebug`) — Play-policy-compatible: no `MANAGE_EXTERNAL_STORAGE`, and
-"Scan storage" opens the SAF folder picker instead (point it at your ROMs folder once; imports
-copy into the library rather than referencing in place). The play flavour installs as
-`com.nvanloo.retroglass.play`, so both fit on one device. Cores must be 16 KB-aligned for Play
-— `python scripts/check_16k.py` verifies, `scripts/build_cores_ndk.sh` rebuilds.
+ROM import is **SAF-only**: "Scan storage" opens the system folder picker — point it at your
+ROMs folder once and the recursive import does the rest. The app requests **no storage
+permission at all**, which is also what keeps it Play-eligible. Cores must be 16 KB-aligned
+for Play — `python scripts/check_16k.py` verifies, `scripts/build_cores_ndk.sh` rebuilds.
 
 CI (`.github/workflows/build.yml`) fetches the cores and builds a debug APK on every push.
 

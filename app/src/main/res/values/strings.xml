@@ -5,17 +5,7 @@
     <string name="add_roms">Add ROMs</string>
     <string name="add_files">Pick files</string>
     <string name="add_folder">Scan a folder (with subfolders)</string>
-    <string name="scan_all">Scan all storage (SD / USB)</string>
     <string name="scan_cta">Scan storage for games</string>
-    <string name="scanning_storage">Scanning all storage…</string>
-    <string name="scan_perm_needed">All-files access is needed to scan storage.</string>
-    <string name="scan_none">No new games or BIOS found.</string>
-    <string name="scan_adding">Adding…</string>
-    <string name="scan_added">Added %1$d item(s) to the library.</string>
-    <string name="scan_found">Found %1$d game(s) and %2$d BIOS</string>
-    <string name="scan_choose">Move them into a single RetroGlass folder, or keep them where they are (they\'re added to the library either way).</string>
-    <string name="scan_keep">Keep in place</string>
-    <string name="scan_move">Move to RetroGlass folder</string>
     <string name="scanning_folder">Scanning folder…</string>
     <string name="set_cover">Set cover image…</string>
     <string name="remove_cover">Remove cover image</string>

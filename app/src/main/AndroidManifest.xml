@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Scan every storage volume (internal + SD + USB) for ROMs/BIOS and reference them in place. -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- ROM import is SAF-only (folder picker / file picker): no storage permission at all,
+         which is also what keeps the app Play-eligible. Legacy READ for pre-SAF devices. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
