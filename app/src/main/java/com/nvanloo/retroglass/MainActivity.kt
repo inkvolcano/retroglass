@@ -1,5 +1,9 @@
 package com.nvanloo.retroglass
 
+import com.nvanloo.retroglass.model.GameCovers
+import com.nvanloo.retroglass.model.ConsoleImages
+import android.widget.ImageView
+import android.widget.FrameLayout
 import com.nvanloo.retroglass.ui.MenuTheme
 import android.content.Intent
 import android.graphics.Color
@@ -1297,7 +1301,8 @@ class MainActivity : AppCompatActivity() {
         fun submit(list: List<RomEntry>) { items = list; notifyDataSetChanged() }
         override fun getItemCount() = items.size
         inner class VH(
-            val row: LinearLayout, val chip: TextView,
+            val row: LinearLayout, val chipBox: FrameLayout,
+            val chip: TextView, val chipImage: ImageView,
             val name: TextView, val sub: TextView,
         ) : RecyclerView.ViewHolder(row)
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -1314,11 +1319,28 @@ class MainActivity : AppCompatActivity() {
                 isFocusable = true
                 setOnFocusChangeListener { v, f -> v.setBackgroundColor(if (f) Color.parseColor("#22FFFFFF") else Color.TRANSPARENT) }
             }
-            val chip = TextView(ctx).apply {
+            // Cover art if the user set one, otherwise the cartridge or disc the game came
+            // on. Initials are the last resort - they were the only thing here before, which
+            // meant a picked cover was stored and never shown anywhere.
+            val chipBox = FrameLayout(ctx).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(46f), dp(46f))
+            }
+            val chip = TextView(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                )
                 gravity = Gravity.CENTER; setTextColor(Color.WHITE); textSize = 14f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
             }
+            val chipImage = ImageView(ctx).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(3f), dp(3f), dp(3f), dp(3f))
+            }
+            chipBox.addView(chip)
+            chipBox.addView(chipImage)
             val texts = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -1331,17 +1353,47 @@ class MainActivity : AppCompatActivity() {
                 text = "▶"; setTextColor(MenuTheme.GROUP); textSize = 14f
                 setPadding(dp(10f), dp(8f), dp(8f), dp(8f))
             }
-            row.addView(chip); row.addView(texts); row.addView(play)
-            return VH(row, chip, name, sub)
+            row.addView(chipBox); row.addView(texts); row.addView(play)
+            return VH(row, chipBox, chip, chipImage, name, sub)
         }
         override fun onBindViewHolder(holder: VH, position: Int) {
             val e = items[position]
             val d = holder.row.resources.displayMetrics.density
             holder.name.text = e.displayName
-            holder.chip.text = initials(e.displayName)
-            holder.chip.background = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR, intArrayOf(lighten(accent), accent),
-            ).apply { cornerRadius = 12f * d }
+            val cover = GameCovers.load(holder.row.context, e.file.absolutePath)
+            val media = if (cover == null) ConsoleImages.media(holder.row.context, e.console) else null
+            when {
+                cover != null -> {
+                    holder.chipImage.setImageBitmap(cover)
+                    holder.chipImage.scaleType = ImageView.ScaleType.CENTER_CROP
+                    holder.chipImage.setPadding(0, 0, 0, 0)
+                    holder.chip.text = ""
+                    holder.chipBox.background = GradientDrawable().apply {
+                        cornerRadius = 12f * d; setColor(MenuTheme.TILE)
+                    }
+                    holder.chipImage.clipToOutline = true
+                }
+                media != null -> {
+                    holder.chipImage.setImageBitmap(media)
+                    holder.chipImage.scaleType = ImageView.ScaleType.FIT_CENTER
+                    holder.chipImage.setPadding(
+                        (3 * d).toInt(), (3 * d).toInt(), (3 * d).toInt(), (3 * d).toInt(),
+                    )
+                    holder.chip.text = ""
+                    holder.chipBox.background = GradientDrawable().apply {
+                        cornerRadius = 12f * d
+                        setColor(MenuTheme.TILE)
+                        setStroke((1 * d).toInt().coerceAtLeast(1), MenuTheme.STROKE)
+                    }
+                }
+                else -> {
+                    holder.chipImage.setImageDrawable(null)
+                    holder.chip.text = initials(e.displayName)
+                    holder.chipBox.background = GradientDrawable(
+                        GradientDrawable.Orientation.TL_BR, intArrayOf(lighten(accent), accent),
+                    ).apply { cornerRadius = 12f * d }
+                }
+            }
             if (history.isFavorite(e.file.absolutePath)) {
                 holder.sub.visibility = View.VISIBLE
                 holder.sub.text = getString(R.string.fav_tag)

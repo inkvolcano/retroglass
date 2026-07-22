@@ -39,9 +39,12 @@ nightly with no pin, there are no git tags, `versionCode` has never moved off 1,
 signed with the debug key, and the 16 KB-aligned core set exists only as a state once produced
 by hand. It is not currently possible to say what any given APK contained.
 
-**5. Four subsystems are dead code that read as features.** `classifyFile`, `addReferences`,
-`LayoutStore.localMultiplayer()`, `CompanionView.clearInput()` — all fully written, documented,
-and never called.
+**5. Five subsystems are dead code that read as features.** `classifyFile`, `addReferences`,
+`LayoutStore.localMultiplayer()`, `CompanionView.clearInput()`, and `GameCovers.load()` — all
+fully written, documented, and never called. The covers one was the worst of them, because the
+user does visible work for nothing: "Set cover" picks an image, stores it, and the library then
+shows initials forever. **Fixed 2026-07-22** — list rows now show the cover, falling back to
+cartridge/disc artwork.
 
 ---
 
@@ -328,6 +331,7 @@ lists a virtual keyboard under **Library-blocked features**. **Verified** for VI
   `ad242e5` to fix UI-thread blocking. Practically a one-frame-stale value, not corruption.
 - **L11.** Dead code that reads as features: `classifyFile`, `addReferences`,
   `LayoutStore.localMultiplayer()` (documented, no callers), `CompanionView.clearInput()`.
+  `GameCovers.load()` was a fifth and is now wired up (see pattern 5).
 - **L12.** The vendored fork is 1661 files copied in with no `.gitmodules` and no record of the
   upstream commit — upstream fixes cannot be rebased and local changes cannot be told from
   inherited ones.
