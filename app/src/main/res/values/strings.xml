@@ -276,6 +276,8 @@
     <string name="state_saved">State saved</string>
     <string name="state_save_failed">Could not save state</string>
     <string name="state_loaded">State loaded</string>
+    <string name="state_load_failed">Could not load that state — it may be from a different core version</string>
+    <string name="save_write_failed">Could not write save data — check free storage</string>
     <string name="no_state">No saved state for this game yet</string>
     <string name="slot_n">Slot %1$d %2$s</string>
     <string name="slot_used">(used)</string>

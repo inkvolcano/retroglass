@@ -782,7 +782,7 @@ class EmulationActivity : AppCompatActivity() {
             preferLowLatencyAudio = true
             rumbleEventsEnabled = true
             shader = currentShaderConfig()
-            sramFile().takeIf { it.exists() }?.let { saveRAMState = it.readBytes() }
+            readableSram()?.let { saveRAMState = it.readBytes() }
             // User core-option overrides, then the system's forced variables (which win —
             // e.g. atari800_system selects 5200 vs 8-bit computer for the shared core).
             val merged = LinkedHashMap<String, String>()
@@ -2749,16 +2749,65 @@ class EmulationActivity : AppCompatActivity() {
 
     private val manualSlots = listOf(1, 2, 3, 4)
 
-    /** Slot 0 is the auto-save written on exit; 1..4 are manual. */
-    private fun stateFile(slot: Int) = File(
-        RomLibrary.statesDir(this),
-        romFile.name + if (slot == 0) ".auto.state" else ".slot$slot.state",
-    )
+    /**
+     * Saves and states are keyed by console *and* filename, because `saves/` and `states/` are
+     * single flat directories while `roms/` is split per console. Keyed on the bare filename,
+     * `roms/nes/game.zip` and `roms/snes/game.zip` both wrote `saves/game.zip.srm` and quietly
+     * destroyed each other's progress.
+     *
+     * Console + name rather than a hash of the absolute path: it stays readable inside a save
+     * backup zip, and it cannot shift under us the way an absolute path can (`/data/data/...`
+     * vs `/data/user/0/...` are the same directory by different names).
+     */
+    private val saveKey: String get() = "${console.prefKey}_${romFile.name}"
 
-    private fun sramFile() = File(RomLibrary.savesDir(this), romFile.name + ".srm")
+    private fun stateSuffix(slot: Int) = if (slot == 0) ".auto.state" else ".slot$slot.state"
+
+    /** Slot 0 is the auto-save written on exit; 1..4 are manual. */
+    private fun stateFile(slot: Int) = File(RomLibrary.statesDir(this), saveKey + stateSuffix(slot))
+
+    private fun sramFile() = File(RomLibrary.savesDir(this), "$saveKey.srm")
+
+    // Saves written before the key changed. Read-only: nothing writes these again, and they are
+    // deliberately not migrated, so a game keeps resuming instead of looking wiped.
+    private fun legacyStateFile(slot: Int) =
+        File(RomLibrary.statesDir(this), romFile.name + stateSuffix(slot))
+
+    private fun legacySramFile() = File(RomLibrary.savesDir(this), romFile.name + ".srm")
+
+    /** The SRAM to read: the current one, else the pre-rename one, else null. */
+    private fun readableSram(): File? =
+        sramFile().takeIf { it.exists() } ?: legacySramFile().takeIf { it.exists() }
+
+    /** The state to read for a slot: the current one, else the pre-rename one, else null. */
+    private fun readableState(slot: Int): File? =
+        stateFile(slot).takeIf { it.exists() } ?: legacyStateFile(slot).takeIf { it.exists() }
+
+    private fun hasState(slot: Int): Boolean = readableState(slot) != null
+
+    /**
+     * Writes via a temp file and a rename, so an interrupted write cannot destroy the save it
+     * was replacing. `writeBytes` truncates the target first: a process kill or a full disk
+     * midway through left an empty file where a good save used to be.
+     */
+    private fun writeAtomic(target: File, bytes: ByteArray): Boolean {
+        val tmp = File(target.parentFile, target.name + ".tmp")
+        return runCatching {
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                if (!tmp.renameTo(target)) error("rename failed for ${target.name}")
+            }
+            true
+        }.getOrElse {
+            Log.w(TAG, "save write failed: ${target.name}", it)
+            tmp.delete()
+            false
+        }
+    }
 
     private fun slotLabel(slot: Int): String {
-        val used = if (stateFile(slot).exists()) getString(R.string.slot_used) else getString(R.string.slot_empty)
+        val used = if (hasState(slot)) getString(R.string.slot_used) else getString(R.string.slot_empty)
         return getString(R.string.slot_n, slot, used)
     }
 
@@ -2772,19 +2821,19 @@ class EmulationActivity : AppCompatActivity() {
     }
 
     private fun doSaveState(slot: Int) {
-        runCatching {
-            retroView?.serializeState()?.let { stateFile(slot).writeBytes(it) }
-        }.onSuccess {
-            Toast.makeText(this, R.string.state_saved, Toast.LENGTH_SHORT).show()
-        }.onFailure {
-            Toast.makeText(this, R.string.state_save_failed, Toast.LENGTH_SHORT).show()
-        }
+        val data = runCatching { retroView?.serializeState() }.getOrNull()
+        val ok = data != null && data.isNotEmpty() && writeAtomic(stateFile(slot), data)
+        Toast.makeText(
+            this,
+            if (ok) R.string.state_saved else R.string.state_save_failed,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun loadState() {
         val slots = buildList {
-            addAll(manualSlots.filter { stateFile(it).exists() })
-            if (stateFile(0).exists()) add(0)
+            addAll(manualSlots.filter { hasState(it) })
+            if (hasState(0)) add(0)
         }
         if (slots.isEmpty()) {
             Toast.makeText(this, R.string.no_state, Toast.LENGTH_SHORT).show()
@@ -2800,27 +2849,50 @@ class EmulationActivity : AppCompatActivity() {
             .show().gamepadNavigable()
     }
 
+    /**
+     * Reports what actually happened. `unserializeState` returns false for a state a core will
+     * not accept - a different core build, a corrupt file - and the result used to be dropped
+     * on the floor while the toast said "State loaded" regardless.
+     */
     private fun doLoadState(slot: Int) {
-        runCatching { retroView?.unserializeState(stateFile(slot).readBytes()) }
-        Toast.makeText(this, R.string.state_loaded, Toast.LENGTH_SHORT).show()
+        val f = readableState(slot)
+        val ok = f != null &&
+            runCatching { retroView?.unserializeState(f.readBytes()) }.getOrNull() == true
+        Toast.makeText(
+            this,
+            if (ok) R.string.state_loaded else R.string.state_load_failed,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     /** Resumes from the auto-save written when the game was last exited. */
     private fun autoLoadState() {
-        val f = stateFile(0)
-        if (f.exists()) runCatching { retroView?.unserializeState(f.readBytes()) }
+        val f = readableState(0) ?: return
+        runCatching { retroView?.unserializeState(f.readBytes()) }
     }
 
+    /**
+     * Both of these run while the app is being backgrounded, where a failure used to be
+     * swallowed whole - no toast, no log. Storage full at that moment meant the save silently
+     * did not happen, and with the old truncating write the previous one was gone too.
+     */
     private fun autoSaveState() {
-        runCatching {
-            retroView?.serializeState(false)?.let { if (it.isNotEmpty()) stateFile(0).writeBytes(it) }
-        }
+        val data = runCatching { retroView?.serializeState(false) }.getOrNull() ?: return
+        if (data.isEmpty()) return
+        if (!writeAtomic(stateFile(0), data)) warnSaveFailed()
     }
 
     private fun persistSram() {
+        val sram = runCatching { retroView?.serializeSRAM() }.getOrNull() ?: return
+        if (sram.isEmpty()) return
+        // Nothing to carry over: SRAM is read by the core at load, so a legacy file has already
+        // been consumed by the time we write. The new path simply becomes the live one.
+        if (!writeAtomic(sramFile(), sram)) warnSaveFailed()
+    }
+
+    private fun warnSaveFailed() {
         runCatching {
-            val sram = retroView?.serializeSRAM() ?: return
-            if (sram.isNotEmpty()) sramFile().writeBytes(sram)
+            Toast.makeText(this, R.string.save_write_failed, Toast.LENGTH_LONG).show()
         }
     }
 
