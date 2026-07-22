@@ -8,6 +8,20 @@
 # genesis_plus_gx (both flip from 0x1000 to 0x4000 LOAD alignment).
 #
 # Requires: ANDROID_NDK_HOME pointing at NDK r28+, git.
+#
+# On Windows, two things will waste an afternoon if you do not know them:
+#
+#   * Build from a SHORT path (C:	mp\<core>, not a deep temp dir). ndk-build appends
+#     obj/local/arm64-v8a/objs/... to every source path, and past MAX_PATH it dies with an
+#     access violation (0xC0000005) and a zero-byte log - no error message at all. It looks
+#     like a toolchain crash; it is the path length.
+#   * The NDK ships only ndk-build.cmd, and invoking it from git-bash segfaults. Drive it
+#     through cmd.exe.
+#
+# Per-core flags matter as much as the alignment. mupen64plus_next needs GLES3=1: without it
+# the makefile falls through to the GLES2 path, and that core asks the frontend for an
+# OPENGLES2 context, gets ES 3.x, and renders a black screen at a perfect 60fps. Check the
+# result links libGLESv3 and not libGLESv2 before trusting it.
 # Output goes to app/src/main/jniLibs/arm64-v8a/lib<name>.so
 set -euo pipefail
 
@@ -36,6 +50,8 @@ CORES=(
   "pokemini|https://github.com/libretro/PokeMini|."
   "stella2023|https://github.com/libretro/stella|."
   "mgba|https://github.com/libretro/mgba|."
+  # NOTE: needs GLES3=1 - see the header. The plain loop below builds the GLES2
+  # variant, which renders black.
   "mupen64plus_next|https://github.com/libretro/mupen64plus-libretro-nx|."
   "picodrive|https://github.com/libretro/picodrive|."
   "puae|https://github.com/libretro/libretro-uae|."

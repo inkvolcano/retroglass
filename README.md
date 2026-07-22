@@ -6,7 +6,7 @@ It uses Android's `DisplayManager` + `Presentation`, which treats every external
 
 Built on [LibretroDroid](https://github.com/Swordfish90/LibretroDroid) with official [libretro](https://www.libretro.com/) cores.
 
-> ⚠️ **Personal-use / sideload project.** See [Licensing & distribution](#licensing--distribution) — because of GPL licensing this **cannot be published on the Google Play Store**; distribute via GitHub Releases or F-Droid.
+> ⚠️ **Personal-use / sideload project.** Distribute via GitHub Releases or F-Droid. GPL is *not* what stops a Play listing — [Lemuroid](https://play.google.com/store/apps/details?id=com.swordfish.lemuroid) is GPL-3.0, libretro-based and on Play. The blocker is `MANAGE_EXTERNAL_STORAGE`, which Play restricts to a handful of app categories that do not include emulators; see [Licensing & distribution](#licensing--distribution).
 
 ## Features
 
