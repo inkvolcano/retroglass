@@ -158,7 +158,14 @@ class EmulationActivity : AppCompatActivity() {
 
     private val inputDeviceListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) = updateForGamepad(true)
-        override fun onInputDeviceRemoved(deviceId: Int) = updateForGamepad(false)
+        override fun onInputDeviceRemoved(deviceId: Int) {
+            // The device is already gone, so it cannot be mapped back to a port - release
+            // everything instead. A pad whose battery dies mid-press otherwise leaves the
+            // button held forever: the core never sees the key-up, so the character keeps
+            // walking into a wall until the game is force-quit.
+            releaseAllGamepadInput()
+            updateForGamepad(false)
+        }
         override fun onInputDeviceChanged(deviceId: Int) = updateForGamepad(false)
     }
 
@@ -368,6 +375,15 @@ class EmulationActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // The layout editor first: it closes the menu when it opens, so back found no
+                // menu stack to walk, called showMenu(), and showMenu() declines while editing
+                // - the event was consumed to do nothing at all. Back means cancel here, the
+                // same as the editor's own Cancel button.
+                if (controllerView.editMode) {
+                    controllerView.cancelEdits()
+                    setEditMode(false)
+                    return
+                }
                 // Back walks the menu's own stack first, so a sub-screen returns to the root
                 // rather than dropping straight out to the game.
                 if (!gameMenu.onBack()) showMenu()
@@ -990,6 +1006,25 @@ class EmulationActivity : AppCompatActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.actionMasked == MotionEvent.ACTION_DOWN && phoneIsDisplay()) revealFloatingMenu()
         return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * Releases every held button and centres every stick, on all ports. Blunt on purpose: a
+     * key-up for a button that was not down is a no-op, so over-releasing costs nothing while
+     * under-releasing leaves the game holding an input the player cannot let go of.
+     */
+    private fun releaseAllGamepadInput() {
+        val v = retroView ?: return
+        val held = pressedGamepadKeys.toList()
+        for (port in 0..3) {
+            held.forEach { code ->
+                androidToRetroKey(code)?.let { rk -> v.sendKeyEvent(KeyEvent.ACTION_UP, rk, port) }
+            }
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, 0f, 0f, port)
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_LEFT, 0f, 0f, port)
+            v.sendMotionEvent(GLRetroView.MOTION_SOURCE_ANALOG_RIGHT, 0f, 0f, port)
+        }
+        pressedGamepadKeys.clear()
     }
 
     /** Opens the in-game menu from a gamepad, releasing the hotkey buttons so nothing sticks. */
@@ -2723,7 +2758,7 @@ class EmulationActivity : AppCompatActivity() {
             })
             addView(slider(
                 getString(R.string.screen_pos_h), layoutStore.videoOffsetX() + 0.5f,
-                format = { "${((it - 0.5f) * 100).toInt()}" },
+                format = { "${((it - 0.5f) * 100).toInt()}%" },
             ) {
                 layoutStore.setVideoOffset(it - 0.5f, layoutStore.videoOffsetY())
                 applyVideoTransform()
@@ -2731,7 +2766,7 @@ class EmulationActivity : AppCompatActivity() {
             })
             addView(slider(
                 getString(R.string.screen_pos_v), layoutStore.videoOffsetY() + 0.5f,
-                format = { "${((it - 0.5f) * 100).toInt()}" },
+                format = { "${((it - 0.5f) * 100).toInt()}%" },
             ) {
                 layoutStore.setVideoOffset(layoutStore.videoOffsetX(), it - 0.5f)
                 applyVideoTransform()

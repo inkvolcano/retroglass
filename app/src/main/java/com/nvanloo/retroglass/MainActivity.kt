@@ -232,6 +232,10 @@ class MainActivity : AppCompatActivity() {
             textSize = size
             gravity = Gravity.CENTER
             setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
+            // Same 48dp floor GameMenuView.glyphButton already sets. This is the library's only
+            // way into Add ROMs / BIOS / backup, and it was drawing at roughly 28dp.
+            minWidth = dp(48f)
+            minHeight = dp(48f)
             isClickable = true
             isFocusable = true
             setOnClickListener { onTap() }

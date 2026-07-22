@@ -118,7 +118,7 @@ class GameMenuView(context: Context) : FrameLayout(context) {
 
     /** Rebuilds the current screen in place — call after changing a value the screen displays. */
     fun refresh() {
-        if (stack.isNotEmpty()) render()
+        if (stack.isNotEmpty()) render(preserveFocus = true)
     }
 
     val isOpen: Boolean get() = visibility == View.VISIBLE && stack.isNotEmpty()
@@ -130,8 +130,13 @@ class GameMenuView(context: Context) : FrameLayout(context) {
         return true
     }
 
-    private fun render() {
+    private fun render(preserveFocus: Boolean = false) {
         val entry = stack.last()
+        // A row that changes its own value calls refresh(), which rebuilds the whole screen.
+        // Without this the rebuild dropped focus back to the first row every time - worst in
+        // glasses mode, where the D-pad is the only way to move and re-reaching the row you
+        // just used costs the whole list again.
+        val keepIndex = if (preserveFocus) focusedRowIndex() else -1
         host.removeAllViews()
         val screen = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -142,7 +147,33 @@ class GameMenuView(context: Context) : FrameLayout(context) {
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
         ))
         host.addView(screen, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        post { screen.findFocusableChild()?.requestFocus() }
+        post {
+            if (keepIndex >= 0) {
+                val rows = focusableRows()
+                // Clamp: a refresh can legitimately return fewer rows than it had before.
+                rows.getOrNull(keepIndex.coerceAtMost(rows.size - 1))?.requestFocus()
+                    ?: screen.findFocusableChild()?.requestFocus()
+            } else {
+                screen.findFocusableChild()?.requestFocus()
+            }
+        }
+    }
+
+    /** Every focusable row on the current screen, in display order. */
+    private fun focusableRows(): List<View> {
+        val out = mutableListOf<View>()
+        fun walk(v: View) {
+            if (v.isFocusable && v.visibility == View.VISIBLE) out.add(v)
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        for (i in 0 until host.childCount) walk(host.getChildAt(i))
+        return out
+    }
+
+    /** Position of the focused row among [focusableRows], or -1 if nothing is focused. */
+    private fun focusedRowIndex(): Int {
+        val focused = findFocus() ?: return -1
+        return focusableRows().indexOf(focused)
     }
 
     private fun View.findFocusableChild(): View? {

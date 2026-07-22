@@ -1,6 +1,8 @@
 package com.nvanloo.retroglass.model
 
 import android.view.KeyEvent
+import com.nvanloo.retroglass.controller.ControlDef
+import com.nvanloo.retroglass.controller.ControlShape
 import com.nvanloo.retroglass.controller.ControlType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -154,6 +156,51 @@ class ControlLayoutTest {
             "Atari 5200 has no R3 button, so its keypad is unreachable",
             a5200.any { it.keyCode == KeyEvent.KEYCODE_BUTTON_THUMBR },
         )
+    }
+
+
+    @Test
+    fun `a preset introduces no overlap the authored layout does not have`() {
+        // The suite only ever checked the *authored* layouts, never what the presets do to
+        // them - which is why "Large buttons" and "Full-screen" could stack the ColecoVision
+        // and Intellivision keypads with nothing noticing. Overlapping buttons do not throw:
+        // hit-testing resolves every tap to whichever control is declared first, so the
+        // covered one silently stops responding.
+        //
+        // Measured the way ControllerView draws: x and size share a base, and a control
+        // pushed past the edge is clamped back inside - which is what collapsed the gaps.
+        //
+        // The bar is relative, not absolute. Some authored layouts overlap on this axis on
+        // purpose (the SNES diamond puts X above A), and y cannot be compared against size
+        // here because one is a fraction of height and the other of width. What must never
+        // happen is a preset creating a collision the base did not have.
+        fun halfX(c: ControlDef): Float {
+            val r = c.size / 2f
+            return if (c.shape == ControlShape.PILL || c.shape == ControlShape.BAR) r * 1.85f else r
+        }
+        fun collisions(cs: List<ControlDef>): Set<Pair<String, String>> = buildSet {
+            for (i in cs.indices) for (j in i + 1 until cs.size) {
+                val a = cs[i]
+                val b = cs[j]
+                if (a.type == ControlType.DPAD || b.type == ControlType.DPAD) continue
+                if (kotlin.math.abs(a.y - b.y) > (a.size + b.size) / 2f) continue
+                val ah = halfX(a)
+                val bh = halfX(b)
+                val ax = a.x.coerceIn(ah, 1f - ah)
+                val bx = b.x.coerceIn(bh, 1f - bh)
+                if (kotlin.math.abs(ax - bx) < ah + bh) add(a.id to b.id)
+            }
+        }
+        for (console in Console.entries) {
+            val base = collisions(ControllerDefs.controlsFor(console))
+            for (preset in ControllerDefs.presetsFor(console)) {
+                val added = collisions(preset.controls) - base
+                assertTrue(
+                    "${console.name}/${preset.id} introduces overlapping controls: $added",
+                    added.isEmpty(),
+                )
+            }
+        }
     }
 
 }

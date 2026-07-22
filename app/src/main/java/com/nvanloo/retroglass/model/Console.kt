@@ -1,5 +1,8 @@
 package com.nvanloo.retroglass.model
 
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.abs
 import android.graphics.Color
 import android.view.KeyEvent
 import com.nvanloo.retroglass.controller.ControlDef
@@ -409,17 +412,25 @@ object ControllerDefs {
     private val GRAY_BTN = Color.parseColor("#55555F")
     private val SYMBOL = Color.parseColor("#2A2A31")
 
-    /** All layouts available for a console. First entry is the default. */
+    /**
+     * All layouts available for a console. First entry is the default.
+     *
+     * Every derived preset goes through [fitWithoutOverlap] against the authored layout, so a
+     * transform cannot introduce a collision the base did not have. Applied here rather than
+     * inside one transform because they all need it: the bug was first found in `scaled`, but
+     * `lowered` reproduced it independently on the SNES diamond.
+     */
     fun presetsFor(console: Console): List<LayoutPreset> {
         val base = baseControls(console)
+        fun fit(controls: List<ControlDef>) = fitWithoutOverlap(base, controls)
         val presets = mutableListOf(
             LayoutPreset("default", "Default", base),
-            LayoutPreset("large", "Large buttons", scaled(base, 1.28f)),
-            LayoutPreset("compact", "Compact", scaled(base, 0.82f)),
-            LayoutPreset("wide", "Wide (edges)", widened(base)),
-            LayoutPreset("bottom", "Bottom-heavy", lowered(base)),
-            LayoutPreset("lefty", "Left-handed", mirrored(base)),
-            LayoutPreset("fullscreen", "Full-screen", fullscreen(console)),
+            LayoutPreset("large", "Large buttons", fit(scaled(base, 1.28f))),
+            LayoutPreset("compact", "Compact", fit(scaled(base, 0.82f))),
+            LayoutPreset("wide", "Wide (edges)", fit(widened(base))),
+            LayoutPreset("bottom", "Bottom-heavy", fit(lowered(base))),
+            LayoutPreset("lefty", "Left-handed", fit(mirrored(base))),
+            LayoutPreset("fullscreen", "Full-screen", fit(fullscreen(console))),
         )
         // N64-specific: a big D-pad with Z at its centre so one thumb can hold a
         // direction and Z together.
@@ -498,8 +509,80 @@ object ControllerDefs {
     /** Scales button sizes by [factor] and spreads positions out from the layout centre by a
      *  coupled amount, so enlarging buttons keeps clusters (face diamond, twin sticks) from
      *  colliding — and shrinking them tightens the layout. clampCenter keeps everything on-screen. */
+    /**
+     * Shrinks a transformed layout just enough that no two controls overlap horizontally.
+     *
+     * The preset transforms scale size faster than they spread position, and anything pushed
+     * past the edge is then pulled back by `ControllerView.clampCenter` - which collapses the
+     * gap it was clamped into. On a dense grid that is fatal: "Large buttons" overlapped the
+     * ColecoVision/Intellivision keypad columns, and "Full-screen" stacked them almost on top
+     * of each other, taking out the keys those games need to start.
+     *
+     * Positions are left alone (they are what makes a preset look like itself) and only the
+     * size is trimmed, by the largest uniform factor that clears every pair.
+     *
+     * Pairs that already touch in the authored layout are exempt. Some are meant to: the SNES
+     * diamond has X and A overlapping on the x-axis and separated on the y, and y cannot be
+     * compared against size here because one is a fraction of height and the other of width.
+     * So the rule is not "nothing overlaps" but "a preset introduces no overlap the authored
+     * layout did not already have", which is exactly the defect this fixes.
+     */
+    private fun fitWithoutOverlap(
+        base: List<ControlDef>,
+        controls: List<ControlDef>,
+    ): List<ControlDef> {
+        fun halfX(c: ControlDef, k: Float): Float {
+            val r = c.size * k / 2f
+            return if (c.shape == ControlShape.PILL || c.shape == ControlShape.BAR) r * 1.85f else r
+        }
+        fun overlaps(list: List<ControlDef>, i: Int, j: Int, k: Float): Boolean {
+            val a = list[i]
+            val b = list[j]
+            if (a.type == ControlType.DPAD || b.type == ControlType.DPAD) return false
+            if (abs(a.y - b.y) > (a.size + b.size) / 2f) return false
+            val ah = halfX(a, k)
+            val bh = halfX(b, k)
+            val ax = a.x.coerceIn(ah, 1f - ah)
+            val bx = b.x.coerceIn(bh, 1f - bh)
+            return abs(ax - bx) < ah + bh
+        }
+        // Same order and count as the input, so indices line up with the authored layout.
+        val exempt = buildSet {
+            for (i in base.indices) for (j in i + 1 until base.size) {
+                if (overlaps(base, i, j, 1f)) add(i to j)
+            }
+        }
+        fun clashes(k: Float): Boolean {
+            for (i in controls.indices) for (j in i + 1 until controls.size) {
+                if ((i to j) in exempt) continue
+                if (overlaps(controls, i, j, k)) return true
+            }
+            return false
+        }
+        if (!clashes(1f)) return controls
+        var lo = 0.5f
+        var hi = 1f
+        repeat(12) {
+            val mid = (lo + hi) / 2f
+            if (clashes(mid)) hi = mid else lo = mid
+        }
+        return controls.map { it.copy(size = it.size * lo) }
+    }
+
     private fun scaled(controls: List<ControlDef>, factor: Float): List<ControlDef> {
-        val spread = 1f + (factor - 1f) * 0.9f
+        // Spread far enough that a control would leave the screen and ControllerView clamps it
+        // back - onto whatever it was spreading away from. Saturn's Z went to x = 1.07 at
+        // "Full-screen" and came back pinned against Y. So the spread is capped at the point
+        // the outermost control reaches the edge, and everything moves by that same amount.
+        val want = 1f + (factor - 1f) * 0.9f
+        val spread = controls.fold(want) { k, c ->
+            val d = abs(c.x - 0.5f)
+            if (d <= 0.0001f || c.shape == ControlShape.BAR) k else {
+                val half = c.size * factor / 2f *
+                    (if (c.shape == ControlShape.PILL) 1.85f else 1f)
+                min(k, ((0.5f - half) / d).coerceAtLeast(1f))
+            }
+        }
         return controls.map {
             // BAR shoulders are already wide; spreading them outward only shoves their
             // ends (and labels) off the edge, so scale their size but keep their position.
@@ -570,13 +653,34 @@ object ControllerDefs {
         else -> scaled(spreadToEdges(baseControls(console)), 1.35f)
     }
 
-    /** Pushes controls toward the screen edges to use more space. */
-    private fun spreadToEdges(controls: List<ControlDef>): List<ControlDef> =
-        controls.map {
-            val nx = 0.5f + (it.x - 0.5f) * 1.18f
-            val ny = 0.5f + (it.y - 0.5f) * 1.12f
-            it.copy(x = nx.coerceIn(0.08f, 0.92f), y = ny.coerceIn(0.08f, 0.92f))
+    /**
+     * Pushes controls toward the screen edges to use more space.
+     *
+     * The spread is reduced until the outermost control lands inside the margin, rather than
+     * spreading everything and clamping each control separately. Per-control clamping pins
+     * distinct columns to the *same* coordinate - Saturn's six face buttons collapsed Y onto Z
+     * and B onto C that way, and once two controls share an x no amount of shrinking can
+     * separate them again.
+     */
+    private fun spreadToEdges(controls: List<ControlDef>): List<ControlDef> {
+        val lo = 0.08f
+        val hi = 0.92f
+        fun limit(want: Float, values: List<Float>): Float {
+            var k = want
+            for (v in values) {
+                val d = abs(v - 0.5f)
+                if (d <= 0.0001f) continue
+                val room = if (v > 0.5f) hi - 0.5f else 0.5f - lo
+                k = min(k, room / d)
+            }
+            return max(1f, k)
         }
+        val kx = limit(1.18f, controls.map { it.x })
+        val ky = limit(1.12f, controls.map { it.y })
+        return controls.map {
+            it.copy(x = 0.5f + (it.x - 0.5f) * kx, y = 0.5f + (it.y - 0.5f) * ky)
+        }
+    }
 
     // ------------------------------------------------------------- NES
 
