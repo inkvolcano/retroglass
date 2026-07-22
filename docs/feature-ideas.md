@@ -145,6 +145,19 @@ the touch layout could dim to a live *diagram* instead — it already does exact
 
 ## Rejected, with reasons
 
+- **Delegating systems to external emulators (NetherSX2, standalone Dolphin) — rejected
+  2026-07-22.** The launch-intent mechanics work (every Android frontend does it), but the
+  game then runs in the other app's process: no glasses mode, no phone-as-controller, no
+  filters, no save states — the features that are the point of this app. Making those work
+  across app boundaries needs Shizuku-grade input injection and shell display routing, which
+  is exactly the fragile, setup-heavy tooling this app is not. Decision: stay self-contained;
+  PS2 remains Play! (experimental), Xbox stays unsupported (no Android emulator exists anyway).
+- **Citra (3DS) / Dolphin (GC-Wii) libretro cores — parked, same bar.** Android arm64 cores
+  exist on the buildbot, but both are old semi-maintained forks with real stability problems.
+  The dual-screen 3DS fit (top screen on glasses, touch on phone) remains genuinely attractive,
+  so revisit only if a core proves solid in isolation first — nothing ships that needs an
+  "expect crashes" label.
+
 - **Vulkan / ParaLLEl-RDP for N64.** The N64 core exposes ParaLLEl-RDP options, but the fork
   only ever supplies a GLES context and there is no Vulkan path. Adding one is a rewrite of the
   video layer for one console.
