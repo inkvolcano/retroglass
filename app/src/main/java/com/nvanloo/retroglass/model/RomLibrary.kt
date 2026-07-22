@@ -435,6 +435,66 @@ object RomLibrary {
         return cueStems.any { stem.startsWith(it) || it.startsWith(stem) }
     }
 
+    /** Storage to keep free after any import, so the device never lands at literally zero. */
+    private const val FREE_SPACE_HEADROOM = 32L * 1024 * 1024
+
+    /**
+     * Copies into the library only if there is room, and only via a temp file and a rename.
+     *
+     * Both halves matter. There was no free-space check anywhere, and the copy wrote straight
+     * to its destination - so filling the disk during a disc import left a truncated file
+     * sitting in the ROM folder under a valid name, which the next scan happily listed as a
+     * playable game.
+     *
+     * Re-importing the same file is not an error and not a duplicate: a destination of
+     * identical size is treated as already-imported. Anything else gets a numbered name rather
+     * than overwriting, because two different dumps sharing a display name used to mean the
+     * first one silently disappeared.
+     */
+    private fun placeInLibrary(context: Context, source: File, console: Console, name: String): Boolean {
+        val dir = romsDir(context, console)
+        val existing = File(dir, name)
+        if (existing.exists() && existing.length() == source.length()) return true
+        if (dir.usableSpace < source.length() + FREE_SPACE_HEADROOM) {
+            android.util.Log.w("RomLibrary", "no room for $name (${source.length()} bytes)")
+            return false
+        }
+        val dest = uniqueDest(dir, name)
+        val tmp = File(dir, dest.name + ".part")
+        return runCatching {
+            source.copyTo(tmp, overwrite = true)
+            if (!tmp.renameTo(dest)) error("rename failed for ${dest.name}")
+            true
+        }.getOrElse {
+            android.util.Log.w("RomLibrary", "import copy failed for $name", it)
+            tmp.delete()
+            false
+        }
+    }
+
+    /** `name`, or `name (2)`, `name (3)`… if taken. */
+    private fun uniqueDest(dir: File, name: String): File {
+        var f = File(dir, name)
+        if (!f.exists()) return f
+        val base = name.substringBeforeLast('.', name)
+        val ext = name.substringAfterLast('.', "")
+        var n = 2
+        while (f.exists() && n < 1000) {
+            f = File(dir, if (ext.isEmpty()) "$base ($n)" else "$base ($n).$ext")
+            n++
+        }
+        return f
+    }
+
+    /**
+     * Extensions accepted only when a folder says so.
+     *
+     * `.exe` is a real PS1 homebrew type and also the single most common file on a phone that
+     * is emphatically not a game. Since the folder picker's own hint suggests pointing it at
+     * Download, a blind accept turned every stray installer into a PlayStation entry.
+     */
+    private val HINT_ONLY_EXTENSIONS = setOf("exe")
+
     private fun importStream(
         context: Context,
         input: InputStream,
@@ -457,19 +517,31 @@ object RomLibrary {
             return true
         }
         if (ext !in ALL_ROM_EXTENSIONS) return false
+        // The hint must actually claim the extension, not merely exist: a stray installer in
+        // a folder called "nes" is still an installer, and Console.forExtension would file it
+        // as PlayStation anyway.
+        if (ext in HINT_ONLY_EXTENSIONS && ext !in (folderHint?.romExtensions ?: emptySet())) {
+            return false
+        }
 
         // Stage to a temp file first so we can use the size for .bin disambiguation.
         val temp = File(context.cacheDir, "import_$name")
-        temp.outputStream().use { input.copyTo(it) }
+        val staged = runCatching {
+            temp.outputStream().use { input.copyTo(it) }
+            true
+        }.getOrDefault(false)
+        if (!staged) {
+            temp.delete()
+            return false
+        }
         val console = classify(ext, name, cueStems, temp.length(), folderHint)
         if (console == null) {
             temp.delete()
             return false
         }
-        val dest = File(romsDir(context, console), name)
-        temp.copyTo(dest, overwrite = true)
+        val ok = placeInLibrary(context, temp, console, name)
         temp.delete()
-        return true
+        return ok
     }
 
     private val CONSOLE_ROM_EXTENSIONS: Set<String> = ALL_ROM_EXTENSIONS - "zip"
@@ -489,25 +561,30 @@ object RomLibrary {
         folderHint: Console? = null,
     ): Boolean {
         val temp = File(context.cacheDir, "import_$originalName")
-        temp.outputStream().use { input.copyTo(it) }
-        val hasConsoleRom = runCatching {
-            java.util.zip.ZipFile(temp).use { zf ->
-                zf.entries().asSequence().any {
-                    !it.isDirectory &&
-                        it.name.substringAfterLast('.', "").lowercase() in CONSOLE_ROM_EXTENSIONS
-                }
-            }
-        }.getOrDefault(false)
-
-        val result = if (hasConsoleRom) {
-            extractConsoleZip(context, temp)
-        } else {
-            // Arcade-style romset kept intact. A folder hint (naomi/atomiswave subfolder)
-            // routes it to that system; otherwise it defaults to Arcade (FBNeo) and can be
-            // reassigned via long-press → Change system.
-            val target = if (folderHint in ARCADE_ZIP_CONSOLES) folderHint!! else Console.ARCADE
-            temp.copyTo(File(romsDir(context, target), originalName), overwrite = true)
+        val staged = runCatching {
+            temp.outputStream().use { input.copyTo(it) }
             true
+        }.getOrDefault(false)
+        if (!staged) {
+            temp.delete()
+            return false
+        }
+
+        // classifyZip is the tested classifier (ArchiveClassificationTest). It used to be
+        // unreachable: this function decided with a one-line "does any entry look like a ROM",
+        // and on *any* false answer - corrupt archive, nested folders, a docs bundle, a file
+        // picked by mistake - copied the thing into Arcade and reported success. Returning null
+        // now means refuse, which is what the .7z path already did with the same input.
+        val kind = classifyZip(temp)
+        val result = when {
+            kind == null -> false
+            // A flat, clean archive of unrecognised parts is an arcade romset: keep it intact,
+            // since FBNeo reads the zip itself. A naomi/atomiswave folder hint redirects it.
+            kind == Console.ARCADE -> {
+                val target = if (folderHint in ARCADE_ZIP_CONSOLES) folderHint!! else Console.ARCADE
+                placeInLibrary(context, temp, target, originalName)
+            }
+            else -> extractConsoleZip(context, temp)
         }
         temp.delete()
         return result
@@ -575,12 +652,8 @@ object RomLibrary {
                 )
             }
             if (console != null) {
-                val dest = File(romsDir(context, console), entryName)
-                if (!temp.renameTo(dest)) {
-                    temp.copyTo(dest, overwrite = true)
-                    temp.delete()
-                }
-                importedAny = true
+                if (placeInLibrary(context, temp, console, entryName)) importedAny = true
+                temp.delete()
             } else {
                 temp.delete()
             }
