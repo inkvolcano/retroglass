@@ -1,5 +1,6 @@
 package com.nvanloo.retroglass
 
+import com.nvanloo.retroglass.ui.MenuTheme
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -223,7 +224,7 @@ class MainActivity : AppCompatActivity() {
         // ---- top bar: centred RETRO / GLASS lockup + settings + overflow
         fun iconButton(glyph: String, size: Float, onTap: () -> Unit) = TextView(this).apply {
             text = glyph
-            setTextColor(Color.parseColor("#C7C7D2"))
+            setTextColor(MenuTheme.FG)
             textSize = size
             gravity = Gravity.CENTER
             setPadding(dp(10f), dp(4f), dp(10f), dp(4f))
@@ -289,7 +290,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
         consoleMeta = TextView(this).apply {
-            setTextColor(Color.parseColor("#9A9AA6"))
+            setTextColor(MenuTheme.DIM)
             textSize = 13f
             gravity = Gravity.CENTER
             setPadding(0, dp(2f), 0, dp(6f))
@@ -308,7 +309,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 15f
             maxLines = 1
             inputType = android.text.InputType.TYPE_CLASS_TEXT
-            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#1B1B22")) }
+            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(MenuTheme.TILE) }
             setPadding(dp(16f), dp(11f), dp(14f), dp(11f))
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun afterTextChanged(s: android.text.Editable?) { searchQuery = s?.toString()?.trim().orEmpty(); refreshGames() }
@@ -317,11 +318,11 @@ class MainActivity : AppCompatActivity() {
             })
         }
         sortToggle = TextView(this).apply {
-            setTextColor(Color.parseColor("#C7C7D2"))
+            setTextColor(MenuTheme.FG)
             textSize = 13f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#1B1B22")) }
+            background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(MenuTheme.TILE) }
             setPadding(dp(14f), dp(11f), dp(14f), dp(11f))
             isClickable = true
             isFocusable = true
@@ -361,7 +362,7 @@ class MainActivity : AppCompatActivity() {
                 textSize = 16f
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
-                background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(Color.parseColor("#2D8CFF")) }
+                background = GradientDrawable().apply { cornerRadius = dp(14f).toFloat(); setColor(MenuTheme.ACCENT) }
                 setPadding(dp(28f), dp(14f), dp(28f), dp(14f))
                 isClickable = true
                 isFocusable = true
@@ -442,7 +443,7 @@ class MainActivity : AppCompatActivity() {
 
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setBackgroundColor(Color.parseColor("#0B0B0E"))
+                setBackgroundColor(MenuTheme.BG)
                 fitsSystemWindows = true
             }
             row.addView(leftPane, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.42f))
@@ -478,7 +479,7 @@ class MainActivity : AppCompatActivity() {
 
             val blackBand = View(this).apply { setBackgroundColor(Color.BLACK) }
             val frame = android.widget.FrameLayout(this).apply {
-                setBackgroundColor(Color.parseColor("#0B0B0E"))
+                setBackgroundColor(MenuTheme.BG)
                 addView(blackBand, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0))
                 addView(root, android.widget.FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -633,7 +634,7 @@ class MainActivity : AppCompatActivity() {
         if (n > 12) {
             dotsRow.addView(TextView(this).apply {
                 text = "${active + 1} / $n"
-                setTextColor(Color.parseColor("#6A6A76"))
+                setTextColor(MenuTheme.GROUP)
                 textSize = 11f
             })
             return
@@ -643,7 +644,7 @@ class MainActivity : AppCompatActivity() {
             dotsRow.addView(View(this).apply {
                 background = GradientDrawable().apply {
                     cornerRadius = 100f
-                    setColor(if (on) Color.parseColor("#2D8CFF") else Color.parseColor("#3A3A44"))
+                    setColor(if (on) MenuTheme.ACCENT else Color.parseColor("#3A3A44"))
                 }
                 layoutParams = LinearLayout.LayoutParams(((if (on) 16 else 6) * d).toInt(), (6 * d).toInt())
                     .apply { marginEnd = (5 * d).toInt() }
@@ -732,7 +733,7 @@ class MainActivity : AppCompatActivity() {
     /** Opens the library overlay at its root when a screen is reached from outside the gear. */
     private fun openLibraryMenuIfNeeded() {
         if (libraryMenu.isOpen) return
-        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.consoleTint = MenuTheme.LIBRARY_TINT
         libraryMenu.rootStatus = null
         libraryMenu.open { libraryMenuScreen() }
     }
@@ -740,7 +741,7 @@ class MainActivity : AppCompatActivity() {
     private fun showTopMenu() {
         // No console here, and green means "focused / live" - so the identity rule falls back
         // to the app's own colorPrimary rather than borrowing the focus colour.
-        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.consoleTint = MenuTheme.LIBRARY_TINT
         libraryMenu.rootStatus = null
         libraryMenu.open { libraryMenuScreen() }
     }
@@ -875,7 +876,7 @@ class MainActivity : AppCompatActivity() {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(Color.parseColor("#161620")) }
+                background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(MenuTheme.TILE) }
                 setPadding(dp(9f), dp(6f), dp(9f), dp(6f))
                 alpha = if (occupied) 1f else 0.42f
                 isClickable = true; isFocusable = true
@@ -942,7 +943,7 @@ class MainActivity : AppCompatActivity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(Color.parseColor("#161620")) }
+            background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(MenuTheme.TILE) }
             setPadding(dp(8f), dp(6f), dp(8f), dp(6f))
             isClickable = true; isFocusable = true
             layoutParams = LinearLayout.LayoutParams(dp(56f), ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -952,7 +953,7 @@ class MainActivity : AppCompatActivity() {
             })
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.screen_label)
-                setTextColor(Color.parseColor("#6A6A76")); textSize = 8.5f
+                setTextColor(MenuTheme.GROUP); textSize = 8.5f
                 gravity = Gravity.CENTER; setPadding(0, dp(3f), 0, 0)
                 letterSpacing = 0.04f
             })
@@ -984,7 +985,7 @@ class MainActivity : AppCompatActivity() {
     private fun screenModeIcon(mode: Int, px: Int): android.graphics.Bitmap {
         val b = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(b)
-        val col = Color.parseColor("#DFE3EC")
+        val col = MenuTheme.FG
         val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             color = col; style = android.graphics.Paint.Style.STROKE; strokeWidth = px * 0.055f
             strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
@@ -1174,7 +1175,7 @@ class MainActivity : AppCompatActivity() {
         }
         actions += getString(R.string.change_system) to { chooseSystem(entry) }
         actions += getString(R.string.delete) to { confirmDelete(entry) }
-        libraryMenu.consoleTint = Color.parseColor("#7C6CF2")
+        libraryMenu.consoleTint = MenuTheme.LIBRARY_TINT
         libraryMenu.rootStatus = null
         libraryMenu.open {
             with(libraryMenu) {
@@ -1291,7 +1292,7 @@ class MainActivity : AppCompatActivity() {
         val onLongClick: (RomEntry) -> Unit,
     ) : RecyclerView.Adapter<GamesAdapter.VH>() {
         private var items: List<RomEntry> = emptyList()
-        var accent: Int = Color.parseColor("#2D8CFF")
+        var accent: Int = MenuTheme.ACCENT
         @Suppress("NotifyDataSetChanged")
         fun submit(list: List<RomEntry>) { items = list; notifyDataSetChanged() }
         override fun getItemCount() = items.size
@@ -1327,7 +1328,7 @@ class MainActivity : AppCompatActivity() {
             val sub = TextView(ctx).apply { setTextColor(Color.parseColor("#8A8A96")); textSize = 12f }
             texts.addView(name); texts.addView(sub)
             val play = TextView(ctx).apply {
-                text = "▶"; setTextColor(Color.parseColor("#6A6A76")); textSize = 14f
+                text = "▶"; setTextColor(MenuTheme.GROUP); textSize = 14f
                 setPadding(dp(10f), dp(8f), dp(8f), dp(8f))
             }
             row.addView(chip); row.addView(texts); row.addView(play)

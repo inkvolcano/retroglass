@@ -62,6 +62,14 @@ The point of the pattern library is that 44 surfaces are built from a dozen piec
 
 - **Green means focused or live. The console colour means identity.** From the design. Green is
   never decoration — `MenuTheme.ACCENT` on a value means it is the current one.
+- **The palette answers to the artwork.** `ACCENT` is `#9AC40C`, sampled from the stroke core of
+  `console_line.png`, so the accent and the console drawings are the same green rather than two
+  greens that nearly agree. Surfaces are near-black with a faint green cast, replacing a
+  blue-grey chrome that read as a second design sharing the screen. The library has no console
+  to borrow identity from, so it uses `LIBRARY_TINT` (amber) — deliberately not another green,
+  because identity and focus have to stay tellable apart. `MenuTheme` is the single source:
+  `CompanionView` used to hold its own copies of these literals and silently kept the old
+  palette, so it now aliases them.
 - **Sliders print their unit.** A bare 0..1 position next to a label that quotes a percentage
   reads as two numbers for one control. Pass `format`.
 - **Screen headings come from the row that opens them, via `menuTitle()`**, which drops the

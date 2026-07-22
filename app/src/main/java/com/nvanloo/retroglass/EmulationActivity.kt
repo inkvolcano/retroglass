@@ -610,7 +610,7 @@ class EmulationActivity : AppCompatActivity() {
             setOnClickListener { showMenu() }
         }
         fpsView = TextView(this).apply {
-            setTextColor(Color.parseColor("#B6FF6A"))
+            setTextColor(MenuTheme.ACCENT)
             setBackgroundColor(Color.parseColor("#66000000"))
             textSize = 12f
             val p = (5 * resources.displayMetrics.density).toInt()

@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      Keep these in step with ui/MenuTheme, which paints everything the app draws itself.
+      This style only reaches the surfaces the framework owns: the window behind our views,
+      the status/nav bars, and the AlertDialogs still used for text entry and key capture.
+      colorPrimary was #7C6CF2 (purple) and matched nothing on screen - dialog buttons came up
+      violet in an otherwise green app.
+    -->
     <style name="Theme.RetroGlass" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">#7C6CF2</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="android:statusBarColor">#141419</item>
-        <item name="android:navigationBarColor">#141419</item>
-        <item name="android:windowBackground">#141419</item>
+        <item name="colorPrimary">#9AC40C</item>
+        <item name="colorOnPrimary">#0A0F06</item>
+        <item name="android:statusBarColor">#060806</item>
+        <item name="android:navigationBarColor">#060806</item>
+        <item name="android:windowBackground">#060806</item>
     </style>
 </resources>

@@ -1,5 +1,6 @@
 package com.nvanloo.retroglass.controller
 
+import com.nvanloo.retroglass.ui.MenuTheme
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -335,13 +336,15 @@ class CompanionView(context: Context) : android.widget.FrameLayout(context) {
     }
 
     companion object {
-        private const val BG = 0xFF0B0B12.toInt()
-        private const val TILE = 0xFF171722.toInt()
-        private const val STROKE = 0xFF2A2A3A.toInt()
-        private const val FG = 0xFFEDEDF5.toInt()
-        private const val DIM = 0xFF8A8AA6.toInt()
-        private const val ACCENT = 0xFF9BE870.toInt()
-        private const val ACCENT2 = 0xFF7FB0FF.toInt()
+        // Aliases onto MenuTheme rather than copies. These were duplicated literals, which is
+        // how the dashboard kept the old blue-grey palette when the menu was restyled.
+        private const val BG = MenuTheme.BG
+        private const val TILE = MenuTheme.TILE
+        private const val STROKE = MenuTheme.STROKE
+        private const val FG = MenuTheme.FG
+        private const val DIM = MenuTheme.DIM
+        private const val ACCENT = MenuTheme.ACCENT
+        private const val ACCENT2 = MenuTheme.ACCENT_DIM
 
         private fun formatTime(totalSeconds: Long): String {
             val s = totalSeconds % 60

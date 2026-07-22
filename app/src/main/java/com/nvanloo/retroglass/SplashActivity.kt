@@ -1,5 +1,6 @@
 package com.nvanloo.retroglass
 
+import com.nvanloo.retroglass.ui.MenuTheme
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -20,7 +21,7 @@ class SplashActivity : AppCompatActivity() {
         val d = resources.displayMetrics.density
         fun dp(v: Float) = (v * d).toInt()
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#0B0B0E")) }
+        val root = FrameLayout(this).apply { setBackgroundColor(MenuTheme.BG) }
         root.addView(
             ImageView(this).apply {
                 setImageResource(R.drawable.retroglass_logo)

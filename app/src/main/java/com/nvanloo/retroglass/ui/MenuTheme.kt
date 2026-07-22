@@ -18,23 +18,43 @@ import android.graphics.drawable.GradientDrawable
  */
 object MenuTheme {
 
-    // --- surfaces (shared with CompanionView) ---
-    const val BG = 0xFF0B0B12.toInt()
-    const val TILE = 0xFF171722.toInt()
-    const val STROKE = 0xFF2A2A3A.toInt()
-    const val TRACK = 0xFF23232F.toInt()
-    const val HAIRLINE = 0xFF1C1C26.toInt()
+    // --- surfaces (the single source; CompanionView reads these too) ---
+    //
+    // Near-black with a faint green cast rather than the old blue-grey. The console artwork is
+    // lime line work on #010100, and a blue-tinted chrome around it read as two designs sharing
+    // a screen. These are warm-neutral enough to disappear behind the art instead.
+    const val BG = 0xFF060806.toInt()
+    const val TILE = 0xFF10140E.toInt()
+    const val STROKE = 0xFF2B3323.toInt()
+    const val TRACK = 0xFF1D2318.toInt()
+    const val HAIRLINE = 0xFF161B13.toInt()
 
     // --- text ---
-    const val FG = 0xFFEDEDF5.toInt()
-    const val DIM = 0xFF8A8AA6.toInt()
-    const val GROUP = 0xFF6B6B82.toInt()
-    const val CHEVRON = 0xFF5A5A72.toInt()
+    const val FG = 0xFFECF1E4.toInt()
+    const val DIM = 0xFF8B9A7C.toInt()
+    const val GROUP = 0xFF6C7A5E.toInt()
+    const val CHEVRON = 0xFF5B6850.toInt()
 
     // --- semantic ---
-    /** Focus ring and live values. Never used as plain decoration. */
-    const val ACCENT = 0xFF9BE870.toInt()
-    /** Destructive actions (Save & exit, Reset to defaults). */
+    /**
+     * Focus ring and live values. Never used as plain decoration.
+     *
+     * Sampled from the console artwork's own stroke core, so the accent and the drawings are
+     * literally the same green. The previous #9BE870 was a softer mint that sat next to the
+     * art's lime without matching it, which is worse than an obvious contrast.
+     */
+    const val ACCENT = 0xFF9AC40C.toInt()
+    /** A dimmer pass of [ACCENT], for secondary live readouts that must not outshout focus. */
+    const val ACCENT_DIM = 0xFF6E8C22.toInt()
+    /**
+     * Identity tint for the library, which has no console of its own to borrow one from.
+     * Amber rather than another green: the design rule is that the tint means identity and
+     * [ACCENT] means focus, so the two must stay tellable apart. Green-and-amber is also what
+     * the phosphor monitors this artwork is drawn like actually came in.
+     */
+    const val LIBRARY_TINT = 0xFFD8A32B.toInt()
+    /** Destructive actions (Save & exit, Reset to defaults). Kept warm — it has to read as
+     *  "stop" against a field of green, which a second green never would. */
     const val DANGER = 0xFFFF6B6B.toInt()
 
     // --- metrics (dp), read straight off the design ---
