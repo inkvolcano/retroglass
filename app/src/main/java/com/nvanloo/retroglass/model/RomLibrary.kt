@@ -315,7 +315,16 @@ object RomLibrary {
      * (Dreamcast/Saturn/Sega-CD headers, the PS2 SYSTEM.CNF BOOT2, the PS1 licence/BOOT).
      * Returns null for formats it can't read (.chd/.pbp) or when nothing matches.
      */
-    private fun detectDiscConsole(dataFile: File): Console? {
+    /**
+     * Which disc system a data track belongs to, by scanning its first 2 MB for the volume
+     * signatures each console stamps.
+     *
+     * Visible for tests: the order of the checks is load-bearing and invisible from the call
+     * site. PS2 and PSP discs both carry "PLAYSTATION" strings, so those two must be decided
+     * before the PS1 case or they file as PlayStation.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun detectDiscConsole(dataFile: File): Console? {
         if (!dataFile.exists() || dataFile.length() < 4096) return null
         val len = minOf(dataFile.length(), 2L * 1024 * 1024).toInt()
         val buf = ByteArray(len)
