@@ -42,9 +42,16 @@ Requires JDK 17 and the Android SDK (platform 35). Cores are **not committed** (
 ```bash
 git clone https://github.com/<you>/retroglass.git
 cd retroglass
-bash scripts/fetch_cores.sh        # or: pwsh scripts/fetch_cores.ps1
-./gradlew assembleDebug            # APK in app/build/outputs/apk/debug/
+bash scripts/fetch_cores.sh              # or: pwsh scripts/fetch_cores.ps1
+./gradlew assembleSideloadDebug          # APK in app/build/outputs/apk/sideload/debug/
 ```
+
+Two flavours: **`sideload`** (default — whole-storage ROM scanning via all-files access) and
+**`play`** (`assemblePlayDebug`) — Play-policy-compatible: no `MANAGE_EXTERNAL_STORAGE`, and
+"Scan storage" opens the SAF folder picker instead (point it at your ROMs folder once; imports
+copy into the library rather than referencing in place). The play flavour installs as
+`com.nvanloo.retroglass.play`, so both fit on one device. Cores must be 16 KB-aligned for Play
+— `python scripts/check_16k.py` verifies, `scripts/build_cores_ndk.sh` rebuilds.
 
 CI (`.github/workflows/build.yml`) fetches the cores and builds a debug APK on every push.
 

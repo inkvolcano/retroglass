@@ -222,6 +222,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startStorageScan() {
+        // The play flavour has no MANAGE_EXTERNAL_STORAGE (Play policy), so "scan storage"
+        // becomes the SAF folder picker: point it at the ROMs folder once and the recursive
+        // import does the rest. Same downstream pipeline, files copied instead of referenced.
+        if (!com.nvanloo.retroglass.BuildConfig.ALL_FILES_SCAN) {
+            pickFolder.launch(null)
+            return
+        }
         ensureStorageAccess {
             Toast.makeText(this, R.string.scanning_storage, Toast.LENGTH_SHORT).show()
             Thread {
