@@ -950,7 +950,12 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(MenuTheme.TILE) }
             setPadding(dp(8f), dp(6f), dp(8f), dp(6f))
             isClickable = true; isFocusable = true
-            layoutParams = LinearLayout.LayoutParams(dp(56f), ViewGroup.LayoutParams.WRAP_CONTENT)
+            // MATCH_PARENT so the card is exactly as tall as the player slots beside it.
+            // LinearLayout re-measures a match_parent child against the row's final height, so
+            // this tracks the slots even though the bar itself is wrap_content.
+            layoutParams = LinearLayout.LayoutParams(
+                dp(56f), ViewGroup.LayoutParams.MATCH_PARENT,
+            )
             addView(android.widget.ImageView(this@MainActivity).apply {
                 setImageBitmap(screenModeIcon(mode, dp(34f)))
                 layoutParams = LinearLayout.LayoutParams(dp(34f), dp(34f))
@@ -967,8 +972,24 @@ class MainActivity : AppCompatActivity() {
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
                 maxLines = 1; maxWidth = dp(52f); ellipsize = android.text.TextUtils.TruncateAt.END
             })
-            setOnClickListener { showScreenModePicker() }
+            // Tapping cycles rather than opening a picker: this is a 5-way toggle you flip
+            // while looking at the library, not a setting you go and find. The full list is
+            // still under the gear (Setup -> Where to play), which is where you go when you
+            // want to pick a specific mode instead of stepping to the next one.
+            contentDescription = getString(R.string.screen_mode_title) + ": " + screenModeLabel(mode)
+            setOnClickListener {
+                performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                cycleScreenMode()
+            }
         }
+    }
+
+    /** Steps to the next available screen mode, wrapping. See [buildScreenModeCard]. */
+    private fun cycleScreenMode() {
+        val modes = availableScreenModes()
+        val here = modes.indexOf(layoutStore.screenMode()).coerceAtLeast(0)
+        layoutStore.setScreenMode(modes[(here + 1) % modes.size])
+        buildControllerBar()
     }
 
     /** Where to play: Auto / phone portrait / phone landscape / external / fullscreen. */
