@@ -75,3 +75,16 @@ Timothy Lottes released this CRT shader to the **public domain**; no restriction
 `libretrodroid/` is a vendored fork of [LibretroDroid](https://github.com/Swordfish90/LibretroDroid)
 (GPLv3, Copyright Filippo Scognamiglio), extended with a custom multi-pass shader
 pipeline (`ShaderConfig.Custom`). See `libretrodroid/LICENSE` for the full GPLv3 text.
+
+## Console artwork (first-party)
+
+`app/src/main/res/drawable-nodpi/console_line.png` is original line art created for this
+project — 35 console silhouettes, no manufacturer logo, wordmark or lettering on any of them.
+It is not third-party material and carries no upstream licence.
+
+The omission of logos is deliberate. Earlier sheets (`console_photos.png`,
+`console_photos2.png`, removed) were photographic renders carrying legible Nintendo, SEGA and
+Sony marks. Depicting the hardware an emulator targets is normal; reproducing the marks is the
+part that draws an IP complaint, so the artwork was redrawn without them. Note that the removed
+files remain in git history — they are gone from the shipped APK and from the working tree, not
+from earlier commits.

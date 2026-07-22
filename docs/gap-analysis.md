@@ -206,12 +206,13 @@ Six `.so` files (~10 MB) tracked under `libretrodroid/app/src/main/jniLibs/arm64
 in with the vendored fork's demo app, which is not even built. Directly contradicts the policy
 stated in `scripts/fetch_cores.sh:6`. **Verified.**
 
-**H17. Console artwork carries manufacturer trademarks with no licensing note.**
-`console_photos.png` / `console_photos2.png` (2.4 MB) render real hardware with legible
-Nintendo, SEGA, SONY, PlayStation, PS2, PSP, NAOMI and Atomiswave marks. Not mentioned in
-`THIRD_PARTY_LICENSES.md`, which documents every other asset.
-*Failure:* emulator listings are exactly where Play's IP policy gets enforced. **Verified**
-content; risk assessment is judgement, not law. **Get a second opinion before publishing.**
+**H17. Console artwork carries manufacturer trademarks with no licensing note.** — **FIXED
+2026-07-22.** The photographic sheets carried legible Nintendo, SEGA, SONY, PlayStation, PS2,
+PSP, NAOMI and Atomiswave marks. Replaced with original line art (`console_line.png`): 35
+silhouettes, no logo, wordmark or lettering anywhere, verified cell by cell — and zero
+non-green pixels in the sheet, so the red Atari fuji is gone too. Provenance recorded in
+`THIRD_PARTY_LICENSES.md`. **The removed files remain in git history**; that is a separate
+decision (rewrite vs accept) and has not been made.
 
 **H18. Cores are fetched unpinned, so no build can be reproduced or GPL-corresponded.**
 `scripts/fetch_cores.sh:7` points at `nightly/android/latest`; there are no git tags. A core
