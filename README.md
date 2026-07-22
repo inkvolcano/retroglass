@@ -60,6 +60,13 @@ and rendered a black screen. Re-running `fetch_cores.sh` fixed it; the newer nig
 
 **arm64-v8a only.** Install `app/build/outputs/apk/debug/app-debug.apk` on any modern (arm64) Android phone with USB-C DisplayPort output.
 
+## Documentation
+
+- [`docs/ui.md`](docs/ui.md) — the menu overlay's pattern library, and the tilt-lit 3D pad
+- [`docs/filters.md`](docs/filters.md) — shader pipeline contract, every filter, the Auto factor
+- [`docs/feature-ideas.md`](docs/feature-ideas.md) — candidates with enough analysis to reject cheaply
+- [`docs/menu-design-brief.md`](docs/menu-design-brief.md) — the brief the menu was designed from
+
 ## Using it
 
 1. **Add ROMs** — *Add ROMs* offers two ways:
