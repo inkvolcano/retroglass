@@ -33,6 +33,7 @@ object ZoneLayout {
 
     private val LIGHT = Color.parseColor("#EDEDF2")
     private val DARK = Color.parseColor("#26262B")
+    private val STICK_FILL = Color.parseColor("#3A3A41")
 
     // Row heights, as fractions of the pad's height. Measured off the layouts being replaced.
     private const val TOP_Y = 0.09f
@@ -137,6 +138,21 @@ object ZoneLayout {
         fun shoulders(l: Btn?, r: Btn?, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
             if (l != null) out += bar(l, lx, cy, size)
             if (r != null) out += bar(r, rx, cy, size)
+        }
+
+        /** Two stacked shoulder bars per side: L1 over L2, R1 over R2 (DualShock). */
+        fun shouldersStacked(
+            l1: Btn, l2: Btn, r1: Btn, r2: Btn,
+            top: Float, bottom: Float, size: Float = 0.20f, lx: Float = 0.15f, rx: Float = 0.85f,
+        ) {
+            out += bar(l1, lx, top, size); out += bar(l2, lx, bottom, size)
+            out += bar(r1, rx, top, size); out += bar(r2, rx, bottom, size)
+        }
+
+        /** An analog stick module (PS1 twin, N64/Dreamcast single). */
+        fun stick(id: String, x: Float, y: Float, size: Float, label: String = "", fill: Int = STICK_FILL) {
+            out += ControlDef(id, ControlType.STICK, label, x = x, y = y, size = size,
+                shape = ControlShape.STICK, fillColor = fill, labelColor = LIGHT)
         }
 
         /** A raw control, for clusters the helpers do not yet cover. */

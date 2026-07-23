@@ -747,52 +747,32 @@ object ControllerDefs {
     // ------------------------------------------------------------- PlayStation
 
     /** Compact PS1 layout. Face cluster sits clear of the shoulder row. */
+    // Zone system: PS1 DualShock - stacked L1/L2 + R1/R2 shoulders, the shape diamond on
+    // crossed axes (each symbol keeps its colour), Select/Start pills, and twin sticks below.
     private fun psx(): List<ControlDef> {
         val face = 0.16f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.42f, size = 0.46f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            // Shoulder bars pushed out to the screen edges.
-            ControlDef("l1", ControlType.BUTTON, "L1", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.15f, y = 0.055f, size = 0.20f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("l2", ControlType.BUTTON, "L2", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.15f, y = 0.175f, size = 0.20f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r1", ControlType.BUTTON, "R1", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.85f, y = 0.055f, size = 0.20f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r2", ControlType.BUTTON, "R2", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.85f, y = 0.175f, size = 0.20f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.39f, y = 0.11f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = SYMBOL, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.61f, y = 0.11f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = SYMBOL, labelColor = LIGHT_TEXT),
-            // Shape diamond, widened so the buttons don't touch.
-            ControlDef("triangle", ControlType.BUTTON, "△", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.73f, y = 0.325f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#26B57A")),
-            ControlDef("circle", ControlType.BUTTON, "○", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.87f, y = 0.42f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#E4574C")),
-            ControlDef("cross", ControlType.BUTTON, "✕", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.73f, y = 0.515f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#7BA4D9")),
-            ControlDef("square", ControlType.BUTTON, "□", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.59f, y = 0.42f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#D992BC")),
-            // Twin sticks, moved apart and a little lower.
-            ControlDef("stick_l", ControlType.STICK, "L", x = 0.33f, y = 0.82f, size = 0.26f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-            ControlDef("stick_r", ControlType.STICK, "R", x = 0.67f, y = 0.82f, size = 0.26f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.257f, cy = 0.42f, size = 0.46f, fill = GRAY_BTN)
+            shouldersStacked(
+                Btn("l1", "L1", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                Btn("l2", "L2", KeyEvent.KEYCODE_BUTTON_L2, GRAY_BTN),
+                Btn("r1", "R1", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN),
+                Btn("r2", "R2", KeyEvent.KEYCODE_BUTTON_R2, GRAY_BTN),
+                top = 0.055f, bottom = 0.175f, size = 0.20f,
+            )
+            faceDiamond4(
+                Btn("triangle", "△", KeyEvent.KEYCODE_BUTTON_X, SYMBOL, labelColor = Color.parseColor("#26B57A")),
+                Btn("circle", "○", KeyEvent.KEYCODE_BUTTON_A, SYMBOL, labelColor = Color.parseColor("#E4574C")),
+                Btn("cross", "✕", KeyEvent.KEYCODE_BUTTON_B, SYMBOL, labelColor = Color.parseColor("#7BA4D9")),
+                Btn("square", "□", KeyEvent.KEYCODE_BUTTON_Y, SYMBOL, labelColor = Color.parseColor("#D992BC")),
+                cx = 0.73f, cy = 0.42f, hx = 0.14f, vy = 0.095f, size = face,
+            )
+            pillPair(Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, SYMBOL),
+                     Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, SYMBOL),
+                     cy = 0.11f, size = 0.10f, gap = 0.22f)
+            stick("stick_l", 0.33f, 0.82f, 0.26f, label = "L")
+            stick("stick_r", 0.67f, 0.82f, 0.26f, label = "R")
+        }
     }
 
     /**
@@ -918,47 +898,30 @@ object ControllerDefs {
      * (ids "c_*") = the right analog (handled in ControllerView.sendCButtons). This mirrors
      * the physical pad: one centred stick, D-pad upper-left, big A + B, small C diamond.
      */
+    // Zone system: N64 - shoulders + Z + Start across the top, D-pad upper-left, big B/A, the
+    // four yellow C-buttons as a small diamond (they drive the right analog), one centred stick.
     private fun n64(): List<ControlDef> {
         val yellow = Color.parseColor("#E8B800")
         val cSize = 0.115f
-        return listOf(
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.13f, y = 0.06f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.87f, y = 0.06f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.06f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-            ControlDef("z", ControlType.BUTTON, "Z", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.50f, y = 0.20f, size = 0.13f, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
-            // D-pad upper-left.
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.227f, y = 0.33f, size = 0.40f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
-            // Big B / A on the right.
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.58f, y = 0.54f, size = 0.17f, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#2E7D32"), labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.78f, y = 0.62f, size = 0.20f, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#1565C0"), labelColor = LIGHT_TEXT),
-            // Four small yellow C-buttons in a diamond (drive the right analog).
-            ControlDef("c_up", ControlType.BUTTON, "C", x = 0.80f, y = 0.30f, size = cSize,
-                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
-            ControlDef("c_left", ControlType.BUTTON, "C", x = 0.70f, y = 0.38f, size = cSize,
-                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
-            ControlDef("c_right", ControlType.BUTTON, "C", x = 0.90f, y = 0.38f, size = cSize,
-                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
-            ControlDef("c_down", ControlType.BUTTON, "C", x = 0.80f, y = 0.46f, size = cSize,
-                shape = ControlShape.CIRCLE, fillColor = yellow, labelColor = DARK),
-            // The one analog stick, centred at the bottom.
-            ControlDef("stick_l", ControlType.STICK, "", x = 0.50f, y = 0.81f, size = 0.34f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN),
+                      cy = 0.06f, size = 0.18f, lx = 0.13f, rx = 0.87f)
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#C0392B")),
+                cy = 0.06f)
+            faceButton(Btn("z", "Z", KeyEvent.KEYCODE_BUTTON_L2, Color.parseColor("#2E2E33")), 0.50f, 0.20f, 0.13f)
+            directional(cx = 0.227f, cy = 0.33f, size = 0.40f, fill = Color.parseColor("#3A3A3E"))
+            faceButton(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, Color.parseColor("#2E7D32")), 0.58f, 0.54f, 0.17f)
+            faceButton(Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, Color.parseColor("#1565C0")), 0.78f, 0.62f, 0.20f)
+            faceDiamond4(
+                Btn("c_up", "C", 0, yellow, labelColor = DARK),
+                Btn("c_right", "C", 0, yellow, labelColor = DARK),
+                Btn("c_down", "C", 0, yellow, labelColor = DARK),
+                Btn("c_left", "C", 0, yellow, labelColor = DARK),
+                cx = 0.80f, cy = 0.38f, hx = 0.10f, vy = 0.08f, size = cSize,
+            )
+            stick("stick_l", 0.50f, 0.81f, 0.34f)
+        }
     }
 
     private fun n64Fullscreen(): List<ControlDef> = scaled(spreadToEdges(n64()), 1.15f)
@@ -1257,34 +1220,30 @@ object ControllerDefs {
 
     /** Arcade: D-pad, six buttons (SF layout), Coin (=Select), Start. */
 
+    // Zone system: arcade - the 2x3 punch/kick cluster as two shallow diagonal rows (LP MP HP
+    // over LK MK HK), Coin/Start pills.
     private fun arcade(): List<ControlDef> {
         val punch = Color.parseColor("#2E86C1")
         val kick = Color.parseColor("#E67E22")
         val face = 0.13f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.55f, size = 0.52f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("coin", ControlType.BUTTON, "COIN", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.62f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            // Top row: light/medium/heavy punch
-            ControlDef("lp", ControlType.BUTTON, "LP", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.62f, y = 0.42f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
-            ControlDef("mp", ControlType.BUTTON, "MP", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.77f, y = 0.37f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
-            ControlDef("hp", ControlType.BUTTON, "HP", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.92f, y = 0.34f, size = face, shape = ControlShape.CIRCLE, fillColor = punch, labelColor = LIGHT_TEXT),
-            // Bottom row: light/medium/heavy kick
-            ControlDef("lk", ControlType.BUTTON, "LK", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.62f, y = 0.64f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
-            ControlDef("mk", ControlType.BUTTON, "MK", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.77f, y = 0.59f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
-            ControlDef("hk", ControlType.BUTTON, "HK", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.92f, y = 0.56f, size = face, shape = ControlShape.CIRCLE, fillColor = kick, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.287f, cy = 0.55f, size = 0.52f)
+            faceDiagonal(listOf(
+                Btn("lp", "LP", KeyEvent.KEYCODE_BUTTON_Y, punch),
+                Btn("mp", "MP", KeyEvent.KEYCODE_BUTTON_X, punch),
+                Btn("hp", "HP", KeyEvent.KEYCODE_BUTTON_L1, punch),
+            ), cx = 0.77f, cy = 0.377f, spread = 0.30f, size = face, slope = 0.27f)
+            faceDiagonal(listOf(
+                Btn("lk", "LK", KeyEvent.KEYCODE_BUTTON_B, kick),
+                Btn("mk", "MK", KeyEvent.KEYCODE_BUTTON_A, kick),
+                Btn("hk", "HK", KeyEvent.KEYCODE_BUTTON_R1, kick),
+            ), cx = 0.77f, cy = 0.597f, spread = 0.30f, size = face, slope = 0.27f)
+            systemPills(
+                Btn("coin", "COIN", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                cy = 0.88f, size = 0.10f, gap = 0.25f,
+            )
+        }
     }
 
     // ---------------------------------------------- Master System / Game Gear
@@ -1332,40 +1291,26 @@ object ControllerDefs {
      * A bottom), analog L/R triggers, and Start. Flycast reads A/B/X/Y directly and
      * the triggers as L2/R2.
      */
+    // Zone system: Dreamcast - one stick, L/R triggers, the Y/X/B/A diamond, orange Start.
     private fun dreamcast(): List<ControlDef> {
         val face = 0.14f
         val btn = Color.parseColor("#3A3A40")
-        return listOf(
-            // START moved up top so the D-pad + analog can grow.
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.38f, size = 0.52f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("stick_l", ControlType.STICK, "", x = 0.29f, y = 0.78f, size = 0.44f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.15f, y = 0.06f, size = 0.17f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.85f, y = 0.06f, size = 0.17f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.11f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#F17022"), labelColor = DARK),
-            // Even diamond: equal spacing top/bottom and left/right.
-            ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.81f, y = 0.44f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.70f, y = 0.52f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.92f, y = 0.52f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.81f, y = 0.60f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.287f, cy = 0.38f, size = 0.52f, fill = Color.parseColor("#2A2A2E"))
+            stick("stick_l", 0.29f, 0.78f, 0.44f)
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L2, GRAY_BTN),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R2, GRAY_BTN),
+                      cy = 0.06f, size = 0.17f)
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START,
+                Color.parseColor("#F17022"), labelColor = DARK), cy = 0.11f, size = 0.12f)
+            faceDiamond4(
+                Btn("y", "Y", KeyEvent.KEYCODE_BUTTON_Y, btn),
+                Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn),
+                Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn),
+                Btn("x", "X", KeyEvent.KEYCODE_BUTTON_X, btn),
+                cx = 0.81f, cy = 0.52f, hx = 0.11f, vy = 0.08f, size = face,
+            )
+        }
     }
 
     // ------------------------------------------------------------- Neo Geo Pocket
