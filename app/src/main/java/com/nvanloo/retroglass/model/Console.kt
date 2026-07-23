@@ -780,53 +780,32 @@ object ControllerDefs {
      * top, a large D-pad bottom-left, large face cluster bottom-right, twin sticks
      * in the middle, SELECT/START between the shoulders. Matches the reference sketch.
      */
+    // Zone system: the full-screen PS1 pad (gamepad fills the phone) - the same DualShock
+    // pieces spread out: half-width shoulder bars stacked at the top, a large D-pad
+    // bottom-left, the widened shape diamond bottom-right, twin sticks in the middle.
     private fun psxFullscreen(): List<ControlDef> {
         val face = 0.20f
-        return listOf(
-            // Shoulder bars — each spans roughly half the width.
-            ControlDef("l1", ControlType.BUTTON, "L1", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.245f, y = 0.05f, size = 0.46f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r1", ControlType.BUTTON, "R1", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.755f, y = 0.05f, size = 0.46f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("l2", ControlType.BUTTON, "L2", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.245f, y = 0.185f, size = 0.46f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r2", ControlType.BUTTON, "R2", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.755f, y = 0.185f, size = 0.46f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.38f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
-                fillColor = SYMBOL, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.62f, y = 0.34f, size = 0.11f, shape = ControlShape.PILL,
-                fillColor = SYMBOL, labelColor = LIGHT_TEXT),
-            // Big D-pad bottom-left.
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.15f, y = 0.66f, size = 0.66f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            // Big face cluster bottom-right.
-            ControlDef("triangle", ControlType.BUTTON, "△", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.85f, y = 0.47f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#26B57A")),
-            ControlDef("circle", ControlType.BUTTON, "○", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.95f, y = 0.66f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#E4574C")),
-            ControlDef("cross", ControlType.BUTTON, "✕", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.85f, y = 0.85f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#7BA4D9")),
-            ControlDef("square", ControlType.BUTTON, "□", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.75f, y = 0.66f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = SYMBOL, labelColor = Color.parseColor("#D992BC")),
-            // Twin sticks in the middle.
-            ControlDef("stick_l", ControlType.STICK, "L", x = 0.40f, y = 0.66f, size = 0.34f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-            ControlDef("stick_r", ControlType.STICK, "R", x = 0.60f, y = 0.66f, size = 0.34f,
-                shape = ControlShape.STICK,
-                fillColor = Color.parseColor("#3A3A41"), labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            shouldersStacked(
+                Btn("l1", "L1", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                Btn("l2", "L2", KeyEvent.KEYCODE_BUTTON_L2, GRAY_BTN),
+                Btn("r1", "R1", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN),
+                Btn("r2", "R2", KeyEvent.KEYCODE_BUTTON_R2, GRAY_BTN),
+                top = 0.05f, bottom = 0.185f, size = 0.46f, lx = 0.245f, rx = 0.755f,
+            )
+            pillPair(Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, SYMBOL),
+                     Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, SYMBOL), cy = 0.34f, size = 0.11f)
+            directional(cx = 0.15f, cy = 0.66f, size = 0.66f, fill = GRAY_BTN)
+            faceDiamond4(
+                Btn("triangle", "△", KeyEvent.KEYCODE_BUTTON_X, SYMBOL, labelColor = Color.parseColor("#26B57A")),
+                Btn("circle", "○", KeyEvent.KEYCODE_BUTTON_A, SYMBOL, labelColor = Color.parseColor("#E4574C")),
+                Btn("cross", "✕", KeyEvent.KEYCODE_BUTTON_B, SYMBOL, labelColor = Color.parseColor("#7BA4D9")),
+                Btn("square", "□", KeyEvent.KEYCODE_BUTTON_Y, SYMBOL, labelColor = Color.parseColor("#D992BC")),
+                cx = 0.85f, cy = 0.66f, hx = 0.10f, vy = 0.19f, size = face,
+            )
+            stick("stick_l", 0.40f, 0.66f, 0.34f, label = "L")
+            stick("stick_r", 0.60f, 0.66f, 0.34f, label = "R")
+        }
     }
 
     // ------------------------------------------------------------- Game Boy
@@ -1071,30 +1050,31 @@ object ControllerDefs {
      * ControllerView.COLECO_KEYPAD. The previous layout bound "1" to X and "2" to Y, which
      * are the codes for 2 and 1: the two keys most games use, swapped.
      */
+    // Zone system: ColecoVision - joystick, two fire buttons, and the 12-key numeric keypad
+    // as a 3x4 grid. Bindings are gearcoleco's own (kp_9 / kp_0 carry no keycode - the core
+    // reads them off the left analog, see ControllerView.COLECO_KEYPAD).
     private fun coleco(): List<ControlDef> {
         val key = Color.parseColor("#2E2E33")
-        val ksz = 0.115f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.252f, y = 0.32f, size = 0.45f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("lfire", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.13f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-            ControlDef("rfire", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.36f, y = 0.62f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-            ControlDef("kp_1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_Y, x = 0.62f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_X, x = 0.76f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_3", ControlType.BUTTON, "3", KeyEvent.KEYCODE_BUTTON_L1, x = 0.90f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_4", ControlType.BUTTON, "4", KeyEvent.KEYCODE_BUTTON_R1, x = 0.62f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_5", ControlType.BUTTON, "5", KeyEvent.KEYCODE_BUTTON_L2, x = 0.76f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_6", ControlType.BUTTON, "6", KeyEvent.KEYCODE_BUTTON_R2, x = 0.90f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_7", ControlType.BUTTON, "7", KeyEvent.KEYCODE_BUTTON_THUMBL, x = 0.62f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_8", ControlType.BUTTON, "8", KeyEvent.KEYCODE_BUTTON_THUMBR, x = 0.76f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            // 9 and 0 carry no keycode: ControllerView routes them to the left analog instead.
-            ControlDef("kp_9", ControlType.BUTTON, "9", x = 0.90f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_star", ControlType.BUTTON, "*", KeyEvent.KEYCODE_BUTTON_START, x = 0.62f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_0", ControlType.BUTTON, "0", x = 0.76f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_hash", ControlType.BUTTON, "#", KeyEvent.KEYCODE_BUTTON_SELECT, x = 0.90f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-        )
+        val fire = Color.parseColor("#C0392B")
+        return ZoneLayout.pad {
+            directional(cx = 0.252f, cy = 0.32f, size = 0.45f)
+            faceButton(Btn("lfire", "L", KeyEvent.KEYCODE_BUTTON_B, fire), 0.13f, 0.62f, 0.19f)
+            faceButton(Btn("rfire", "R", KeyEvent.KEYCODE_BUTTON_A, fire), 0.36f, 0.62f, 0.19f)
+            keypad(listOf(
+                listOf(Btn("kp_1", "1", KeyEvent.KEYCODE_BUTTON_Y, key),
+                       Btn("kp_2", "2", KeyEvent.KEYCODE_BUTTON_X, key),
+                       Btn("kp_3", "3", KeyEvent.KEYCODE_BUTTON_L1, key)),
+                listOf(Btn("kp_4", "4", KeyEvent.KEYCODE_BUTTON_R1, key),
+                       Btn("kp_5", "5", KeyEvent.KEYCODE_BUTTON_L2, key),
+                       Btn("kp_6", "6", KeyEvent.KEYCODE_BUTTON_R2, key)),
+                listOf(Btn("kp_7", "7", KeyEvent.KEYCODE_BUTTON_THUMBL, key),
+                       Btn("kp_8", "8", KeyEvent.KEYCODE_BUTTON_THUMBR, key),
+                       Btn("kp_9", "9", 0, key)),
+                listOf(Btn("kp_star", "*", KeyEvent.KEYCODE_BUTTON_START, key),
+                       Btn("kp_0", "0", 0, key),
+                       Btn("kp_hash", "#", KeyEvent.KEYCODE_BUTTON_SELECT, key)),
+            ), cx0 = 0.62f, cy0 = 0.26f, colGap = 0.14f, rowGap = 0.18f, size = 0.115f)
+        }
     }
 
     // ------------------------------------------------------------- Intellivision
@@ -1105,37 +1085,27 @@ object ControllerDefs {
      * Y=Top, B=Left, A=Right; keypad 1-4/6-9 -> right analog (a 3x3 disc, handled by
      * ControllerView.sendKeypad), 5=R3, 0=L3, Clear=L2, Enter=R2.
      */
+    // Zone system: Intellivision - the disc, three gold side buttons, an off-centre Start, and
+    // the 12-key keypad (1-4/6-9 carry no keycode: ControllerView.sendKeypad routes them to the
+    // right analog as a 3x3 disc; 5/0/Clear/Enter are ordinary buttons).
     private fun intellivision(): List<ControlDef> {
         val gold = Color.parseColor("#B8860B")
         val key = Color.parseColor("#3A3A40")
-        val ksz = 0.115f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.252f, y = 0.30f, size = 0.45f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            // Three side action buttons (Top=Y, Left=B, Right=A per FreeIntv).
-            ControlDef("act_left", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.09f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
-            ControlDef("act_top", ControlType.BUTTON, "T", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.235f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
-            ControlDef("act_right", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.38f, y = 0.52f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = gold, labelColor = DARK),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.235f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            // 12-key numeric keypad. 1-4/6-9 drive the right analog (isKeypadDir); 5/0/Clear/Enter are buttons.
-            ControlDef("kp_1", ControlType.BUTTON, "1", x = 0.62f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_2", ControlType.BUTTON, "2", x = 0.76f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_3", ControlType.BUTTON, "3", x = 0.90f, y = 0.26f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_4", ControlType.BUTTON, "4", x = 0.62f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_5", ControlType.BUTTON, "5", KeyEvent.KEYCODE_BUTTON_THUMBR, x = 0.76f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_6", ControlType.BUTTON, "6", x = 0.90f, y = 0.44f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_7", ControlType.BUTTON, "7", x = 0.62f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_8", ControlType.BUTTON, "8", x = 0.76f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_9", ControlType.BUTTON, "9", x = 0.90f, y = 0.62f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_clear", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_L2, x = 0.62f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#7A2A2A"), labelColor = LIGHT_TEXT),
-            ControlDef("kp_0", ControlType.BUTTON, "0", KeyEvent.KEYCODE_BUTTON_THUMBL, x = 0.76f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = key, labelColor = LIGHT_TEXT),
-            ControlDef("kp_enter", ControlType.BUTTON, "E", KeyEvent.KEYCODE_BUTTON_R2, x = 0.90f, y = 0.80f, size = ksz, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#2A6A2A"), labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.252f, cy = 0.30f, size = 0.45f)
+            faceButton(Btn("act_left", "L", KeyEvent.KEYCODE_BUTTON_B, gold, labelColor = DARK), 0.09f, 0.52f, 0.13f)
+            faceButton(Btn("act_top", "T", KeyEvent.KEYCODE_BUTTON_Y, gold, labelColor = DARK), 0.235f, 0.52f, 0.13f)
+            faceButton(Btn("act_right", "R", KeyEvent.KEYCODE_BUTTON_A, gold, labelColor = DARK), 0.38f, 0.52f, 0.13f)
+            pillAt(Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")), 0.235f, 0.85f, 0.11f)
+            keypad(listOf(
+                listOf(Btn("kp_1", "1", 0, key), Btn("kp_2", "2", 0, key), Btn("kp_3", "3", 0, key)),
+                listOf(Btn("kp_4", "4", 0, key), Btn("kp_5", "5", KeyEvent.KEYCODE_BUTTON_THUMBR, key), Btn("kp_6", "6", 0, key)),
+                listOf(Btn("kp_7", "7", 0, key), Btn("kp_8", "8", 0, key), Btn("kp_9", "9", 0, key)),
+                listOf(Btn("kp_clear", "C", KeyEvent.KEYCODE_BUTTON_L2, Color.parseColor("#7A2A2A")),
+                       Btn("kp_0", "0", KeyEvent.KEYCODE_BUTTON_THUMBL, key),
+                       Btn("kp_enter", "E", KeyEvent.KEYCODE_BUTTON_R2, Color.parseColor("#2A6A2A"))),
+            ), cx0 = 0.62f, cy0 = 0.26f, colGap = 0.14f, rowGap = 0.18f, size = 0.115f)
+        }
     }
 
     // ------------------------------------------------------------- Vectrex
@@ -1177,44 +1147,36 @@ object ControllerDefs {
      * here. KBD raises atari800's own on-screen keyboard (L3), and that button is the reason
      * this system is supported at all: everything needing typing goes through the overlay.
      */
-    private fun atari8bit(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.28f, y = 0.50f, size = 0.52f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#2A2018"), labelColor = LIGHT_TEXT),
-        ControlDef("fire1", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#C8102E"), labelColor = LIGHT_TEXT),
-        ControlDef("fire2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.69f, y = 0.60f, size = 0.19f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#8A3A2A"), labelColor = LIGHT_TEXT),
-        ControlDef("ret", ControlType.BUTTON, "RET", KeyEvent.KEYCODE_BUTTON_X,
-            x = 0.69f, y = 0.31f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#3A3A40"), labelColor = LIGHT_TEXT),
-        ControlDef("kbd", ControlType.BUTTON, "KBD", KeyEvent.KEYCODE_BUTTON_THUMBL,
-            x = 0.87f, y = 0.22f, size = 0.13f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#C8102E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.20f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.40f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("option", ControlType.BUTTON, "OPTION", KeyEvent.KEYCODE_BUTTON_L1,
-            x = 0.60f, y = 0.87f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: Atari 8-bit - joystick, Fire + a second fire, RET, the three console keys
+    // (Start/Select/Option) as a low pill row, and KBD (L3) for atari800's on-screen keyboard.
+    private fun atari8bit(): List<ControlDef> {
+        val pill = Color.parseColor("#2A2A2E")
+        return ZoneLayout.pad {
+            directional(cx = 0.28f, cy = 0.50f, size = 0.52f, fill = Color.parseColor("#2A2018"))
+            faceButton(Btn("fire1", "FIRE", KeyEvent.KEYCODE_BUTTON_B, Color.parseColor("#C8102E")), 0.87f, 0.47f, 0.22f)
+            faceButton(Btn("fire2", "2", KeyEvent.KEYCODE_BUTTON_A, Color.parseColor("#8A3A2A")), 0.69f, 0.60f, 0.19f)
+            faceButton(Btn("ret", "RET", KeyEvent.KEYCODE_BUTTON_X, Color.parseColor("#3A3A40")), 0.69f, 0.31f, 0.13f)
+            pillAt(Btn("kbd", "KBD", KeyEvent.KEYCODE_BUTTON_THUMBL, Color.parseColor("#C8102E")), 0.87f, 0.22f, 0.13f)
+            pillAt(Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, pill), 0.20f, 0.87f, 0.11f)
+            pillAt(Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, pill), 0.40f, 0.87f, 0.11f)
+            pillAt(Btn("option", "OPTION", KeyEvent.KEYCODE_BUTTON_L1, pill), 0.60f, 0.87f, 0.11f)
+        }
+    }
 
-    private fun atari5200(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.37f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.63f, y = 0.84f, size = 0.11f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("fire2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
-        ControlDef("fire1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
-        // The 5200 pad has a 12-key keypad, and atari800 puts it on the host keyboard
-        // ("Keyboard 0-9" in its own docs) - a device this fork does not implement. R3 raises
-        // the core's on-screen keyboard instead: drawn into the frame, driven by the pad.
-        ControlDef("kbd", ControlType.BUTTON, "KEYS", KeyEvent.KEYCODE_BUTTON_THUMBR,
-            x = 0.53f, y = 0.30f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#3A3A40"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: Atari 5200 - joystick, two fire buttons on the diagonal, Start/Pause pills,
+    // and KEYS (R3) which raises atari800's on-screen keyboard for the 12-key keypad.
+    private fun atari5200(): List<ControlDef> {
+        val fire = Color.parseColor("#D24A2C")
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.54f, size = 0.55f)
+            faceDiag2(Btn("fire2", "2", KeyEvent.KEYCODE_BUTTON_A, fire),
+                      Btn("fire1", "1", KeyEvent.KEYCODE_BUTTON_B, fire))
+            pillAt(Btn("kbd", "KEYS", KeyEvent.KEYCODE_BUTTON_THUMBR, Color.parseColor("#3A3A40")), 0.53f, 0.30f, 0.12f)
+            pillPair(Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                     Btn("pause", "PAUSE", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+                     cy = 0.84f, size = 0.11f, gap = 0.26f)
+        }
+    }
 
     // ------------------------------------------------------------- Arcade / Neo Geo
 

@@ -62,6 +62,30 @@ Every multi-button cluster sits on a guide, and buttons snap to it:
 - **30° diagonal**, single (GB) or **doubled** (N64 C-cluster + A/B)
 - **crossed axes** of a diamond (SNES)
 
+## Status: complete (2026-07-23)
+
+All 35 consoles render through `ZoneLayout` — no layout function authors absolute coordinates
+any more. The engine's guide-axis helpers cover every cluster the console set uses:
+
+| Helper | Consoles |
+|---|---|
+| `directional` | all (cross/PSX_CROSS) |
+| `faceRow2` | NES, PC Engine, Master System / Game Gear |
+| `faceDiag2` | Game Boy, GBA, Lynx, NGP, WonderSwan, Virtual Boy, Pokémon Mini, Atari 7800, Atari 5200 |
+| `faceArc3` / `faceDiagonal` | Genesis, 3DO, Neo Geo CD, Saturn (×2 rows), arcade (×2 rows) |
+| `faceDiamond4` | SNES, PS1, Dreamcast, N64 C-buttons |
+| `faceFire1` / `faceButton` | Atari 2600, N64 A/B/Z, Coleco/Intellivision side buttons, Atari 8-bit |
+| `faceRowN` | Vectrex |
+| `keypad` | ColecoVision, Intellivision |
+| `stick` / `shouldersStacked` | PS1, Dreamcast, N64 |
+| `systemPills` / `pillPair` / `pillAt` | every console's Start/Select and console keys |
+
+Emitted coordinates match the hand-authored ones within ~0.01 throughout; the overlap-invariant
+test guards against the reflow reintroducing collisions. **Not yet verified on device** — the
+phone was off wireless ADB during the build-out, so visual fidelity of each pad still needs a
+look. The landscape reflow (below) remains: layouts still route through the separate
+`LandscapeLayout` in landscape; only the portrait pad is on the zone engine so far.
+
 ## Implementation plan (loop iterations)
 
 1. `controller/ZoneLayout.kt` — `Zone` enum, `Module` sealed types, `Anchor(vert, horiz)`, and a

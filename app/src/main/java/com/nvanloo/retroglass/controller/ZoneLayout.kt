@@ -114,6 +114,20 @@ object ZoneLayout {
         /** One button at an explicit spot, for clusters the guides do not cover (Vectrex's 4th). */
         fun faceButton(b: Btn, x: Float, y: Float, size: Float) = button(b, x, y, size)
 
+        /**
+         * A numeric keypad grid (ColecoVision, Intellivision), row-major from the top-left key.
+         * Each [Btn] keeps its own keycode and colour — keys the RetroPad has no button for
+         * carry keycode 0 and are routed to an analog axis by ControllerView.
+         */
+        fun keypad(rows: List<List<Btn>>, cx0: Float, cy0: Float, colGap: Float, rowGap: Float, size: Float) {
+            rows.forEachIndexed { r, row ->
+                row.forEachIndexed { c, b -> button(b, cx0 + c * colGap, cy0 + r * rowGap, size) }
+            }
+        }
+
+        /** A pill at an explicit spot (console-key rows, the Atari on-screen-keyboard toggle). */
+        fun pillAt(b: Btn, x: Float, y: Float, size: Float) = pill(b, x, y, size)
+
         /** Three face buttons on a rising diagonal guide (Genesis: A B C). */
         fun faceArc3(
             a: Btn, b: Btn, c: Btn,
