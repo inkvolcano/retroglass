@@ -703,39 +703,27 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- SNES
 
+    // Zone system: the SNES four-button diamond on crossed axes, grey L/R shoulders.
     private fun snes(): List<ControlDef> {
-        val face = 0.18f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.262f, y = 0.50f, size = 0.47f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.15f, y = 0.09f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = Color.parseColor("#8D8A92"), labelColor = DARK),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.85f, y = 0.09f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = Color.parseColor("#8D8A92"), labelColor = DARK),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.38f, y = 0.855f, size = 0.115f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.62f, y = 0.835f, size = 0.115f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#3A3A3E"), labelColor = LIGHT_TEXT),
-            // Symmetric diamond: X top / B bottom on the centre line, Y left / A right on
-            // the vertical mid-point (0.50) so all four are equidistant from the centre.
-            ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.75f, y = 0.40f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#3F51B5"), labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.89f, y = 0.50f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#D32F2F"), labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.75f, y = 0.60f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#F9A825"), labelColor = DARK),
-            ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.61f, y = 0.50f, size = face, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#388E3C"), labelColor = LIGHT_TEXT),
-        )
+        val body = Color.parseColor("#3A3A3E")
+        val sh = Color.parseColor("#8D8A92")
+        return ZoneLayout.pad {
+            directional(cx = 0.262f, cy = 0.50f, size = 0.47f, fill = body)
+            faceDiamond4(
+                Btn("x", "X", KeyEvent.KEYCODE_BUTTON_X, Color.parseColor("#3F51B5")),
+                Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, Color.parseColor("#D32F2F")),
+                Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, Color.parseColor("#F9A825"), labelColor = DARK),
+                Btn("y", "Y", KeyEvent.KEYCODE_BUTTON_Y, Color.parseColor("#388E3C")),
+            )
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, sh, labelColor = DARK),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, sh, labelColor = DARK),
+                      cy = 0.09f)
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, body),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, body),
+                cy = 0.845f, size = 0.115f,
+            )
+        }
     }
 
     // ------------------------------------------------------------- Mega Drive
@@ -871,7 +859,8 @@ object ControllerDefs {
         return ZoneLayout.pad {
             directional(cx = 0.29f, cy = 0.50f, size = 0.50f)
             faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn),
-                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn))
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn),
+                      cx = 0.775f, cy = 0.52f, spread = 0.20f, size = 0.24f)
             systemPills(
                 Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, body),
                 Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, body),
@@ -979,115 +968,85 @@ object ControllerDefs {
     // ------------------------------------------------------------- Atari Lynx
 
     /** Lynx: D-pad, A, B, two Option buttons (shoulder bars), Pause = Start. */
+    // Zone system: Lynx - handheld diagonal, OPT1/OPT2 shoulders, a lone Pause pill.
     private fun lynx(): List<ControlDef> {
         val btn = Color.parseColor("#E8A020")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.55f, size = 0.55f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("opt1", ControlType.BUTTON, "OPT 1", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.15f, y = 0.10f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("opt2", ControlType.BUTTON, "OPT 2", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.85f, y = 0.10f, size = 0.18f, shape = ControlShape.BAR,
-                fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = DARK),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
-                fillColor = btn, labelColor = DARK),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.55f, size = 0.55f)
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn, labelColor = DARK),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn, labelColor = DARK))
+            shoulders(Btn("opt1", "OPT 1", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                      Btn("opt2", "OPT 2", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN), cy = 0.10f)
+            systemPills(null, Btn("pause", "PAUSE", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")))
+        }
     }
 
     // ------------------------------------------------------------- Atari 2600
 
     /** 2600: one joystick, one Fire button, plus console Select and Reset (=Start). */
-    private fun atari2600(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("reset", ControlType.BUTTON, "RESET", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("fire", ControlType.BUTTON, "FIRE", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.85f, y = 0.56f, size = 0.30f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#D24A2C"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: 2600 - one big Fire button, Select/Reset console pills.
+    private fun atari2600(): List<ControlDef> = ZoneLayout.pad {
+        directional(cx = 0.302f, cy = 0.54f, size = 0.55f)
+        faceFire1(Btn("fire", "FIRE", KeyEvent.KEYCODE_BUTTON_B, Color.parseColor("#D24A2C")))
+        systemPills(
+            Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+            Btn("reset", "RESET", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+            cy = 0.84f, size = 0.115f,
+        )
+    }
 
     // ------------------------------------------------------------- Atari 7800
 
     /** 7800: D-pad, two fire buttons, Select, Pause (=Start). */
-    private fun atari7800(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("pause", ControlType.BUTTON, "PAUSE", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("b", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-        ControlDef("a", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: 7800 - two fire buttons (1,2) on the diagonal, Select/Pause pills.
+    private fun atari7800(): List<ControlDef> {
+        val btn = Color.parseColor("#C0392B")
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.54f, size = 0.55f)
+            faceDiag2(Btn("b", "1", KeyEvent.KEYCODE_BUTTON_B, btn),
+                      Btn("a", "2", KeyEvent.KEYCODE_BUTTON_A, btn))
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+                Btn("pause", "PAUSE", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                cy = 0.84f, size = 0.115f,
+            )
+        }
+    }
 
     // ------------------------------------------------------------- WonderSwan
 
     /** WonderSwan: D-pad (X-pad), A, B, Start. */
-    private fun wonderswan(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#22222A"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E86C1"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: WonderSwan - handheld diagonal, single Start pill.
+    private fun wonderswan(): List<ControlDef> {
+        val blue = Color.parseColor("#2E86C1")
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.54f, size = 0.55f, fill = Color.parseColor("#22222A"))
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, blue),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, blue))
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, blue))
+        }
+    }
 
     // ------------------------------------------------------------- Virtual Boy
 
     /** Virtual Boy: left D-pad, A, B, L/R shoulders, Select, Start. */
+    // Zone system: Virtual Boy - handheld diagonal, L/R shoulders, Select/Start pills.
     private fun virtualboy(): List<ControlDef> {
         val red = Color.parseColor("#E03A3A")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.56f, size = 0.52f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.14f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
-                fillColor = Color.parseColor("#7A2020"), labelColor = LIGHT_TEXT),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.86f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
-                fillColor = Color.parseColor("#7A2020"), labelColor = LIGHT_TEXT),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#3A1414"), labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
-                fillColor = red, labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
-                fillColor = red, labelColor = LIGHT_TEXT),
-        )
+        val body = Color.parseColor("#3A1414")
+        return ZoneLayout.pad {
+            directional(cx = 0.287f, cy = 0.56f, size = 0.52f, fill = body)
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, red),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, red))
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, Color.parseColor("#7A2020")),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, Color.parseColor("#7A2020")),
+                      cy = 0.10f, size = 0.17f, lx = 0.14f, rx = 0.86f)
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, body),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, body),
+                cy = 0.85f, size = 0.11f,
+            )
+        }
     }
 
     // ------------------------------------------------------------- 3DO
@@ -1246,18 +1205,17 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Pokémon Mini
 
-    private fun pokemonMini(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#241E33"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "POWER", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#2A2438"), labelColor = LIGHT_TEXT),
-        ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_R1,
-            x = 0.86f, y = 0.10f, size = 0.16f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE, fillColor = Color.parseColor("#E0A020"), labelColor = DARK),
-    )
+    // Zone system: Pokemon Mini - handheld diagonal, a single right shoulder (C), Power pill.
+    private fun pokemonMini(): List<ControlDef> {
+        val btn = Color.parseColor("#E0A020")
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.54f, size = 0.55f, fill = Color.parseColor("#241E33"))
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn, labelColor = DARK),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn, labelColor = DARK))
+            shoulders(null, Btn("c", "C", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN), cy = 0.10f, size = 0.16f, rx = 0.86f)
+            systemPills(null, Btn("start", "POWER", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2438")))
+        }
+    }
 
     // ------------------------------------------------------------- Atari 5200
 
@@ -1433,18 +1391,15 @@ object ControllerDefs {
     // ------------------------------------------------------------- Neo Geo Pocket
 
     /** NGP: D-pad plus A, B, and Option (mapped to Start). */
-    private fun ngp(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.302f, y = 0.54f, size = 0.55f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("option", ControlType.BUTTON, "OPTION", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.84f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.70f, y = 0.60f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#D24726"), labelColor = LIGHT_TEXT),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.87f, y = 0.47f, size = 0.22f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#D24726"), labelColor = LIGHT_TEXT),
-    )
+    // Zone system: Neo Geo Pocket - handheld diagonal, single Option pill.
+    private fun ngp(): List<ControlDef> {
+        val btn = Color.parseColor("#D24726")
+        return ZoneLayout.pad {
+            directional(cx = 0.302f, cy = 0.54f, size = 0.55f)
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn))
+            systemPills(null, Btn("option", "OPTION", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                cy = 0.84f)
+        }
+    }
 }

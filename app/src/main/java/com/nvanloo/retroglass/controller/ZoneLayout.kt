@@ -70,11 +70,30 @@ object ZoneLayout {
             button(right, cx + gap / 2f, cy, size)
         }
 
-        /** Two face buttons on a 30° rising guide (Game Boy / Master System: B low-left, A high-right). */
+        /**
+         * Two face buttons on a 30° rising guide (B low-left, A high-right). The default is the
+         * common handheld placement (Lynx, NGP, WonderSwan, Virtual Boy, …); the Game Boy family
+         * passes its own tighter geometry.
+         */
         fun faceDiag2(
             low: Btn, high: Btn,
-            cx: Float = RC_CX + 0.03f, cy: Float = BLOCK_CY, spread: Float = 0.20f, size: Float = 0.24f,
+            cx: Float = 0.785f, cy: Float = 0.539f, spread: Float = 0.17f, size: Float = 0.22f,
         ) = diagonal(listOf(low, high), cx, cy, spread, size)
+
+        /** Four face buttons on the crossed axes of a diamond (SNES: X top, A right, B bottom, Y left). */
+        fun faceDiamond4(
+            top: Btn, right: Btn, bottom: Btn, left: Btn,
+            cx: Float = 0.75f, cy: Float = BLOCK_CY, hx: Float = 0.14f, vy: Float = 0.10f, size: Float = 0.18f,
+        ) {
+            button(top, cx, cy - vy, size)
+            button(right, cx + hx, cy, size)
+            button(bottom, cx, cy + vy, size)
+            button(left, cx - hx, cy, size)
+        }
+
+        /** A single large fire button (Atari 2600). */
+        fun faceFire1(b: Btn, cx: Float = 0.85f, cy: Float = 0.56f, size: Float = 0.30f) =
+            button(b, cx, cy, size)
 
         /** Three face buttons on a rising diagonal guide (Genesis: A B C). */
         fun faceArc3(
@@ -95,10 +114,10 @@ object ZoneLayout {
             }
         }
 
-        /** Shoulder buttons in the top corners (SNES / GBA L R). */
-        fun shoulders(l: Btn, r: Btn, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
-            out += bar(l, lx, cy, size)
-            out += bar(r, rx, cy, size)
+        /** Shoulder buttons in the top corners. Either side may be null (Pokémon Mini has one). */
+        fun shoulders(l: Btn?, r: Btn?, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
+            if (l != null) out += bar(l, lx, cy, size)
+            if (r != null) out += bar(r, rx, cy, size)
         }
 
         /** A raw control, for clusters the helpers do not yet cover. */
