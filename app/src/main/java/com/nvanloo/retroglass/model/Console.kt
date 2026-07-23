@@ -894,23 +894,21 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- PC Engine
 
-    private fun pcengine(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.27f, y = 0.47f, size = 0.48f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SEL", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.38f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("run", ControlType.BUTTON, "RUN", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.62f, y = 0.82f, size = 0.11f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-        ControlDef("two", ControlType.BUTTON, "II", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.63f, y = 0.47f, size = 0.20f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#E67E22"), labelColor = DARK),
-        ControlDef("one", ControlType.BUTTON, "I", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.85f, y = 0.47f, size = 0.20f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#E67E22"), labelColor = DARK),
-    )
+    // Zone system: PC Engine - two-button row (II, I), Sel/Run pills.
+    private fun pcengine(): List<ControlDef> {
+        val btn = Color.parseColor("#E67E22")
+        return ZoneLayout.pad {
+            directional(cx = 0.27f, cy = 0.47f, size = 0.48f, fill = Color.parseColor("#2A2A2E"))
+            faceRow2(Btn("two", "II", KeyEvent.KEYCODE_BUTTON_A, btn, labelColor = DARK),
+                     Btn("one", "I", KeyEvent.KEYCODE_BUTTON_B, btn, labelColor = DARK),
+                     cx = 0.74f, cy = 0.47f, gap = 0.22f, size = 0.20f)
+            systemPills(
+                Btn("select", "SEL", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+                Btn("run", "RUN", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                cy = 0.82f, size = 0.11f,
+            )
+        }
+    }
 
     // ------------------------------------------------------------- Nintendo 64
 
@@ -1051,56 +1049,50 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- 3DO
 
+    // Zone system: 3DO - three face buttons (C B A) on a rising diagonal, L/R shoulders,
+    // and the Play/Stop pills (Play on the left, so an explicit pill pair).
     private fun threedo(): List<ControlDef> {
         val btn = Color.parseColor("#3A3A3E")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.287f, y = 0.55f, size = 0.52f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.14f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.86f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("p", ControlType.BUTTON, "P", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.37f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.63f, y = 0.85f, size = 0.11f, shape = ControlShape.PILL, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.69f, y = 0.66f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.81f, y = 0.55f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.94f, y = 0.44f, size = 0.17f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.287f, cy = 0.55f, size = 0.52f, fill = Color.parseColor("#2A2A2E"))
+            faceDiagonal(listOf(
+                Btn("c", "C", KeyEvent.KEYCODE_BUTTON_X, btn),
+                Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn),
+                Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn),
+            ), cx = 0.815f, cy = 0.55f, spread = 0.25f, size = 0.17f)
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN),
+                      cy = 0.10f, size = 0.17f, lx = 0.14f, rx = 0.86f)
+            pillPair(Btn("p", "P", KeyEvent.KEYCODE_BUTTON_START, btn),
+                     Btn("x", "X", KeyEvent.KEYCODE_BUTTON_SELECT, btn), cy = 0.85f, size = 0.11f)
+        }
     }
 
     // ------------------------------------------------------------- Saturn
 
     /** Saturn: 6 face buttons (X Y Z / A B C), L/R shoulders, Start. */
+    // Zone system: Saturn - six face buttons as two shallow diagonal rows (X Y Z over A B C),
+    // L/R shoulders and a centred Start.
     private fun saturn(): List<ControlDef> {
         val top = Color.parseColor("#37414F")
         val bot = Color.parseColor("#2E2E34")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.56f, size = 0.50f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#22262E"), labelColor = LIGHT_TEXT),
-            ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-                x = 0.14f, y = 0.09f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-                x = 0.86f, y = 0.09f, size = 0.17f, shape = ControlShape.BAR, fillColor = GRAY_BTN, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.88f, size = 0.11f, shape = ControlShape.PILL, fillColor = bot, labelColor = LIGHT_TEXT),
-            ControlDef("x", ControlType.BUTTON, "X", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.65f, y = 0.40f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
-            ControlDef("y", ControlType.BUTTON, "Y", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.79f, y = 0.35f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
-            ControlDef("z", ControlType.BUTTON, "Z", KeyEvent.KEYCODE_BUTTON_L2,
-                x = 0.93f, y = 0.31f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = top, labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.65f, y = 0.62f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.79f, y = 0.57f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
-            ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_R2,
-                x = 0.93f, y = 0.53f, size = 0.13f, shape = ControlShape.CIRCLE, fillColor = bot, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.277f, cy = 0.56f, size = 0.50f, fill = Color.parseColor("#22262E"))
+            faceDiagonal(listOf(
+                Btn("x", "X", KeyEvent.KEYCODE_BUTTON_Y, top),
+                Btn("y", "Y", KeyEvent.KEYCODE_BUTTON_X, top),
+                Btn("z", "Z", KeyEvent.KEYCODE_BUTTON_L2, top),
+            ), cx = 0.79f, cy = 0.353f, spread = 0.28f, size = 0.13f, slope = 0.32f)
+            faceDiagonal(listOf(
+                Btn("a", "A", KeyEvent.KEYCODE_BUTTON_B, bot),
+                Btn("b", "B", KeyEvent.KEYCODE_BUTTON_A, bot),
+                Btn("c", "C", KeyEvent.KEYCODE_BUTTON_R2, bot),
+            ), cx = 0.79f, cy = 0.573f, spread = 0.28f, size = 0.13f, slope = 0.32f)
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, GRAY_BTN),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, GRAY_BTN),
+                      cy = 0.09f, size = 0.17f, lx = 0.14f, rx = 0.86f)
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, bot), cy = 0.88f, size = 0.11f)
+        }
     }
 
     // ------------------------------------------------------------- ColecoVision
@@ -1185,22 +1177,20 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Vectrex
 
+    // Zone system: Vectrex - three buttons in a row (1 2 3) with a fourth (4) centred above.
     private fun vectrex(): List<ControlDef> {
         val btn = Color.parseColor("#2E7D5A")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.55f, size = 0.50f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#141414"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL, fillColor = Color.parseColor("#222222"), labelColor = LIGHT_TEXT),
-            ControlDef("b1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.59f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.735f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b3", ControlType.BUTTON, "3", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.88f, y = 0.62f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b4", ControlType.BUTTON, "4", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.735f, y = 0.42f, size = 0.125f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.277f, cy = 0.55f, size = 0.50f, fill = Color.parseColor("#141414"))
+            faceRowN(listOf(
+                Btn("b1", "1", KeyEvent.KEYCODE_BUTTON_Y, btn),
+                Btn("b2", "2", KeyEvent.KEYCODE_BUTTON_B, btn),
+                Btn("b3", "3", KeyEvent.KEYCODE_BUTTON_A, btn),
+            ), cx = 0.735f, cy = 0.62f, gap = 0.145f, size = 0.125f)
+            faceButton(Btn("b4", "4", KeyEvent.KEYCODE_BUTTON_X, btn), 0.735f, 0.42f, 0.125f)
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#222222")),
+                cy = 0.87f)
+        }
     }
 
     // ------------------------------------------------------------- Pokémon Mini
@@ -1316,29 +1306,19 @@ object ControllerDefs {
     // ---------------------------------------------- Neo Geo (CD)
 
     /** Neo Geo four-button pad A/B/C/D in the classic arc. neocd maps A→B, B→A, C→Y, D→X. */
-    private fun neogeo(): List<ControlDef> {
-        val sz = 0.155f
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.55f, size = 0.46f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.37f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.62f, y = 0.88f, size = 0.10f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("ng_a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.55f, y = 0.66f, size = sz, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#C0392B"), labelColor = LIGHT_TEXT),
-            ControlDef("ng_b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.67f, y = 0.58f, size = sz, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#E4C000"), labelColor = DARK),
-            ControlDef("ng_c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_Y,
-                x = 0.79f, y = 0.50f, size = sz, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#27AE60"), labelColor = LIGHT_TEXT),
-            ControlDef("ng_d", ControlType.BUTTON, "D", KeyEvent.KEYCODE_BUTTON_X,
-                x = 0.91f, y = 0.42f, size = sz, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#2980B9"), labelColor = LIGHT_TEXT),
+    // Zone system: Neo Geo CD - four buttons (A B C D) on one rising diagonal, Select/Start.
+    private fun neogeo(): List<ControlDef> = ZoneLayout.pad {
+        directional(cx = 0.257f, cy = 0.55f, size = 0.46f)
+        faceDiagonal(listOf(
+            Btn("ng_a", "A", KeyEvent.KEYCODE_BUTTON_B, Color.parseColor("#C0392B")),
+            Btn("ng_b", "B", KeyEvent.KEYCODE_BUTTON_A, Color.parseColor("#E4C000"), labelColor = DARK),
+            Btn("ng_c", "C", KeyEvent.KEYCODE_BUTTON_Y, Color.parseColor("#27AE60")),
+            Btn("ng_d", "D", KeyEvent.KEYCODE_BUTTON_X, Color.parseColor("#2980B9")),
+        ), cx = 0.73f, cy = 0.54f, spread = 0.36f, size = 0.155f)
+        systemPills(
+            Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#2A2A2E")),
+            Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+            cy = 0.88f, size = 0.10f,
         )
     }
 
