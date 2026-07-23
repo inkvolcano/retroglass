@@ -8,6 +8,8 @@ import android.view.KeyEvent
 import com.nvanloo.retroglass.controller.ControlDef
 import com.nvanloo.retroglass.controller.ControlShape
 import com.nvanloo.retroglass.controller.ControlType
+import com.nvanloo.retroglass.controller.ZoneLayout
+import com.nvanloo.retroglass.controller.ZoneLayout.Btn
 
 /**
  * The supported consoles. Each carries the libretro core it runs on, the ROM
@@ -684,23 +686,20 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- NES
 
-    private fun nes(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.257f, y = 0.52f, size = 0.46f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.38f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = Color.parseColor("#B02525")),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.62f, y = 0.86f, size = 0.12f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#1C1C1E"), labelColor = Color.parseColor("#B02525")),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.625f, y = 0.52f, size = 0.19f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#B02525"), labelColor = LIGHT_TEXT, plateColor = DARK),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.872f, y = 0.52f, size = 0.19f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#B02525"), labelColor = LIGHT_TEXT, plateColor = DARK),
-    )
+    // Converted to the zone system (docs/controls-layout-system.md): cross directional in the
+    // left block, the NES two-button row in the right block, Select/Start pills in centre-low.
+    private fun nes(): List<ControlDef> {
+        val red = Color.parseColor("#B02525")
+        return ZoneLayout.pad {
+            directional()
+            faceRow2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, red),
+                     Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, red))
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#1C1C1E"), red),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#1C1C1E"), red),
+            )
+        }
+    }
 
     // ------------------------------------------------------------- SNES
 
@@ -867,25 +866,21 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Game Boy
 
+    // Zone system: the Game Boy's two buttons sit on a 30 diagonal (B low-left, A high-right)
+    // rather than a row, so the directional is nudged in and the pills ride a touch higher.
     private fun gameboy(): List<ControlDef> {
         val body = Color.parseColor("#5A3A7A")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.29f, y = 0.50f, size = 0.50f,
-                shape = ControlShape.PSX_CROSS,
-                fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-                x = 0.38f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = body, labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.62f, y = 0.82f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = body, labelColor = LIGHT_TEXT),
-            ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.68f, y = 0.58f, size = 0.24f, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#7B3F97"), labelColor = LIGHT_TEXT),
-            ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.87f, y = 0.46f, size = 0.24f, shape = ControlShape.CIRCLE,
-                fillColor = Color.parseColor("#7B3F97"), labelColor = LIGHT_TEXT),
-        )
+        val btn = Color.parseColor("#7B3F97")
+        return ZoneLayout.pad {
+            directional(cx = 0.29f, cy = 0.50f, size = 0.50f)
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, btn),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, btn))
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, body),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, body),
+                cy = 0.82f,
+            )
+        }
     }
 
     // ------------------------------------------------------------- Game Boy Advance
