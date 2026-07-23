@@ -692,8 +692,8 @@ object ControllerDefs {
         val red = Color.parseColor("#B02525")
         return ZoneLayout.pad {
             directional()
-            faceRow2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, red),
-                     Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, red))
+            faceRow2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, red, plate = DARK),
+                     Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, red, plate = DARK))
             systemPills(
                 Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, Color.parseColor("#1C1C1E"), red),
                 Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#1C1C1E"), red),
@@ -740,24 +740,21 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Mega Drive
 
-    private fun megadrive(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.282f, y = 0.55f, size = 0.51f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#0E0E10"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.50f, y = 0.86f, size = 0.13f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT),
-        // A/B/C arc — spaced so the circles clear each other and C stays on-screen.
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_Y,
-            x = 0.59f, y = 0.68f, size = 0.17f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.70f, y = 0.57f, size = 0.17f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
-        ControlDef("c", ControlType.BUTTON, "C", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.83f, y = 0.47f, size = 0.17f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT_TEXT, strokeColor = Color.parseColor("#C62828")),
-    )
+    // Zone system: the Genesis three-button arc rides a rising diagonal guide, red-rimmed.
+    private fun megadrive(): List<ControlDef> {
+        val body = Color.parseColor("#2E2E33")
+        val rim = Color.parseColor("#C62828")
+        return ZoneLayout.pad {
+            directional(cx = 0.282f, cy = 0.55f, size = 0.51f, fill = Color.parseColor("#0E0E10"))
+            faceArc3(
+                Btn("a", "A", KeyEvent.KEYCODE_BUTTON_Y, body, stroke = rim),
+                Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, body, stroke = rim),
+                Btn("c", "C", KeyEvent.KEYCODE_BUTTON_A, body, stroke = rim),
+                cx = 0.71f, cy = 0.575f, spread = 0.24f, size = 0.17f,
+            )
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, body), cy = 0.86f, size = 0.13f)
+        }
+    }
 
     // ------------------------------------------------------------- PlayStation
 
@@ -885,30 +882,26 @@ object ControllerDefs {
 
     // ------------------------------------------------------------- Game Boy Advance
 
-    private fun gba(): List<ControlDef> = listOf(
-        ControlDef("dpad", ControlType.DPAD, "", x = 0.28f, y = 0.56f, size = 0.50f,
-            shape = ControlShape.PSX_CROSS,
-            fillColor = Color.parseColor("#26243A"), labelColor = LIGHT_TEXT),
-        ControlDef("l", ControlType.BUTTON, "L", KeyEvent.KEYCODE_BUTTON_L1,
-            x = 0.20f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
-            fillColor = Color.parseColor("#4A3E82"), labelColor = LIGHT_TEXT),
-        ControlDef("r", ControlType.BUTTON, "R", KeyEvent.KEYCODE_BUTTON_R1,
-            x = 0.80f, y = 0.10f, size = 0.17f, shape = ControlShape.BAR,
-            fillColor = Color.parseColor("#4A3E82"), labelColor = LIGHT_TEXT),
-        ControlDef("select", ControlType.BUTTON, "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT,
-            x = 0.37f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2E2C45"), labelColor = LIGHT_TEXT),
-        ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-            x = 0.63f, y = 0.84f, size = 0.115f, shape = ControlShape.PILL,
-            fillColor = Color.parseColor("#2E2C45"), labelColor = LIGHT_TEXT),
-        // Real GBA A/B sit on a gentle upward slant (A higher-right than B).
-        ControlDef("b", ControlType.BUTTON, "B", KeyEvent.KEYCODE_BUTTON_B,
-            x = 0.66f, y = 0.545f, size = 0.20f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#8B7FD4"), labelColor = DARK),
-        ControlDef("a", ControlType.BUTTON, "A", KeyEvent.KEYCODE_BUTTON_A,
-            x = 0.87f, y = 0.455f, size = 0.20f, shape = ControlShape.CIRCLE,
-            fillColor = Color.parseColor("#8B7FD4"), labelColor = DARK),
-    )
+    // Zone system: GBA adds shoulders (L/R in the top corners) to the Game Boy diagonal.
+    private fun gba(): List<ControlDef> {
+        val face = Color.parseColor("#8B7FD4")
+        val pill = Color.parseColor("#2E2C45")
+        val sh = Color.parseColor("#4A3E82")
+        return ZoneLayout.pad {
+            directional(cx = 0.28f, cy = 0.56f, size = 0.50f, fill = Color.parseColor("#26243A"))
+            faceDiag2(Btn("b", "B", KeyEvent.KEYCODE_BUTTON_B, face, labelColor = DARK),
+                      Btn("a", "A", KeyEvent.KEYCODE_BUTTON_A, face, labelColor = DARK),
+                      cx = 0.765f, cy = 0.50f, spread = 0.21f, size = 0.20f)
+            shoulders(Btn("l", "L", KeyEvent.KEYCODE_BUTTON_L1, sh),
+                      Btn("r", "R", KeyEvent.KEYCODE_BUTTON_R1, sh),
+                      cy = 0.10f, size = 0.17f, lx = 0.20f, rx = 0.80f)
+            systemPills(
+                Btn("select", "SELECT", KeyEvent.KEYCODE_BUTTON_SELECT, pill),
+                Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, pill),
+                cy = 0.84f, size = 0.115f,
+            )
+        }
+    }
 
     // ------------------------------------------------------------- PC Engine
 
@@ -1349,19 +1342,17 @@ object ControllerDefs {
     // ---------------------------------------------- Master System / Game Gear
 
     /** Two-button pad (1 / 2) + Start/Pause. genesis_plus_gx maps SMS "1"→B, "2"→A. */
+    // Zone system: Master System / Game Gear - two-button row (1,2), a lone Start pill.
     private fun sms(): List<ControlDef> {
         val btn = Color.parseColor("#B02525")
-        return listOf(
-            ControlDef("dpad", ControlType.DPAD, "", x = 0.277f, y = 0.54f, size = 0.50f,
-                shape = ControlShape.PSX_CROSS, fillColor = Color.parseColor("#1C1C1E"), labelColor = LIGHT_TEXT),
-            ControlDef("start", ControlType.BUTTON, "START", KeyEvent.KEYCODE_BUTTON_START,
-                x = 0.50f, y = 0.87f, size = 0.12f, shape = ControlShape.PILL,
-                fillColor = Color.parseColor("#2A2A2E"), labelColor = LIGHT_TEXT),
-            ControlDef("b1", ControlType.BUTTON, "1", KeyEvent.KEYCODE_BUTTON_B,
-                x = 0.65f, y = 0.55f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-            ControlDef("b2", ControlType.BUTTON, "2", KeyEvent.KEYCODE_BUTTON_A,
-                x = 0.87f, y = 0.55f, size = 0.20f, shape = ControlShape.CIRCLE, fillColor = btn, labelColor = LIGHT_TEXT),
-        )
+        return ZoneLayout.pad {
+            directional(cx = 0.277f, cy = 0.54f, size = 0.50f)
+            faceRow2(Btn("b1", "1", KeyEvent.KEYCODE_BUTTON_B, btn),
+                     Btn("b2", "2", KeyEvent.KEYCODE_BUTTON_A, btn),
+                     cx = 0.76f, cy = 0.55f, gap = 0.22f, size = 0.20f)
+            systemPills(null, Btn("start", "START", KeyEvent.KEYCODE_BUTTON_START, Color.parseColor("#2A2A2E")),
+                cy = 0.87f)
+        }
     }
 
     // ---------------------------------------------- Neo Geo (CD)

@@ -76,11 +76,11 @@ object ZoneLayout {
             cx: Float = RC_CX + 0.03f, cy: Float = BLOCK_CY, spread: Float = 0.20f, size: Float = 0.24f,
         ) = diagonal(listOf(low, high), cx, cy, spread, size)
 
-        /** Three face buttons on a rising arc (Genesis: A B C). */
+        /** Three face buttons on a rising diagonal guide (Genesis: A B C). */
         fun faceArc3(
             a: Btn, b: Btn, c: Btn,
             cx: Float = RC_CX - 0.02f, cy: Float = BLOCK_CY + 0.05f, spread: Float = 0.24f, size: Float = 0.17f,
-        ) = diagonal(listOf(a, b, c), cx, cy, spread, size, curve = 0.02f)
+        ) = diagonal(listOf(a, b, c), cx, cy, spread, size)
 
         /** Start / Select as two pills in the centre-low zone. */
         fun systemPills(
@@ -96,9 +96,9 @@ object ZoneLayout {
         }
 
         /** Shoulder buttons in the top corners (SNES / GBA L R). */
-        fun shoulders(l: Btn, r: Btn, cy: Float = TOP_Y, size: Float = 0.18f) {
-            out += bar(l, 0.15f, cy, size)
-            out += bar(r, 0.85f, cy, size)
+        fun shoulders(l: Btn, r: Btn, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
+            out += bar(l, lx, cy, size)
+            out += bar(r, rx, cy, size)
         }
 
         /** A raw control, for clusters the helpers do not yet cover. */
@@ -108,19 +108,18 @@ object ZoneLayout {
 
         // ---- geometry ---------------------------------------------------------------------
 
-        private fun diagonal(btns: List<Btn>, cx: Float, cy: Float, spread: Float, size: Float, curve: Float = 0f) {
+        private fun diagonal(btns: List<Btn>, cx: Float, cy: Float, spread: Float, size: Float) {
             val n = btns.size
             btns.forEachIndexed { i, b ->
-                val t = if (n == 1) 0f else i / (n - 1f) - 0.5f    // -0.5 .. 0.5
-                val x = cx + t * spread
-                val y = cy - t * spread * 0.72f - curve * (1f - (2f * t) * (2f * t)) * 4f
-                button(b, x, y, size)
+                val t = if (n == 1) 0f else i / (n - 1f) - 0.5f    // -0.5 .. 0.5, low → high
+                button(b, cx + t * spread, cy - t * spread * 0.72f, size)
             }
         }
 
         private fun button(b: Btn, x: Float, y: Float, size: Float) {
             out += ControlDef(b.id, ControlType.BUTTON, b.label, b.keyCode, x, y, size,
-                ControlShape.CIRCLE, fillColor = b.fill, labelColor = b.labelColor, plateColor = DARK)
+                ControlShape.CIRCLE, fillColor = b.fill, labelColor = b.labelColor,
+                strokeColor = b.stroke, plateColor = b.plate)
         }
 
         private fun pill(b: Btn, x: Float, y: Float, size: Float) {
@@ -133,13 +132,18 @@ object ZoneLayout {
                 ControlShape.BAR, fillColor = b.fill, labelColor = b.labelColor)
     }
 
-    /** One button's identity + colour, so the geometry helpers stay position-only. */
+    /**
+     * One button's identity + styling, so the geometry helpers stay position-only. [plate] is
+     * the recessed backing plate (NES), [stroke] the coloured rim (Genesis) — both default off.
+     */
     data class Btn(
         val id: String,
         val label: String,
         val keyCode: Int,
         val fill: Int,
         val labelColor: Int = LIGHT,
+        val plate: Int = Color.TRANSPARENT,
+        val stroke: Int = Color.TRANSPARENT,
     )
 
     /** Build a pad from a declarative block. */
