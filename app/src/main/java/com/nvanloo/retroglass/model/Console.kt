@@ -444,19 +444,18 @@ object ControllerDefs {
 
     /** Alt N64 layout: enlarge the D-pad and drop Z into its exact centre (co-centred so a
      *  single finger can press a direction and Z at once — see ControllerView.findControls). */
+    // Zone system: the "Z in D-pad" preset is the centre-button directional (handoff 2e#2) -
+    // Z seated in the middle of an enlarged cross - reusing every other N64 cluster unchanged.
     private fun n64ZDpad(): List<ControlDef> {
-        val cx = 0.26f
-        val cy = 0.48f
-        val mapped = n64().map {
-            when (it.id) {
-                "dpad" -> it.copy(x = cx, y = cy, size = 0.44f)
-                "z" -> it.copy(x = cx, y = cy, size = 0.20f)
-                else -> it
-            }
+        val keep = n64().filter { it.id != "dpad" && it.id != "z" }
+        val dpadWithZ = ZoneLayout.pad {
+            directional(
+                cx = 0.26f, cy = 0.48f, size = 0.44f, fill = Color.parseColor("#3A3A3E"),
+                centerButton = Btn("z", "Z", KeyEvent.KEYCODE_BUTTON_L2, Color.parseColor("#2E2E33")),
+                centerSize = 0.20f,
+            )
         }
-        // Draw Z on top of the D-pad (move it after the dpad in the list).
-        val z = mapped.first { it.id == "z" }
-        return mapped.filter { it.id != "z" } + z
+        return keep + dpadWithZ
     }
 
     fun defaultPresetId(console: Console): String = presetsFor(console).first().id

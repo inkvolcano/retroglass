@@ -300,11 +300,14 @@ class ControllerView @JvmOverloads constructor(
         if (layoutMode != LAYOUT_PORTRAIT && (w != oldw || h != oldh)) reloadControls()
     }
 
+    // The settings gear the design puts in the CT zone (handoff 2d): the app's own ⚙ glyph
+    // (U+2699, matching the library and in-game menu buttons), as a pill rather than the old ≡
+    // circle. Always injected here, never authored per console, so every pad has exactly one.
     private fun menuControl() = ControlDef(
-        id = "_menu", type = ControlType.BUTTON, label = "≡",
+        id = "_menu", type = ControlType.BUTTON, label = "⚙",
         keyCode = -1,
-        x = 0.5f, y = 0.09f, size = 0.105f,
-        shape = ControlShape.CIRCLE,
+        x = 0.5f, y = 0.09f, size = 0.11f,
+        shape = ControlShape.PILL,
         fillColor = Color.parseColor("#33FFFFFF"),
         labelColor = Color.parseColor("#DDFFFFFF"),
     )

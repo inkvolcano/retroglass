@@ -50,16 +50,26 @@ object ZoneLayout {
     class Pad {
         private val out = mutableListOf<ControlDef>()
 
-        /** The directional module in the left block. [shape] picks the design (cross/disc/…). */
+        /**
+         * The directional module in the left block. [shape] picks the design (cross/disc/…).
+         *
+         * [centerButton] is the design's "cross with a centre button" (handoff 2e#2): a labelled
+         * button seated at the D-pad's centre, e.g. N64's Z. It is emitted *after* the D-pad so
+         * it draws on top, and ControllerView's co-centre hit-test already lets one thumb hold a
+         * direction and press it together.
+         */
         fun directional(
             shape: ControlShape = ControlShape.PSX_CROSS,
             size: Float = 0.46f,
             fill: Int = Color.parseColor("#1C1C1E"),
             cx: Float = LC_CX,
             cy: Float = BLOCK_CY,
+            centerButton: Btn? = null,
+            centerSize: Float = 0.20f,
         ) {
             out += ControlDef("dpad", ControlType.DPAD, "", x = cx, y = cy, size = size,
                 shape = shape, fillColor = fill, labelColor = LIGHT)
+            if (centerButton != null) button(centerButton, cx, cy, centerSize)
         }
 
         /** Two face buttons on a horizontal guide (NES: B — A). */
