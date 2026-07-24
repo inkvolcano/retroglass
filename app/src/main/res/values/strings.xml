@@ -128,7 +128,10 @@
     <string name="designer_shadow_buttons">Shadow: buttons</string>
     <string name="designer_shadow_dpad">Shadow: d-pad</string>
     <string name="designer_shadow_stick">Shadow: stick</string>
-    <string name="designer_reset">Reset this console’s pad</string>
+    <string name="designer_done">Done</string>
+    <string name="designer_done_sub">back to the game</string>
+    <string name="designer_reset_sub">the shipped layout</string>
+    <string name="designer_reset">Reset</string>
     <string name="menu_turbo">Turbo / autofire buttons…</string>
     <string name="turbo_none">This layout has no buttons to turbo.</string>
     <string name="menu_exit">Save &amp; exit</string>

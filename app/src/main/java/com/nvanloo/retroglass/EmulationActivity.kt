@@ -80,9 +80,6 @@ class EmulationActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ROM_PATH = "rom_path"
-        private const val MODE_MENU = "menu"
-        private const val MODE_LIST = "list"
-        private const val MODE_MOVE = "move"
         const val EXTRA_CONSOLE = "console"
         private const val TAG = "RetroGlass"
 
@@ -1542,128 +1539,179 @@ class EmulationActivity : AppCompatActivity() {
     /** The field being edited: zone code plus slot number for the LC/RC columns. */
     private var designerField: Pair<String, Int?>? = null
 
-    /** "menu" (what to do with this field) · "list" (pick a module) · "move" (pick a destination). */
-    private var designerMode: String = MODE_MENU
-
     /** While moving: the module being carried and the field it came from. */
     private var designerMove: Triple<String, Int?, String>? = null
+
+    /** The design being edited. Every edit is written through immediately. */
+    private var designerDraft: PadDesign? = null
 
     private fun padParts() = PadParts.from(ControllerDefs.controlsFor(console))
 
     private fun padDesign(): PadDesign =
         layoutStore.padDesign(console) ?: PadDeriver.derive(padParts())
 
-    private fun savePad(layout: PadLayout) {
-        layoutStore.setPadDesign(console, padDesign().copy(portrait = layout))
+    private fun draft(): PadDesign = designerDraft ?: padDesign().also { designerDraft = it }
+
+    /**
+     * Applies an edit straight through to the pad. Every tap commits, so the canvas and the
+     * controls under it never disagree — and Done is an exit, not a save you can forget to press.
+     */
+    private fun editDraft(layout: PadLayout) {
+        designerDraft = draft().copy(portrait = layout)
+        layoutStore.setPadDesign(console, designerDraft!!)
         controllerView.refreshLayout()
         gameMenu.refresh()
     }
 
+    private fun openDesigner() {
+        designerDraft = padDesign()
+        designerField = null
+        designerMove = null
+        gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuDesignerScreen() }
+    }
+
+
     /**
      * The controls designer (docs/controls-layout-handoff.md §6).
      *
-     * Field-first, and that ordering is the whole point: you tap the part of the pad you want to
-     * change and are then shown only the modules that can go there, rather than picking a module
-     * and hunting for somewhere it will fit. Rules surface as row states — amber for "this
-     * replaces what is already here", red with a reason for "this cannot go here" — so a blocked
-     * combination explains itself instead of silently doing nothing.
+     * The canvas is the screen. It stands at the phone's own aspect and fills the menu, so a
+     * module's size and reach read the same here as they will under your thumbs — a thumbnail
+     * cannot tell you whether something is within reach, which is most of what this screen is for.
+     *
+     * Field-first, and that ordering is the point: you tap the part of the pad you want to change
+     * and are then shown only the modules that can go there, rather than picking a module and
+     * hunting for somewhere it fits. Choosing takes over the whole screen rather than sharing it
+     * with the canvas, because the module list carries a rendered preview per row and those are
+     * useless at the size a split screen leaves them.
      */
     private fun menuDesignerScreen(): View = with(gameMenu) {
         val parts = padParts()
-        val layout = padDesign().portrait
+        val layout = draft().portrait
         val density = resources.displayMetrics.density
         fun dp(v: Float) = (v * density).toInt()
 
-        // The canvas takes the phone's own aspect, not the wireframe's nominal 236x470. The
-        // whole value of the preview is that a module's size and reach read the same here as in
-        // your hands, and that only holds if the box has the shape of the screen it stands for.
-        val previewH = dp(430f)
         val metrics = resources.displayMetrics
-        val previewW = (previewH * metrics.widthPixels / metrics.heightPixels.toFloat()).toInt()
-        val preview = DesignerView(this@EmulationActivity).apply {
-            // The real split, not a nominal 4:3: the preview is only useful if the picture takes
-            // up as much of it as the picture will actually take up on the phone.
+        val ratio = metrics.widthPixels / metrics.heightPixels.toFloat()
+        // Fill what the header and the save bar leave, then take the width that keeps the phone's
+        // shape - capped, so a tall menu area cannot push the canvas wider than the screen itself.
+        val canvasH = (metrics.heightPixels - dp(230f)).coerceAtLeast(dp(260f))
+        val canvasW = (canvasH * ratio).toInt().coerceAtMost(metrics.widthPixels - dp(24f))
+        val canvas = DesignerView(this@EmulationActivity).apply {
             bind(console, layout, parts, layoutStore.portraitScreenFraction())
             selected = designerField
-            onLayoutChange = { savePad(it) }
+            onLayoutChange = { editDraft(it) }
             onFieldTap = { zone, slot ->
                 val moving = designerMove
-                if (designerMode == MODE_MOVE && moving != null) {
+                if (moving != null) {
                     moveModule(layout, moving, zone, slot)
                 } else {
                     designerField = zone to slot
-                    designerMode = MODE_MENU
-                    gameMenu.refresh()
+                    pushDesignerField()
                 }
             }
         }
 
-        body {
+        body(padSides = 10f) {
+            designerMove?.let { moving ->
+                addView(
+                    note(
+                        getString(
+                            R.string.designer_moving,
+                            PadModules.byId(moving.third)?.name.orEmpty(),
+                        ),
+                    ),
+                )
+            }
             addView(
-                preview,
-                LinearLayout.LayoutParams(previewW, previewH).apply {
+                canvas,
+                LinearLayout.LayoutParams(canvasW, canvasH).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
-                    bottomMargin = dp(10f)
                 },
             )
-            when {
-                designerMode == MODE_MOVE && designerMove != null ->
-                    designerMovePanel(this, layout)
-                designerField == null ->
-                    addView(note(getString(R.string.designer_hint)))
-                designerMode == MODE_LIST -> designerListPanel(this, layout, parts)
-                else -> designerMenuPanel(this, layout)
-            }
             addView(spacer())
-            addView(navRow(null, getString(R.string.designer_reset)) {
-                layoutStore.resetPadDesign(console)
-                designerField = null
-                designerMode = MODE_MENU
-                controllerView.refreshLayout()
-                gameMenu.refresh()
-            })
+            if (designerMove != null) {
+                addView(navRow(null, getString(R.string.designer_move_cancel)) {
+                    designerMove = null
+                    gameMenu.refresh()
+                })
+            } else {
+                addView(
+                    pair(
+                        actionTile(
+                            getString(R.string.designer_done),
+                            getString(R.string.designer_done_sub),
+                        ) {
+                            designerDraft = null
+                            designerField = null
+                            gameMenu.close()
+                        },
+                        actionTile(
+                            getString(R.string.designer_reset),
+                            getString(R.string.designer_reset_sub),
+                        ) {
+                            layoutStore.resetPadDesign(console)
+                            designerDraft = padDesign()
+                            designerField = null
+                            controllerView.refreshLayout()
+                            gameMenu.refresh()
+                        },
+                    ),
+                )
+            }
         }
     }
 
-    /** Step 1: what to do with the tapped field. */
-    private fun designerMenuPanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
-        val (zone, slot) = designerField ?: return@with
+    private fun pushDesignerField() {
+        val (zone, slot) = designerField ?: return
+        val layout = draft().portrait
+        val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
+        val module = PadModules.byId(layout.moduleAt(zone, start ?: slot))
+        gameMenu.push(fieldTitle(zone, slot, module)) { menuDesignerFieldScreen() }
+    }
+
+    /** What to do with the tapped field - its own screen, reached by tapping the canvas. */
+    private fun menuDesignerFieldScreen(): View = with(gameMenu) {
+        val layout = draft().portrait
+        val field = designerField ?: return@with body { }
+        val zone = field.first
+        val slot = field.second
         val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
         val id = layout.moduleAt(zone, start ?: slot)
         val module = PadModules.byId(id)
-        root.addView(group(fieldTitle(zone, slot, module)))
-        if (module == null) {
-            root.addView(navRow(null, getString(R.string.designer_add)) {
-                designerMode = MODE_LIST
-                gameMenu.refresh()
-            })
-        } else {
-            root.addView(navRow(null, getString(R.string.designer_edit)) {
-                designerMode = MODE_LIST
-                gameMenu.refresh()
-            })
-            root.addView(navRow(null, getString(R.string.designer_move)) {
-                designerMove = Triple(zone, start ?: slot, id!!)
-                designerMode = MODE_MOVE
-                gameMenu.refresh()
-            })
-            root.addView(navRow(null, getString(R.string.designer_remove)) {
-                savePad(removeAt(layout, zone, start ?: slot))
-            })
+        body {
+            if (module == null) {
+                addView(navRow(null, getString(R.string.designer_add)) {
+                    push(getString(R.string.designer_add)) { menuDesignerListScreen() }
+                })
+            } else {
+                addView(navRow(null, getString(R.string.designer_edit), module.name) {
+                    push(getString(R.string.designer_edit)) { menuDesignerListScreen() }
+                })
+                if (module.cat == PadModules.Cat.BLOCK && slot != null) {
+                    addView(designerAlignRow(layout, zone, start ?: slot))
+                }
+                addView(navRow(null, getString(R.string.designer_move)) {
+                    designerMove = Triple(zone, start ?: slot, id!!)
+                    pop()
+                })
+                addView(navRow(null, getString(R.string.designer_remove)) {
+                    editDraft(removeAt(layout, zone, start ?: slot))
+                    pop()
+                })
+            }
         }
     }
 
-    /** Step 2: the modules that fit this field, with the rules shown rather than enforced silently. */
-    private fun designerListPanel(
-        root: LinearLayout,
-        layout: PadLayout,
-        parts: PadParts,
-    ) = with(gameMenu) {
-        val (zone, slot) = designerField ?: return@with
+    /** The modules that fit this field, with the rules shown rather than enforced silently. */
+    private fun menuDesignerListScreen(): View = with(gameMenu) {
+        val parts = padParts()
+        val layout = draft().portrait
+        val field = designerField ?: return@with body { }
+        val zone = field.first
+        val slot = field.second
         val centre = slot == null
-        val cat = if (centre) PadModules.Cat.SYSTEM else null
         val current = layout.moduleAt(zone, slot)
-        val thumbH = (56 * resources.displayMetrics.density).toInt()
+        val thumbH = (76 * resources.displayMetrics.density).toInt()
         val thumbW = (thumbH / LayoutPreview.ASPECT).toInt()
 
         val options = (if (centre) {
@@ -1673,45 +1721,31 @@ class EmulationActivity : AppCompatActivity() {
                 PadModules.optionsFor(PadModules.Cat.SHOULDER, parts, zone)
         }).filter { hasRoomFor(layout, parts, zone, slot, it) }
 
-        for (module in options) {
-            val blocked = blockedReason(layout, zone, slot, module)
-            val next = if (blocked == null) place(layout, zone, slot, module) else layout
-            val replaces = if (blocked == null) replacedNames(layout, zone, slot, module) else null
-            val shot = LayoutPreview.render(
-                console, PadRenderer.render(next, parts, landscape = false), thumbW, thumbH,
-            )
-            root.addView(
-                modulePickRow(
-                    shot, module.name, blocked ?: replaces,
-                    selected = module.id == current,
-                    enabled = blocked == null,
-                ) {
-                    designerMode = MODE_MENU
-                    savePad(next)
-                },
-            )
+        body {
+            for (module in options) {
+                val blocked = blockedReason(layout, zone, slot, module)
+                val next = if (blocked == null) place(layout, zone, slot, module) else layout
+                val replaces = if (blocked == null) replacedNames(layout, zone, slot, module) else null
+                val shot = LayoutPreview.render(
+                    console, PadRenderer.render(next, parts, landscape = false), thumbW, thumbH,
+                )
+                addView(
+                    modulePickRow(
+                        shot, module.name, blocked ?: replaces,
+                        selected = module.id == current,
+                        enabled = blocked == null,
+                    ) {
+                        editDraft(next)
+                        // Straight back to the canvas: the point of picking was to see it in place.
+                        pop()
+                        pop()
+                    },
+                )
+            }
         }
-        if (!centre && PadModules.byId(current)?.cat == PadModules.Cat.BLOCK) {
-            root.addView(designerAlignRow(layout, zone, slot!!))
-        }
-        root.addView(navRow(null, getString(R.string.designer_back)) {
-            designerMode = MODE_MENU
-            gameMenu.refresh()
-        })
     }
 
-    private fun designerMovePanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
-        val moving = designerMove ?: return@with
-        val name = PadModules.byId(moving.third)?.name.orEmpty()
-        root.addView(note(getString(R.string.designer_moving, name)))
-        root.addView(navRow(null, getString(R.string.designer_move_cancel)) {
-            designerMode = MODE_MENU
-            designerMove = null
-            gameMenu.refresh()
-        })
-    }
-
-    /** Alignment is visual: three boxes, and the module slides in the preview as you pick one. */
+    /** Alignment is visual: the module slides in the canvas as soon as you pick a side. */
     private fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View = with(gameMenu) {
         val key = zone + slot
         val current = layout.align[key] ?: 'c'
@@ -1726,7 +1760,7 @@ class EmulationActivity : AppCompatActivity() {
                 labels.map { it.second },
                 labels.indexOfFirst { it.first == current },
             ) { which ->
-                savePad(layout.copy(align = layout.align + (key to labels[which].first)))
+                editDraft(layout.copy(align = layout.align + (key to labels[which].first)))
             }
         }
     }
@@ -1895,9 +1929,8 @@ class EmulationActivity : AppCompatActivity() {
         if (!allowed || blockedReason(layout, zone, slot, module) != null) return
         val cleared = removeAt(layout, fromZone, fromSlot)
         designerMove = null
-        designerMode = MODE_MENU
         designerField = zone to slot
-        savePad(place(cleared, zone, slot, module))
+        editDraft(place(cleared, zone, slot, module))
     }
 
     private fun fieldTitle(zone: String, slot: Int?, module: PadModules.Module?): String {
@@ -1908,12 +1941,7 @@ class EmulationActivity : AppCompatActivity() {
     private fun menuControlsScreen(): View = with(gameMenu) {
         body {
             if (controllerView.visibility == View.VISIBLE) {
-                addView(navRow(null, getString(R.string.menu_edit_layout)) {
-                    designerField = null
-                    designerMode = MODE_MENU
-                    designerMove = null
-                    gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuDesignerScreen() }
-                })
+                addView(navRow(null, getString(R.string.menu_edit_layout)) { openDesigner() })
                 addView(navRow(null, getString(R.string.menu_turbo)) { showTurboConfig() })
             }
             if (extendedMode) {
