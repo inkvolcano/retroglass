@@ -14,13 +14,20 @@ package com.nvanloo.retroglass.controller
  * separate view above the pad, so `SCREEN` has no rect here; it is listed in the handoff because
  * that document describes the whole display. Landscape is the same story with the pad overlaid.
  *
- * ## A known ambiguity in the handoff
+ * ## The 40% figure (resolved)
  *
- * §1 says the centre boxes are "width = 40% of screen width, centered" and, in the next line,
- * that they "overlap into LC and RC by 40% on one side". A 40%-wide box centred on the seam
- * necessarily overlaps 50% into each side, so the two statements cannot both hold. This
- * implements the first (centred, 40% wide) because it is the unambiguous one, and leaves
- * [SEAM_OVERLAP] as the knob if the asymmetric reading turns out to be what was meant.
+ * §1 reads as a contradiction — the centre boxes are "40% of screen width, centered" *and*
+ * "overlap into LC and RC by 40%". Both hold once you notice the two percentages measure
+ * different things: the box is 40% of the **pad**, and each block is 50% of the pad, so a
+ * centred box reaches 0.2 into each — which is 40% of a **block**. Confirmed as the intent:
+ * 40% overlap on each side.
+ *
+ * ## Falling back to combined buttons
+ *
+ * Because CT/CL sit on top of LC/RC, separate pills can collide with whatever the big blocks
+ * hold. The rule is to degrade rather than overlap: when the separate arrangement does not fit,
+ * the zone switches to its **combined** variant (one divided pill), which is narrower. The same
+ * applies to LT/RT shoulders. [fitsSeparate] is that decision.
  */
 object ZoneGrid {
 
@@ -58,9 +65,11 @@ object ZoneGrid {
     // --- portrait geometry ----------------------------------------------------------------
     // The shoulder row sits directly under the screen; the two big blocks run to the bottom.
     private const val TOP_ROW_H = 0.18f
-    // Centre boxes: 40% of the width, centred on the LC/RC seam.
+    // Centre boxes: 40% of the pad wide, centred on the LC/RC seam — which is the same thing as
+    // overlapping 40% into each block, since each block is half the pad. See the class note.
     private const val CENTER_W = 0.40f
-    /** Unused while the centred reading is implemented; see the class note. */
+
+    /** Overlap into each big block, as a fraction of that block's width. */
     const val SEAM_OVERLAP = 0.40f
 
     private val PORTRAIT = mapOf(
@@ -91,6 +100,28 @@ object ZoneGrid {
 
     /** True for the zones on the left, which is what mirrors [HAnchor]. */
     private fun isLeft(zone: Zone) = zone == Zone.LT || zone == Zone.LC
+
+    /**
+     * Whether [count] separate pills of width [pillW] fit inside [zone] without colliding, given
+     * a gap of [gap] between them. When this is false the caller uses the zone's **combined**
+     * variant instead — one divided pill, which packs the same inputs into the width of one.
+     *
+     * This is the handoff's degradation rule (see the class note) and it applies to CT/CL's
+     * Start/Select and to LT/RT's shoulders alike. Degrading is always preferable to overlapping:
+     * two pills drawn on top of each other are not just ugly, they are ambiguous to hit-test,
+     * which is exactly how the ColecoVision keypad bug hid.
+     */
+    fun fitsSeparate(
+        zone: Zone,
+        landscape: Boolean,
+        count: Int,
+        pillW: Float,
+        gap: Float = 0.02f,
+    ): Boolean {
+        if (count <= 1) return true
+        val needed = count * pillW + (count - 1) * gap
+        return needed <= rect(zone, landscape).w + 1e-4f
+    }
 
     /**
      * Solves a module's centre inside [zone].

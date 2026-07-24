@@ -158,6 +158,62 @@ object ZoneLayout {
             pill(right, 0.5f + gap / 2f, cy, size)
         }
 
+        /**
+         * The **combined divided pill** (handoff 2c/2d): N buttons packed into one pill's
+         * footprint, outer corners rounded, dividers on the inner edges only.
+         *
+         * This is what a zone degrades to when separate pills will not fit — see
+         * [ZoneGrid.fitsSeparate]. Each segment stays its own control, so hit-testing, remap and
+         * turbo are unchanged; only the drawing joins them up.
+         */
+        fun pillsCombined(
+            btns: List<Btn>,
+            cx: Float = 0.5f,
+            cy: Float = LOW_Y,
+            size: Float = 0.12f,
+        ) {
+            val n = btns.size
+            if (n == 0) return
+            if (n == 1) { pill(btns[0], cx, cy, size); return }
+            // One pill's width, shared: each segment is 1/n of it, laid end to end.
+            val fullHalfW = size / 2f * 1.85f
+            val segHalfW = fullHalfW / n
+            btns.forEachIndexed { i, b ->
+                val seg = when (i) {
+                    0 -> PillSegment.LEFT
+                    n - 1 -> PillSegment.RIGHT
+                    else -> PillSegment.MID
+                }
+                val x = cx - fullHalfW + segHalfW * (2 * i + 1)
+                out += ControlDef(
+                    b.id, ControlType.BUTTON, b.label, b.keyCode, x, cy, size,
+                    ControlShape.PILL, fillColor = b.fill, labelColor = b.labelColor,
+                    segment = seg, widthScale = 1f / n,
+                )
+            }
+        }
+
+        /**
+         * Start/Select for a centre zone, degrading automatically: separate pills when the zone
+         * has room, one combined divided pill when it does not.
+         */
+        fun systemPillsAuto(
+            btns: List<Btn>,
+            zone: ZoneGrid.Zone = ZoneGrid.Zone.CL,
+            landscape: Boolean = false,
+            cy: Float = LOW_Y,
+            size: Float = 0.12f,
+            gap: Float = 0.24f,
+        ) {
+            val pillW = size * 1.85f
+            if (ZoneGrid.fitsSeparate(zone, landscape, btns.size, pillW)) {
+                val span = (btns.size - 1) * gap
+                btns.forEachIndexed { i, b -> pill(b, 0.5f - span / 2f + i * gap, cy, size) }
+            } else {
+                pillsCombined(btns, 0.5f, cy, size)
+            }
+        }
+
         /** Shoulder buttons in the top corners. Either side may be null (Pokémon Mini has one). */
         fun shoulders(l: Btn?, r: Btn?, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
             if (l != null) out += bar(l, lx, cy, size)

@@ -334,10 +334,13 @@ class ControllerView @JvmOverloads constructor(
     private fun controlRadius(c: ControlState): Float =
         c.def.size * c.placement.scale * sizeBase() / 2f
 
+    /** A pill's half-width. Segments of a combined divided pill share one pill's footprint. */
+    private fun pillHalfW(c: ControlState): Float = controlRadius(c) * 1.85f * c.def.widthScale
+
     /** Half-width of a control's visible box, matching how [drawControl] draws each shape. */
     private fun halfExtentX(c: ControlState): Float = when (c.def.shape) {
         ControlShape.BAR -> barHalfLen(c)
-        ControlShape.PILL -> controlRadius(c) * 1.85f
+        ControlShape.PILL -> pillHalfW(c)
         ControlShape.CIRCLE -> controlRadius(c) * if (c.def.plateColor != Color.TRANSPARENT) 1.28f else 1f
         else -> controlRadius(c)
     }
@@ -374,7 +377,7 @@ class ControllerView @JvmOverloads constructor(
         }
         val r = controlRadius(c) * slop
         return when (c.def.shape) {
-            ControlShape.PILL -> abs(dx) <= r * 1.85f && abs(dy) <= r
+            ControlShape.PILL -> abs(dx) <= pillHalfW(c) && abs(dy) <= r
             ControlShape.CROSS, ControlShape.PSX_CROSS -> abs(dx) <= r && abs(dy) <= r
             else -> hypot(dx, dy) <= r
         }
@@ -936,7 +939,7 @@ class ControllerView @JvmOverloads constructor(
         when (c.def.shape) {
             ControlShape.CIRCLE, ControlShape.STICK -> out.addCircle(cx, cy, r, cw)
             ControlShape.PILL -> {
-                val w = r * 1.85f
+                val w = pillHalfW(c)
                 out.addRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, cw)
             }
             ControlShape.BAR -> {
@@ -1042,9 +1045,34 @@ class ControllerView @JvmOverloads constructor(
             }
 
             ControlShape.PILL -> {
-                val w = r * 1.85f
+                val w = pillHalfW(c)
+                val top = cy - r * 0.8f
+                val bot = cy + r * 0.8f
                 fillPaint.color = withAlpha(if (c.pressed) lighten(def.fillColor) else def.fillColor, alpha)
-                canvas.drawRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, fillPaint)
+                if (def.segment == PillSegment.NONE) {
+                    canvas.drawRoundRect(RectF(cx - w, top, cx + w, bot), r, r, fillPaint)
+                } else {
+                    // Round only the outer end so adjacent segments read as one divided pill.
+                    // Drawn as a full round-rect clipped to this segment's half, which keeps the
+                    // outer curve exact instead of approximating it with a square-cornered rect.
+                    val roundLeft = def.segment == PillSegment.LEFT
+                    val roundRight = def.segment == PillSegment.RIGHT
+                    canvas.save()
+                    canvas.clipRect(cx - w, top, cx + w, bot)
+                    val extendL = if (roundLeft) 0f else r
+                    val extendR = if (roundRight) 0f else r
+                    canvas.drawRoundRect(
+                        RectF(cx - w - extendL, top, cx + w + extendR, bot), r, r, fillPaint,
+                    )
+                    canvas.restore()
+                    // Divider on inner edges only - the handoff is explicit that the outer
+                    // sides carry none.
+                    strokePaint.color = withAlpha(Color.argb(90, 0, 0, 0), alpha)
+                    strokePaint.strokeWidth = max(1f, r * 0.06f)
+                    val inset = r * 0.30f
+                    if (!roundLeft) canvas.drawLine(cx - w, top + inset, cx - w, bot - inset, strokePaint)
+                    if (!roundRight) canvas.drawLine(cx + w, top + inset, cx + w, bot - inset, strokePaint)
+                }
                 textPaint.color = withAlpha(def.labelColor, alpha)
                 textPaint.textSize = r * (if (def.label.length > 2) 0.62f else 0.9f)
                 canvas.drawText(def.label, cx, cy - (textPaint.ascent() + textPaint.descent()) / 2f, textPaint)

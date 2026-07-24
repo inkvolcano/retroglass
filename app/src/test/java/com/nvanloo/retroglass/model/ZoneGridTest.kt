@@ -1,6 +1,8 @@
 package com.nvanloo.retroglass.model
 
+import com.nvanloo.retroglass.controller.PillSegment
 import com.nvanloo.retroglass.controller.ZoneGrid
+import com.nvanloo.retroglass.controller.ZoneLayout
 import com.nvanloo.retroglass.controller.ZoneGrid.HAnchor
 import com.nvanloo.retroglass.controller.ZoneGrid.VAnchor
 import com.nvanloo.retroglass.controller.ZoneGrid.Zone
@@ -88,8 +90,9 @@ class ZoneGridTest {
 
     @Test
     fun `the centre boxes straddle the seam and are 40 percent wide`() {
-        // Handoff §1: "width = 40% of screen width, centered". The companion sentence about a
-        // 40% one-sided overlap contradicts this; ZoneGrid documents the choice.
+        // Handoff §1: 40% of the pad wide, centred on the seam - which is the same thing as
+        // overlapping 40% into each block, since each block is half the pad. The two sentences
+        // that looked contradictory were measuring against different things.
         for (landscape in orientations) {
             for (zone in listOf(Zone.CT, Zone.CL)) {
                 val box = ZoneGrid.rect(zone, landscape)
@@ -117,4 +120,68 @@ class ZoneGridTest {
         assertTrue("LT must sit above LC", lt.b <= lc.t + 1e-4f)
         assertEquals("the shoulder row starts at the top of the pad", 0f, lt.t, 1e-4f)
     }
+
+    @Test
+    fun `a combined divided pill tiles exactly one pill's footprint`() {
+        // The segments must meet edge to edge: a gap looks like a broken pill, an overlap makes
+        // two buttons fight for the same touch. Either failure is silent on screen.
+        val size = 0.12f
+        for (n in 2..3) {
+            val btns = (1..n).map { ZoneLayout.Btn("b$it", "$it", it, 0) }
+            val out = ZoneLayout.pad { pillsCombined(btns, cx = 0.5f, cy = 0.8f, size = size) }
+            assertEquals("expected $n segments", n, out.size)
+
+            val fullHalfW = size / 2f * 1.85f
+            val segHalfW = fullHalfW / n
+            out.forEachIndexed { i, d ->
+                assertEquals("segment $i width scale", 1f / n, d.widthScale, 1e-5f)
+                val expected = when (i) {
+                    0 -> PillSegment.LEFT
+                    n - 1 -> PillSegment.RIGHT
+                    else -> PillSegment.MID
+                }
+                assertEquals("segment $i position", expected, d.segment)
+            }
+            // Edge-to-edge, and the whole run is exactly one pill wide.
+            for (i in 0 until n - 1) {
+                val rightEdge = out[i].x + segHalfW
+                val leftEdge = out[i + 1].x - segHalfW
+                assertEquals("segments $i/${i + 1} must meet", rightEdge, leftEdge, 1e-5f)
+            }
+            assertEquals("run should start at the pill's left edge", 0.5f - fullHalfW, out.first().x - segHalfW, 1e-5f)
+            assertEquals("run should end at the pill's right edge", 0.5f + fullHalfW, out.last().x + segHalfW, 1e-5f)
+        }
+    }
+
+    @Test
+    fun `a single button never becomes a divided pill`() {
+        val out = ZoneLayout.pad {
+            pillsCombined(listOf(ZoneLayout.Btn("start", "START", 1, 0)), size = 0.12f)
+        }
+        assertEquals(1, out.size)
+        assertEquals("one button is an ordinary pill", PillSegment.NONE, out[0].segment)
+        assertEquals(1f, out[0].widthScale, 1e-5f)
+    }
+
+    @Test
+    fun `the zone falls back to combined only when separate will not fit`() {
+        // CL is 40% of the pad wide. Two narrow pills fit; two wide ones do not, and that is
+        // when the handoff says to degrade rather than overlap.
+        assertTrue(
+            "two narrow pills should fit CL",
+            ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 2, pillW = 0.15f),
+        )
+        assertTrue(
+            "two wide pills should not fit CL",
+            !ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 2, pillW = 0.30f),
+        )
+        // A lone button always "fits" - there is nothing to collide with.
+        assertTrue(ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 1, pillW = 0.9f))
+        // The same rule governs the shoulder zones.
+        assertTrue(
+            "three wide shoulder pills should not fit LT",
+            !ZoneGrid.fitsSeparate(Zone.LT, landscape = false, count = 3, pillW = 0.25f),
+        )
+    }
+
 }
