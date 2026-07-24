@@ -353,15 +353,18 @@ class ControllerView @JvmOverloads constructor(
             if (!collides) continue
 
             // First choice: keep them SEPARATE - the wireframe shows Start/Select and the
-            // gear as distinct pills in a row. Lay the group out side by side with small
-            // gaps, centred on its own centroid and aligned to one baseline.
+            // gear as distinct pills in a row. All members share the anchor's height (the
+            // gear used to ride shorter than START next to it), and the whole row is centred
+            // on the screen, since the centre zone is screen-centred by definition.
             val gapPx = base * 0.012f
-            val widths = members.map { 2f * halfPx(it) }
-            val totalW = widths.sum() + gapPx * (members.size - 1)
+            val row = members.map {
+                if (it.id == "_menu") it.copy(size = anchor.size) else it
+            }
+            val widths = row.map { 2f * halfPx(it) }
+            val totalW = widths.sum() + gapPx * (row.size - 1)
             if (totalW <= width * 0.5f) {
-                val centrePx = (members.map { it.x }.average() * width).toFloat()
-                var cursor = centrePx - totalW / 2f
-                for (m in members) {
+                var cursor = width * 0.5f - totalW / 2f
+                for (m in row) {
                     val w = 2f * halfPx(m)
                     replaced[m.id] = m.copy(
                         x = (cursor + w / 2f) / width,
@@ -1038,7 +1041,15 @@ class ControllerView @JvmOverloads constructor(
         val cw = android.graphics.Path.Direction.CW
         out.reset()
         when (c.def.shape) {
-            ControlShape.CIRCLE, ControlShape.STICK -> out.addCircle(cx, cy, r, cw)
+            ControlShape.CIRCLE -> out.addCircle(cx, cy, r, cw)
+            ControlShape.STICK -> {
+                // The raised part of a stick is its cap, not the well the cap sits in - a
+                // recess casts no drop shadow. Follow the knob at its current deflection, so
+                // the shadow moves with the stick (and the square-gate design stops casting a
+                // circular well shadow it does not have).
+                val knobR = if (c.def.design == 2) r * 0.34f else r * 0.52f
+                out.addCircle(cx + c.valueX * r * 0.48f, cy + c.valueY * r * 0.48f, knobR, cw)
+            }
             ControlShape.PILL -> {
                 val w = pillHalfW(c)
                 out.addRoundRect(RectF(cx - w, cy - r * 0.8f, cx + w, cy + r * 0.8f), r, r, cw)
@@ -1249,8 +1260,6 @@ class ControllerView @JvmOverloads constructor(
                         canvas.drawCircle(kx, ky, knobR * 0.42f, fillPaint)
                     }
                 }
-                fillPaint.color = withAlpha(Color.argb(30, 255, 255, 255), alpha)
-                canvas.drawCircle(kx - knobR * 0.2f, ky - knobR * 0.25f, knobR * 0.55f, fillPaint)
                 textPaint.color = withAlpha(def.labelColor, (alpha * 0.5f).toInt())
                 textPaint.textSize = r * 0.3f
                 canvas.drawText(def.label, cx, cy + r * 1.28f, textPaint)
