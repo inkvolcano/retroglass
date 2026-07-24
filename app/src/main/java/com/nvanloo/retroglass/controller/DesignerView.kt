@@ -288,7 +288,15 @@ class DesignerView(context: Context) : View(context) {
     }
 
     private fun slotRect(zone: String, slot: Int, span: Int, w: Float, top: Float, padH: Float): RectF {
-        val (l, r) = PadRenderer.columnBounds(layout, zone, landscape)
+        var (l, r) = PadRenderer.columnBounds(layout, zone, landscape)
+        // A widened slot 1 has to be drawn and hit-tested at the width the module actually
+        // occupies, or the field and the thing inside it would sit in different places.
+        PadModules.byId(layout.column(zone)[slot])?.let { module ->
+            PadRenderer.widenedBand(layout, zone, slot, module, landscape)?.let { band ->
+                l = band.first
+                r = band.second
+            }
+        }
         val y0 = top + PadRenderer.slotTop(slot) * padH
         val y1 = top + (PadRenderer.slotTop(slot + span - 1) + PadRenderer.slotHeight()) * padH
         return RectF(l * w + 2f, y0, r * w - 2f, y1)

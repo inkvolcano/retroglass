@@ -1646,6 +1646,17 @@ class EmulationActivity : AppCompatActivity() {
                 )
             }
             addView(
+                TextView(this@EmulationActivity).apply {
+                    text = getString(
+                        if (designerLandscape) R.string.designer_landscape
+                        else R.string.designer_portrait,
+                    )
+                    textSize = 12f
+                    setTextColor(Color.parseColor("#8A8A98"))
+                    gravity = Gravity.CENTER_HORIZONTAL
+                },
+            )
+            addView(
                 canvas,
                 LinearLayout.LayoutParams(canvasW, canvasH).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
@@ -1768,23 +1779,71 @@ class EmulationActivity : AppCompatActivity() {
         }
     }
 
-    /** Alignment is visual: the module slides in the canvas as soon as you pick a side. */
-    private fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View = with(gameMenu) {
+    /**
+     * Alignment, as the wireframe draws it: three boxes with a marker sitting where the module
+     * will sit. Picking one shifts the module in the canvas immediately.
+     *
+     * A dropdown would have been less code, but "inner / centre / outer" only means anything once
+     * you can see which edge of the block is which — and on a mirrored pair of columns, outer is a
+     * different direction on each side. The picture says it; the words need translating.
+     */
+    private fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View {
         val key = zone + slot
         val current = layout.align[key] ?: 'c'
-        val labels = listOf(
-            'l' to getString(R.string.designer_align_left),
-            'c' to getString(R.string.designer_align_centre),
-            'r' to getString(R.string.designer_align_right),
-        )
-        return navRow(null, getString(R.string.designer_align), labels.first { it.first == current }.second) {
-            pushSelect(
-                getString(R.string.designer_align),
-                labels.map { it.second },
-                labels.indexOfFirst { it.first == current },
-            ) { which ->
-                editDraft(layout.copy(align = layout.align + (key to labels[which].first)))
+        val d = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+            addView(
+                TextView(this@EmulationActivity).apply {
+                    text = getString(R.string.designer_align)
+                    textSize = 15f
+                    setTextColor(Color.parseColor("#E8E8F0"))
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            for (side in listOf('l', 'c', 'r')) {
+                addView(
+                    alignBox(side, current) {
+                        editDraft(layout.copy(align = layout.align + (key to side)))
+                    },
+                    LinearLayout.LayoutParams((34 * d).toInt(), (28 * d).toInt()).apply {
+                        marginStart = (8 * d).toInt()
+                    },
+                )
             }
+        }
+    }
+
+    /** One alignment box: a marker parked at the edge the module would be pushed to. */
+    private fun alignBox(side: Char, current: Char, onPick: () -> Unit): View {
+        val d = resources.displayMetrics.density
+        val on = side == current
+        val edge = if (on) Color.parseColor("#C6FF4A") else Color.parseColor("#7A7A88")
+        return FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (on) Color.parseColor("#22C6FF4A") else Color.TRANSPARENT)
+                cornerRadius = 6 * d
+                setStroke((1.5f * d).toInt(), edge)
+            }
+            setPadding((4 * d).toInt(), 0, (4 * d).toInt(), 0)
+            addView(
+                View(this@EmulationActivity).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(edge)
+                        cornerRadius = 2 * d
+                    }
+                },
+                FrameLayout.LayoutParams((9 * d).toInt(), (9 * d).toInt()).apply {
+                    gravity = Gravity.CENTER_VERTICAL or when (side) {
+                        'l' -> Gravity.START
+                        'r' -> Gravity.END
+                        else -> Gravity.CENTER_HORIZONTAL
+                    }
+                },
+            )
+            setOnClickListener { onPick() }
         }
     }
 

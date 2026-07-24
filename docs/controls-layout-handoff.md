@@ -193,8 +193,12 @@ never touches the other.
 
 ### 6.6 Landscape shoulder widening
 When CT is occupied, slot 1 of LC/RC widens inward up to the CT edge and a shoulder pill placed
-there stretches across it, vertically aligned with the CT row. When CT is empty (screen covering
-the top), the widening is disabled so nothing overlaps the screen.
+there stretches across it, vertically aligned with the CT row — LT · CT · RT read as one row. When
+CT is empty the picture covers that row, so the widening is off and nothing overlaps the screen.
+
+Implemented in `PadRenderer.widenedBand`, which the canvas also asks so that the field it draws and
+hit-tests is the width the module actually occupies. A stretched bar takes its size from the band
+rather than from the console's authored width; everywhere else the authored width stands.
 
 ### 6.7 Module catalogue
 

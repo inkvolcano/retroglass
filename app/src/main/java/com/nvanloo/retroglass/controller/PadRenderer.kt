@@ -90,17 +90,22 @@ object PadRenderer {
             val side = if (zone == PadLayout.ZONE_LC) 'L' else 'R'
             for ((slot, id) in layout.column(zone).entries.sortedBy { it.key }) {
                 val module = PadModules.byId(id) ?: continue
+                val widen = widenedBand(layout, zone, slot, module, landscape)
+                val l = widen?.first ?: left
+                val r = widen?.second ?: right
                 val box = PadModules.Box(
-                    cx = (left + right) / 2f,
-                    cy = slotCentreY(slot, module.slots),
-                    w = right - left,
+                    cx = (l + r) / 2f,
+                    cy = if (widen != null) centreY(PadLayout.ZONE_CT, landscape)
+                    else slotCentreY(slot, module.slots),
+                    w = r - l,
                     h = module.slots * SLOT_H,
                     mx = mx, my = my,
+                    stretch = widen != null,
                 )
                 val emitted = PadModules.emit(module, parts, box, scale, side, stickIndex)
                 if (module.family == PadModules.Family.STICK) stickIndex++
                 val align = layout.align[zone + slot] ?: 'c'
-                out += alignGroup(emitted, align, left, right)
+                out += alignGroup(emitted, align, l, r)
             }
         }
 
@@ -112,6 +117,29 @@ object PadRenderer {
             out += PadModules.gear(0.5f, centreY(PadLayout.ZONE_CT, landscape), size)
         }
         return out
+    }
+
+    /**
+     * The widened slot-1 band of handoff §6.6, or null when the rule does not apply.
+     *
+     * In landscape an occupied CT already claims the top row, so a shoulder in slot 1 can run
+     * inward to meet it instead of staying inside its narrow column — the two read as one row,
+     * which is how the wireframe draws LT · CT · RT. With CT empty the picture covers that row
+     * and widening would push the shoulder over the game, so the rule is off.
+     */
+    fun widenedBand(
+        layout: PadLayout,
+        zone: String,
+        slot: Int,
+        module: PadModules.Module,
+        landscape: Boolean,
+    ): Pair<Float, Float>? {
+        if (!landscape || slot != 1 || layout.ct == null) return null
+        if (module.cat != PadModules.Cat.SHOULDER) return null
+        val (left, right) = columnBounds(layout, zone, landscape = true)
+        val (ctL, ctR) = centreBounds(PadLayout.ZONE_CT, landscape = true)
+        return if (zone == PadLayout.ZONE_LC) left to (ctL - EDGE_INSET)
+        else (ctR + EDGE_INSET) to right
     }
 
     /** Slides an emitted group so it sits left, centred or right within its column. */

@@ -128,6 +128,8 @@
     <string name="designer_shadow_buttons">Shadow: buttons</string>
     <string name="designer_shadow_dpad">Shadow: d-pad</string>
     <string name="designer_shadow_stick">Shadow: stick</string>
+    <string name="designer_portrait">Portrait \u00b7 saved separately</string>
+    <string name="designer_landscape">Landscape \u00b7 saved separately</string>
     <string name="designer_done">Done</string>
     <string name="designer_done_sub">back to the game</string>
     <string name="designer_reset_sub">the shipped layout</string>

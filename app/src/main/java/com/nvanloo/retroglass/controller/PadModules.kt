@@ -140,6 +140,8 @@ object PadModules {
         val h: Float,
         val mx: Float = 1f,
         val my: Float = 0.7f,
+        /** Widen a bar to fill the box rather than keeping its authored width (handoff §6.6). */
+        val stretch: Boolean = false,
     ) {
         companion object {
             /** Builds the unit converters for a pad of the given width/height ratio. */
@@ -216,7 +218,9 @@ object PadModules {
             else -> bumpers
         }
         if (take.isEmpty()) return emptyList()
-        val size = (take.first().size) * scale
+        // A widened landscape slot-1 band is meant to be filled end to end; everywhere else the
+        // shoulder keeps the width the console authored for it.
+        val size = if (box.stretch) box.w / BAR_ASPECT else take.first().size * scale
         return if (m.id == "shComb2" || m.id == "shComb3") {
             combinedPill(take, box.cx, box.cy, size)
         } else {
@@ -278,6 +282,9 @@ object PadModules {
     )
 
     const val MENU_ID = "_menu"
+
+    /** How much wider than tall a bar or pill is drawn — shared with PadRenderer.halfWidth. */
+    const val BAR_ASPECT = 1.85f
 
     private fun combinedPill(
         defs: List<ControlDef>,
