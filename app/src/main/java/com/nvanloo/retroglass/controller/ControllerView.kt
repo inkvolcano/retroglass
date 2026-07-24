@@ -1283,7 +1283,10 @@ class ControllerView @JvmOverloads constructor(
                 val knobR = if (def.design == 2) r * 0.34f else r * 0.52f
                 val kx = cx + c.valueX * r * 0.48f
                 val ky = cy + c.valueY * r * 0.48f
-                fillPaint.color = withAlpha(if (c.pressed) lighten(darken(def.fillColor)) else darken(def.fillColor), alpha)
+                // A tint lighter than the well, not darker: the knob casts the tilt shadow, and
+                // a near-black cap on a near-black shadow fused into one warped blob - the
+                // cap's lower edge simply vanished into it.
+                fillPaint.color = withAlpha(if (c.pressed) lighten(lighten(def.fillColor)) else lighten(def.fillColor), alpha)
                 canvas.drawCircle(kx, ky, knobR, fillPaint)
                 when (def.design) {
                     1 -> { // dished cap: bright rim, sunken middle
