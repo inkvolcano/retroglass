@@ -11,7 +11,7 @@ $cores = [ordered]@{
   "fceumm" = "fceumm"; "snes9x" = "snes9x"; "genesis_plus_gx" = "genesis_plus_gx"
   "pcsx_rearmed" = "pcsx_rearmed"; "gambatte" = "gambatte"; "mgba" = "mgba"
   "mupen64plus_next_gles3" = "mupen64plus_next"; "mednafen_pce_fast" = "mednafen_pce_fast"
-  "mednafen_ngp" = "mednafen_ngp"; "flycast" = "flycast"; "play" = "play"; "handy" = "handy"
+  # flycast removed - buildbot binary crashes on Android 11+. Use scripts/build_flycast.sh.
   "stella2023" = "stella2023"; "prosystem" = "prosystem"; "mednafen_wswan" = "mednafen_wswan"
   "mednafen_vb" = "mednafen_vb"; "ppsspp" = "ppsspp"; "melonds" = "melonds"; "opera" = "opera"
   "mednafen_saturn" = "mednafen_saturn"; "picodrive" = "picodrive"; "gearcoleco" = "gearcoleco"

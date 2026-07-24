@@ -1,0 +1,18 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 19bdfee..7cb77d5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -219,6 +219,13 @@ elseif(LIBRETRO)
+ 	endif()
+ 	if(ANDROID OR USE_GLES)
+ 		target_compile_definitions(${PROJECT_NAME} PRIVATE GLES GLES3 HAVE_OPENGLES HAVE_OPENGLES3 HAVE_OIT)
++		if(ANDROID)
++			# ASharedMemory_create lives in libandroid. Without linking it, the weak
++			# reference in core/linux/posix_vmem.cpp resolves to null at runtime and the
++			# core falls back to /dev/ashmem, which Android 11+ removed. vmem allocation
++			# then fails (errno 13) and the dynarec segfaults on the first guest RAM write.
++			target_link_libraries(${PROJECT_NAME} PRIVATE android)
++		endif()
+     elseif(IOS)
+ 		target_compile_definitions(${PROJECT_NAME} PRIVATE GLES GLES3 HAVE_OPENGLES HAVE_OPENGLES3)
+ 		find_library(OPENGLES OpenGLES)

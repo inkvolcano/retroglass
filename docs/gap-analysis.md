@@ -63,7 +63,7 @@ Two things worth knowing:
 
 ---
 
-## Known issue: Dreamcast crashes on Android 11+ (2026-07-24)
+## Known issue: Dreamcast crashes on Android 11+ (2026-07-24) — FIXED same day
 
 Reported as "a bug when opening a Dreamcast game"; it is a hard native crash that kills the
 process, so no Java trace and no crash log.
@@ -92,10 +92,18 @@ Ruled out, each by measurement rather than reasoning:
 - **Not fixable via TMPDIR.** Set it to a writable cache dir; no change. Flycast does not consult
   it on this path.
 
-No libretro option exposes the dynarec or fastmem (`config::DynarecEnabled` and an interpreter
-fallback exist inside the binary but are not surfaced), so there is no lever left on the app
-side. This needs a Flycast build that uses `ASharedMemory_create` on modern Android. NAOMI and
-Atomiswave share this core and are presumably affected the same way — untested.
+**Root cause found and fixed.** Upstream Flycast already calls `ASharedMemory_create` — as a
+*weak* import (`core/linux/posix_vmem.cpp`). The libretro CMake target never links `libandroid`
+(the shipped binary's `DT_NEEDED` is only libm/libdl/libc), so the weak symbol resolves to null
+at runtime and the code silently drops to the removed `/dev/ashmem`. The earlier "core-side,
+not fixable from here" conclusion was half right: not fixable *from the app*, but fixable by
+**building the core from source with libandroid linked** — a 3-line CMake patch
+(`scripts/patches/flycast-android-sharedmem.patch`, upstream-worthy), built reproducibly by
+`scripts/build_flycast.sh` from flyinghead/flycast `4126f14` with NDK r28
+(16 KB alignment preserved, 28/28). Verified on device: `[VMEM] Info: nvmem is enabled`, real
+mapping base, zero SIGSEGV, pad running at 60 fps. flycast is removed from the fetch scripts so
+a routine re-fetch cannot reinstall the broken buildbot binary. NAOMI and Atomiswave share the
+core and should be fixed too — still untested.
 
 ---
 

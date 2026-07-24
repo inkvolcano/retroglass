@@ -19,7 +19,8 @@ declare -A CORES=(
   [mupen64plus_next_gles3]=mupen64plus_next
   [mednafen_pce_fast]=mednafen_pce_fast
   [mednafen_ngp]=mednafen_ngp
-  [flycast]=flycast
+  # flycast REMOVED from the fetch list: the buildbot binary never links libandroid
+  # and crashes on Android 11+ (vmem/ashmem). Build it with scripts/build_flycast.sh.
   [play]=play
   [handy]=handy
   [stella2023]=stella2023

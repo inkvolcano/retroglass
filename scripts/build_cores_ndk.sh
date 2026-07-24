@@ -36,6 +36,11 @@ mkdir -p "$JNI_OUT" "$WORK"
 # (verified). Together with the 8 cores the buildbot already ships aligned (fceumm,
 # gambatte, pcsx_rearmed, flycast, fbneo, mednafen_pce_fast, mednafen_ngp, prosystem)
 # that is 20/32 systems Play-ready.
+#
+# EXCEPTION - flycast: the buildbot binary is aligned but crashes on Android 11+ (its
+# libretro target never links libandroid, so ASharedMemory_create resolves to null and
+# the ashmem fallback is gone). Build it with scripts/build_flycast.sh instead, which
+# applies the one-line CMake fix. Covers Dreamcast, NAOMI and Atomiswave.
 CORES=(
   "snes9x|https://github.com/libretro/snes9x|libretro"
   "genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX|libretro"
