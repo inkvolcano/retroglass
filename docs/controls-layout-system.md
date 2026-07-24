@@ -4,6 +4,8 @@ The spec the loop is implementing, taken from the Claude Design doc **"Controls 
 Wireframes"** (project *Retroglass Emulator Menu Design*, file `Controls Layout Wireframes.dc.html`,
 turn t2). This file is the stable reference; the design doc itself is not in the repo.
 
+**See also [`controls-layout-handoff.md`](controls-layout-handoff.md)** — the design's own handoff, which pins decisions this file left implicit (zone geometry percentages, shoulder/gear variants, the 7th directional design) and is the fuller target. What is built so far is the guide-axis generator; several handoff pieces are not yet implemented (see that doc and the gap below).
+
 ## The idea
 
 Today every control carries an absolute `x, y, size` in `Console.baseControls()`, hand-tuned per
