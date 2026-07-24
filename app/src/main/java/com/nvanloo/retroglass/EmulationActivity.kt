@@ -1574,11 +1574,18 @@ class EmulationActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         fun dp(v: Float) = (v * density).toInt()
 
-        val previewH = dp(300f)
-        val previewW = (previewH / LayoutPreview.ASPECT).toInt()
+        // The canvas takes the phone's own aspect, not the wireframe's nominal 236x470. The
+        // whole value of the preview is that a module's size and reach read the same here as in
+        // your hands, and that only holds if the box has the shape of the screen it stands for.
+        val previewH = dp(430f)
+        val metrics = resources.displayMetrics
+        val previewW = (previewH * metrics.widthPixels / metrics.heightPixels.toFloat()).toInt()
         val preview = DesignerView(this@EmulationActivity).apply {
-            bind(console, layout, parts)
+            // The real split, not a nominal 4:3: the preview is only useful if the picture takes
+            // up as much of it as the picture will actually take up on the phone.
+            bind(console, layout, parts, layoutStore.portraitScreenFraction())
             selected = designerField
+            onLayoutChange = { savePad(it) }
             onFieldTap = { zone, slot ->
                 val moving = designerMove
                 if (designerMode == MODE_MOVE && moving != null) {
@@ -1608,7 +1615,13 @@ class EmulationActivity : AppCompatActivity() {
                 else -> designerMenuPanel(this, layout)
             }
             addView(spacer())
-            designerSettingsPanel(this, layout)
+            addView(navRow(null, getString(R.string.designer_reset)) {
+                layoutStore.resetPadDesign(console)
+                designerField = null
+                designerMode = MODE_MENU
+                controllerView.refreshLayout()
+                gameMenu.refresh()
+            })
         }
     }
 
@@ -1716,47 +1729,6 @@ class EmulationActivity : AppCompatActivity() {
                 savePad(layout.copy(align = layout.align + (key to labels[which].first)))
             }
         }
-    }
-
-    /** The in-screen settings panel: width split, shadows, scale, reset. */
-    private fun designerSettingsPanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
-        root.addView(
-            navRow(null, getString(R.string.designer_width), PadLayout.splitLabel(layout.split)) {
-                pushSelect(
-                    getString(R.string.designer_width),
-                    PadLayout.SPLITS.map { PadLayout.splitLabel(it) },
-                    PadLayout.SPLITS.indexOf(layout.split),
-                ) { which -> savePad(layout.copy(split = PadLayout.SPLITS[which])) }
-            },
-        )
-        val scales = listOf('s' to getString(R.string.designer_scale_small),
-            'n' to getString(R.string.designer_scale_normal),
-            'l' to getString(R.string.designer_scale_large))
-        root.addView(
-            navRow(null, getString(R.string.designer_scale), scales.first { it.first == layout.scale }.second) {
-                pushSelect(
-                    getString(R.string.designer_scale),
-                    scales.map { it.second },
-                    scales.indexOfFirst { it.first == layout.scale },
-                ) { which -> savePad(layout.copy(scale = scales[which].first)) }
-            },
-        )
-        root.addView(toggleRow(getString(R.string.designer_shadow_buttons), layout.shadowButtons) {
-            savePad(layout.copy(shadowButtons = it))
-        })
-        root.addView(toggleRow(getString(R.string.designer_shadow_dpad), layout.shadowDpad) {
-            savePad(layout.copy(shadowDpad = it))
-        })
-        root.addView(toggleRow(getString(R.string.designer_shadow_stick), layout.shadowStick) {
-            savePad(layout.copy(shadowStick = it))
-        })
-        root.addView(navRow(null, getString(R.string.designer_reset)) {
-            layoutStore.resetPadDesign(console)
-            designerField = null
-            designerMode = MODE_MENU
-            controllerView.refreshLayout()
-            gameMenu.refresh()
-        })
     }
 
     // ---- designer rules ---------------------------------------------------------------------
