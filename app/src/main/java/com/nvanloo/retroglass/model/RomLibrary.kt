@@ -464,6 +464,9 @@ object RomLibrary {
         return runCatching {
             source.copyTo(tmp, overwrite = true)
             if (!tmp.renameTo(dest)) error("rename failed for ${dest.name}")
+            // No core here reads Alcohol images; once both halves of an MDS/MDF pair have
+            // arrived (this call may be either half), rewrite them as cue/bin in place.
+            MdsConverter.convertIfPaired(dir, dest.name)
             true
         }.getOrElse {
             android.util.Log.w("RomLibrary", "import copy failed for $name", it)

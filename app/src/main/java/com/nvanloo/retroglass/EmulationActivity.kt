@@ -19,6 +19,8 @@ import android.util.Log
 import android.view.Display
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.Surface
+import android.view.SurfaceHolder
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -790,6 +792,32 @@ class EmulationActivity : AppCompatActivity() {
 
     // ------------------------------------------------------- emulator setup
 
+    /**
+     * Pins the display to 60 Hz while emulating. The fork's FPSSync samples the display's
+     * refresh rate once at load; with content ~60 fps and a screen reporting 60 it picks its
+     * vsync path, where game pacing comes *entirely* from eglSwapBuffers blocking. On an
+     * adaptive panel (this phone idles at 60 on static UI but runs apps at 120) the panel can
+     * switch modes after that sample — swap then unblocks at 120 Hz and the whole game runs
+     * double speed, which is what "Dreamcast audio runs very quick" was. PAL/50 Hz cores are
+     * unaffected: |50 − 60| exceeds FPSSync's tolerance, so they pace by timer, not vsync.
+     */
+    private fun pinDisplayToContentRate(view: GLRetroView) {
+        window.attributes = window.attributes.apply { preferredRefreshRate = 60f }
+        view.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    holder.surface.setFrameRate(
+                        60f,
+                        Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                    )
+                }
+            }
+
+            override fun surfaceChanged(holder: SurfaceHolder, f: Int, w: Int, h: Int) = Unit
+            override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+        })
+    }
+
     private fun createRetroView(): GLRetroView {
         val data = GLRetroViewData(this).apply {
             coreFilePath = File(applicationInfo.nativeLibraryDir, console.coreLibName).absolutePath
@@ -824,6 +852,7 @@ class EmulationActivity : AppCompatActivity() {
         }
         val view = GLRetroView(this, data)
         lifecycle.addObserver(view)
+        pinDisplayToContentRate(view)
 
         view.getGLRetroEvents()
             .onEach { event ->
