@@ -171,7 +171,22 @@ void Video::renderFrame() {
     if (skipDuplicateFrames && !isDirty) return;
     isDirty = false;
 
+    // A hardware core can leave the GL context in any state it likes, and the compositor
+    // below assumes a clean one: it draws with client-side vertex pointers, which silently
+    // read garbage offsets if the core left a VBO bound, and its fullscreen quad vanishes
+    // whole if culling or scissor survive from the core's last draw. GLideN64 happens to
+    // clean up after itself, which hid all of this; Flycast does not - it presented valid
+    // 640x480 frames while the screen showed nothing but the letterbox clear. Reset every
+    // piece of state the compositor relies on rather than trusting the core du jour.
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDisable(GL_STENCIL_TEST);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     // Letterbox fill. Black by default, but the frontend can paint it the console's own body

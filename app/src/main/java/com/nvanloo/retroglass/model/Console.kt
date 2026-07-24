@@ -334,6 +334,12 @@ enum class Console(
      *  computers, selected by the atari800_system option. */
     val forcedCoreVariables: List<Pair<String, String>> get() = when (this) {
         ATARI5200 -> listOf("atari800_system" to "5200")
+        // Single-threaded rendering, so Flycast draws inside retro_run on the GL thread -
+        // the model this frontend composites against. (The blank-screen bug this was first
+        // suspected of turned out to be GL state pollution, fixed in Video::renderFrame; kept
+        // because a frame completing on Flycast's own thread would race the compositor, and
+        // measured performance is a full 60 fps without it.)
+        DREAMCAST, NAOMI, ATOMISWAVE -> listOf("reicast_threaded_rendering" to "disabled")
         ATARI8BIT -> listOf("atari800_system" to "800XL (64K)")
         else -> emptyList()
     }

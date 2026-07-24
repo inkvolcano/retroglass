@@ -105,6 +105,19 @@ mapping base, zero SIGSEGV, pad running at 60 fps. flycast is removed from the f
 a routine re-fetch cannot reinstall the broken buildbot binary. NAOMI and Atomiswave share the
 core and should be fixed too — still untested.
 
+Two more bugs surfaced and were fixed once it ran:
+
+- **Blank screen, audio playing.** The core presented valid 640×480 HW frames (verified by
+  instrumenting `video_refresh`) but the compositor drew nothing. `Video::renderFrame` assumed a
+  clean GL context — client-side vertex pointers read garbage offsets if the core leaves a VBO
+  bound, and the fullscreen quad vanishes whole under leftover cull/scissor state. GLideN64
+  cleans up after itself, which had hidden this since the fork began; Flycast does not. The
+  compositor now resets every piece of state it relies on. Fix benefits every HW core.
+- **"No VMU found" — games could not save.** The libretro contract has the frontend call
+  `retro_set_controller_port_device` after load; RetroArch always does, LibretroDroid never did.
+  Flycast only attaches expansion devices (VMU, rumble pack) inside that call, so no memory card
+  ever existed. `afterGameLoad` now announces the standard joypad on every port.
+
 ---
 
 ## The five patterns underneath

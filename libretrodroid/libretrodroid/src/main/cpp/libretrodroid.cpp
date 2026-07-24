@@ -614,6 +614,16 @@ void LibretroDroid::clearRequiresVideoRefresh() {
 }
 
 void LibretroDroid::afterGameLoad() {
+    // The libretro contract has the frontend announce each port's device after load, and
+    // RetroArch always does. Skipping it leaves cores at their pre-load defaults - Flycast,
+    // for one, only attaches its expansion devices (VMU memory card, rumble pack) inside
+    // retro_set_controller_port_device, so Dreamcast games reported "No VMU found" and could
+    // never save. Announce the standard joypad on every port; cores that ignore it lose
+    // nothing, and the app's controller-type menu can still change it afterwards.
+    for (unsigned port = 0; port < 4; port++) {
+        core->retro_set_controller_port_device(port, RETRO_DEVICE_JOYPAD);
+    }
+
     struct retro_system_av_info system_av_info {};
     core->retro_get_system_av_info(&system_av_info);
 
