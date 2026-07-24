@@ -277,33 +277,30 @@ class ControllerView @JvmOverloads constructor(
     private fun reloadControls() {
         var base = ControllerDefs.presetOrDefault(console, presetId).controls
         val landscape = layoutMode != LAYOUT_PORTRAIT
-        if (landscape && width > 0 && height > 0) {
-            base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
-                w = width.toFloat(), h = height.toFloat())
-        }
-        // Portrait is built from the designer's slot map: which module sits in which field, with
-        // coordinates computed here rather than authored. Landscape still runs through
-        // LandscapeLayout, whose aspect-corrected face clusters have no equivalent in the slot
-        // renderer yet — see docs/controls-layout-handoff.md §6.10.
-        if (!landscape) {
-            // Always from the console's own controls, never the selected preset: the preset
-            // picker is retired and the designer is the single portrait model, so deriving from
-            // a leftover preset would make the designer's preview disagree with the live pad.
-            val parts = PadParts.from(ControllerDefs.controlsFor(console))
-            val design = layoutStore.padDesign(console) ?: PadDeriver.derive(parts)
+        // Both orientations are built from the designer's slot map now. The aspect goes in with
+        // it, because a cluster's spacing has to be converted into this pad's own units - that
+        // conversion is what landscape previously needed a separate solver for.
+        val parts = PadParts.from(ControllerDefs.controlsFor(console))
+        val design = layoutStore.padDesign(console) ?: PadDeriver.derive(parts)
+        if (width > 0 && height > 0) {
+            base = PadRenderer.render(
+                design.forOrientation(landscape), parts, landscape,
+                aspect = width.toFloat() / height.toFloat(),
+            )
+        } else if (!landscape) {
             base = PadRenderer.render(design.portrait, parts, landscape = false)
         }
-        // Portrait's gear comes from the designer's own system module (or PadRenderer's
-        // guarantee that one exists however the pad has been rearranged), so appending the
-        // frontend's own gear here would draw a second one beside it. Landscape still needs it:
-        // LandscapeLayout makes no such guarantee.
-        val needsMenuButton = !monitorMode && landscape
-        val defs = resolveCombineGroups(if (needsMenuButton) base + menuControl() else base)
+        // PadRenderer guarantees exactly one gear in both orientations — from whichever system
+        // module carries it, or its own fallback — so the frontend no longer adds one. The
+        // monitor pad is the exception: it is a mirror of what is being pressed, not something
+        // you can press, so it drops the gear rather than showing a button that does nothing.
+        val defs = resolveCombineGroups(
+            if (monitorMode) base.filterNot { it.id == PadModules.MENU_ID } else base,
+        )
         controls = defs.map { def ->
-            // Both orientations are computed now — landscape by its own solver, portrait by the
-            // designer — so the drag editor's saved per-control offsets are no longer applied.
-            // Reading them back would drag a freshly designed pad toward wherever the old free
-            // editor last left each button.
+            // Both orientations come from the designer now, so the retired drag editor's saved
+            // per-control offsets are no longer applied. Reading them back would drag a freshly
+            // designed pad toward wherever that free editor last left each button.
             val p = ControlPlacement(def.x, def.y, 1f)
             ControlState(def, p)
         }.toMutableList()
@@ -426,20 +423,6 @@ class ControllerView @JvmOverloads constructor(
         }
         return if (replaced.isEmpty()) defs else defs.map { replaced[it.id] ?: it }
     }
-
-    private fun menuControl() = ControlDef(
-        id = "_menu", type = ControlType.BUTTON, label = "⚙",
-        keyCode = -1,
-        x = 0.5f, y = 0.09f, size = 0.10f,
-        shape = ControlShape.PILL,
-        widthScale = 0.62f, // near-circular: the wireframe draws the gear as a small round pill
-        fillColor = Color.parseColor("#33FFFFFF"),
-        labelColor = Color.parseColor("#DDFFFFFF"),
-        // Handoff 2d: the gear can sit in the centre of the Start/Select pill. Sharing their
-        // combine group means that whenever the gear and the system pills crowd each other,
-        // all of them merge into one divided pill - SELECT | ⚙ | START - instead of stacking.
-        combineGroup = ZoneLayout.SYSTEM_PILLS,
-    )
 
     /** Re-derives the controls (zone spec, presets, merges) without touching saved placements. */
     fun refreshLayout() = reloadControls()

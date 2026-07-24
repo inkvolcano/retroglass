@@ -1545,6 +1545,9 @@ class EmulationActivity : AppCompatActivity() {
     /** The design being edited. Every edit is written through immediately. */
     private var designerDraft: PadDesign? = null
 
+    /** Which orientation the canvas is showing. The two layouts are stored and edited apart. */
+    private var designerLandscape: Boolean = false
+
     private fun padParts() = PadParts.from(ControllerDefs.controlsFor(console))
 
     private fun padDesign(): PadDesign =
@@ -1557,7 +1560,7 @@ class EmulationActivity : AppCompatActivity() {
      * controls under it never disagree — and Done is an exit, not a save you can forget to press.
      */
     private fun editDraft(layout: PadLayout) {
-        designerDraft = draft().copy(portrait = layout)
+        designerDraft = draft().with(designerLandscape, layout)
         layoutStore.setPadDesign(console, designerDraft!!)
         controllerView.refreshLayout()
         gameMenu.refresh()
@@ -1567,6 +1570,9 @@ class EmulationActivity : AppCompatActivity() {
         designerDraft = padDesign()
         designerField = null
         designerMove = null
+        // Open on whichever way the phone is actually being held: that is the layout you are
+        // looking at, and almost always the one you opened the editor to change.
+        designerLandscape = isLandscape()
         gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuDesignerScreen() }
     }
 
@@ -1586,18 +1592,35 @@ class EmulationActivity : AppCompatActivity() {
      */
     private fun menuDesignerScreen(): View = with(gameMenu) {
         val parts = padParts()
-        val layout = draft().portrait
+        val layout = draft().forOrientation(designerLandscape)
         val density = resources.displayMetrics.density
         fun dp(v: Float) = (v * density).toInt()
 
         val metrics = resources.displayMetrics
-        val ratio = metrics.widthPixels / metrics.heightPixels.toFloat()
-        // Fill what the header and the save bar leave, then take the width that keeps the phone's
-        // shape - capped, so a tall menu area cannot push the canvas wider than the screen itself.
-        val canvasH = (metrics.heightPixels - dp(230f)).coerceAtLeast(dp(260f))
-        val canvasW = (canvasH * ratio).toInt().coerceAtMost(metrics.widthPixels - dp(24f))
+        val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
+        val longSide = maxOf(metrics.widthPixels, metrics.heightPixels)
+        // The canvas is the phone, turned the way the layout being edited is held: tall and narrow
+        // for portrait, short and wide for landscape. Fitted to whichever bound binds first.
+        val ratio = if (designerLandscape) longSide / shortSide.toFloat()
+        else shortSide / longSide.toFloat()
+        val availH = (metrics.heightPixels - dp(230f)).coerceAtLeast(dp(220f))
+        val availW = metrics.widthPixels - dp(24f)
+        var canvasH = availH
+        var canvasW = (canvasH * ratio).toInt()
+        if (canvasW > availW) {
+            canvasW = availW
+            canvasH = (canvasW / ratio).toInt()
+        }
         val canvas = DesignerView(this@EmulationActivity).apply {
-            bind(console, layout, parts, layoutStore.portraitScreenFraction())
+            bind(
+                console, layout, parts,
+                layoutStore.portraitScreenFraction(), designerLandscape,
+            )
+            onRotate = {
+                designerLandscape = !designerLandscape
+                designerField = null
+                gameMenu.refresh()
+            }
             selected = designerField
             onLayoutChange = { editDraft(it) }
             onFieldTap = { zone, slot ->
@@ -1663,7 +1686,7 @@ class EmulationActivity : AppCompatActivity() {
 
     private fun pushDesignerField() {
         val (zone, slot) = designerField ?: return
-        val layout = draft().portrait
+        val layout = draft().forOrientation(designerLandscape)
         val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
         val module = PadModules.byId(layout.moduleAt(zone, start ?: slot))
         gameMenu.push(fieldTitle(zone, slot, module)) { menuDesignerFieldScreen() }
@@ -1671,7 +1694,7 @@ class EmulationActivity : AppCompatActivity() {
 
     /** What to do with the tapped field - its own screen, reached by tapping the canvas. */
     private fun menuDesignerFieldScreen(): View = with(gameMenu) {
-        val layout = draft().portrait
+        val layout = draft().forOrientation(designerLandscape)
         val field = designerField ?: return@with body { }
         val zone = field.first
         val slot = field.second
@@ -1705,7 +1728,7 @@ class EmulationActivity : AppCompatActivity() {
     /** The modules that fit this field, with the rules shown rather than enforced silently. */
     private fun menuDesignerListScreen(): View = with(gameMenu) {
         val parts = padParts()
-        val layout = draft().portrait
+        val layout = draft().forOrientation(designerLandscape)
         val field = designerField ?: return@with body { }
         val zone = field.first
         val slot = field.second

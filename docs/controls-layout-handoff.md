@@ -262,11 +262,17 @@ Portrait is fully slot-driven: `PadDesign`/`PadLayout` (model), `PadModules` (ca
 drag editor's saved per-control offset map — reading it back would pull a freshly designed pad
 toward wherever the old free editor last left each button.
 
-**Landscape still runs through `LandscapeLayout`.** Its face clusters are rebuilt aspect-corrected
-so up/down spacing equals left/right spacing in real pixels; the slot renderer has no equivalent
-yet, and dropping an authored diamond into a wide landscape column would render it flat. The
-designer therefore edits the portrait layout only for now. Landscape modules, the CT widening of
-§6.6 and the CL bottom band are the next piece.
+**Landscape now runs through the slot renderer too**, and `LandscapeLayout` is deleted. What kept
+them apart was aspect correction: `ControlDef.size` is a fraction of the pad's shorter edge while x
+and y are fractions of its width and height, so a cluster authored to be square comes out stretched
+the moment the pad is not the shape it was tuned for. Modules now express spacing as one physical
+step and convert it per axis (`Box.mx`/`Box.my`), which makes portrait correct on any phone rather
+than only on the one the numbers were tuned against, and makes landscape possible at all.
+
+The ⟳ rotate pill sits in the settings panel's `layout` row and switches which of the two stored
+layouts the canvas is editing. In landscape the canvas draws the controls *over* the picture, and
+the picture is whatever the columns and occupied overlay zones leave — an empty CT or CL gives its
+band back, which is what the filler module exists to prevent.
 
 Alignment is applied by measuring what a module actually emitted and sliding the group, rather than
 by asking each arrangement to declare its own footprint — a declaration can drift out of step with

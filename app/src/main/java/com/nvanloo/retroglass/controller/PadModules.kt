@@ -126,8 +126,27 @@ object PadModules {
     /**
      * A field's box in normalized pad coordinates: [cx]/[cy] centre, [w]/[h] extent. Widths are
      * fractions of the pad width and heights fractions of its height, matching [ControlDef].
+     *
+     * [mx]/[my] convert a physical spacing - expressed, like [ControlDef.size], as a fraction of
+     * the pad's shorter edge - into those two different units. Without them a cluster authored to
+     * be square comes out stretched the moment the pad is not the shape it was tuned for: the
+     * same normalized step covers far more pixels across a landscape pad than down it. This is
+     * the aspect correction that kept landscape on its own solver until now.
      */
-    data class Box(val cx: Float, val cy: Float, val w: Float, val h: Float)
+    data class Box(
+        val cx: Float,
+        val cy: Float,
+        val w: Float,
+        val h: Float,
+        val mx: Float = 1f,
+        val my: Float = 0.7f,
+    ) {
+        companion object {
+            /** Builds the unit converters for a pad of the given width/height ratio. */
+            fun units(aspect: Float): Pair<Float, Float> =
+                if (aspect < 1f) 1f to aspect else (1f / aspect) to 1f
+        }
+    }
 
     private val LIGHT = Color.parseColor("#EDEDF2")
     private val DARK = Color.parseColor("#1C1C1E")
@@ -202,7 +221,7 @@ object PadModules {
             combinedPill(take, box.cx, box.cy, size)
         } else {
             // Stacked: the first bar sits on the box's own line, the rest hang below it.
-            val step = size * 1.05f
+            val step = size * 1.05f * box.my
             val top = box.cy - step * (take.size - 1) / 2f
             take.mapIndexed { i, def ->
                 def.copy(x = box.cx, y = top + i * step, size = size, shape = ControlShape.BAR)
@@ -217,11 +236,11 @@ object PadModules {
         return when (m.id) {
             "sysStart" -> listOfNotNull(start?.copy(x = box.cx, y = box.cy, size = size))
             "sysGearBelow" -> listOfNotNull(
-                start?.copy(x = box.cx, y = box.cy - size * 0.62f, size = size),
-                gear(box.cx, box.cy + size * 0.62f, size),
+                start?.copy(x = box.cx, y = box.cy - size * 0.62f * box.my, size = size),
+                gear(box.cx, box.cy + size * 0.62f * box.my, size),
             )
             "sysDual" -> {
-                val gap = size * 2.0f
+                val gap = size * 2.0f * box.mx
                 listOfNotNull(
                     select?.copy(x = box.cx - gap / 2f, y = box.cy, size = size),
                     start?.copy(x = box.cx + gap / 2f, y = box.cy, size = size),
@@ -302,8 +321,11 @@ object PadModules {
         if (face.isEmpty()) return emptyList()
         val n = face.size
         val size = face.maxOf { it.size } * scale
-        val gx = size * 1.30f
-        val gy = size * 0.95f
+        // One physical step, then the same step expressed in each axis's own units, so a diamond
+        // stays a diamond whichever way round the phone is.
+        val step = size * 1.30f
+        val gx = step * box.mx
+        val gy = step * box.my
         fun at(i: Int, x: Float, y: Float) = face[i].copy(x = x, y = y, size = size)
 
         return when (m.id) {
@@ -361,14 +383,15 @@ object PadModules {
             // Six buttons: four C keys as a diamond up and right, A and B on a rising diagonal
             // clear of it — the arrangement the handoff derives from the real N64 pad.
             "faceN64" -> {
-                val c = size * 0.92f
+                val cx = size * 0.92f * box.mx
+                val cy = size * 0.92f * box.my
                 listOf(
-                    at(0, box.cx + c * 0.55f, box.cy - c * 1.30f),
-                    at(1, box.cx + c * 0.00f, box.cy - c * 0.45f),
-                    at(2, box.cx + c * 1.10f, box.cy - c * 0.45f),
-                    at(3, box.cx + c * 0.55f, box.cy + c * 0.40f),
-                    at(4, box.cx - c * 1.15f, box.cy + c * 0.30f),
-                    at(5, box.cx - c * 0.45f, box.cy + c * 1.25f),
+                    at(0, box.cx + cx * 0.55f, box.cy - cy * 1.30f),
+                    at(1, box.cx + cx * 0.00f, box.cy - cy * 0.45f),
+                    at(2, box.cx + cx * 1.10f, box.cy - cy * 0.45f),
+                    at(3, box.cx + cx * 0.55f, box.cy + cy * 0.40f),
+                    at(4, box.cx - cx * 1.15f, box.cy + cy * 0.30f),
+                    at(5, box.cx - cx * 0.45f, box.cy + cy * 1.25f),
                 )
             }
 
@@ -399,14 +422,22 @@ object PadModules {
     private fun translateAuthored(face: List<ControlDef>, box: Box, scale: Float): List<ControlDef> {
         val cx = face.map { it.x }.average().toFloat()
         val cy = face.map { it.y }.average().toFloat()
+        // The authored offsets are in portrait units. Re-expressing them through this pad's own
+        // converters is what stops a hand-tuned cluster flattening out in landscape.
+        val (px, py) = Box.units(PORTRAIT_ASPECT)
+        val kx = if (px == 0f) 1f else box.mx / px
+        val ky = if (py == 0f) 1f else box.my / py
         return face.map {
             it.copy(
-                x = box.cx + (it.x - cx) * scale,
-                y = box.cy + (it.y - cy) * scale,
+                x = box.cx + (it.x - cx) * scale * kx,
+                y = box.cy + (it.y - cy) * scale * ky,
                 size = it.size * scale,
             )
         }
     }
+
+    /** The shape the shipped layouts were authored against: a phone pad, wider than it is tall. */
+    const val PORTRAIT_ASPECT = 0.7f
 
     /**
      * How many copies of a family a console can support at once. Every module draws its buttons

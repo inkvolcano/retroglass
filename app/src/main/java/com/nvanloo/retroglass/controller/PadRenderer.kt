@@ -62,15 +62,22 @@ object PadRenderer {
      * a gear is added if no system module already carries one, so the in-game menu is always
      * reachable however the user has rearranged things.
      */
-    fun render(layout: PadLayout, parts: PadParts, landscape: Boolean): List<ControlDef> {
+    fun render(
+        layout: PadLayout,
+        parts: PadParts,
+        landscape: Boolean,
+        aspect: Float = PadModules.PORTRAIT_ASPECT,
+    ): List<ControlDef> {
         val out = mutableListOf<ControlDef>()
         val scale = layout.scaleFactor
+        val (mx, my) = PadModules.Box.units(aspect)
 
         for (zone in listOf(PadLayout.ZONE_CT, PadLayout.ZONE_CL)) {
             val module = PadModules.byId(layout.moduleAt(zone, null)) ?: continue
             val (l, r) = centreBounds(zone, landscape)
             val box = PadModules.Box(
                 cx = (l + r) / 2f, cy = centreY(zone, landscape), w = r - l, h = SLOT_H,
+                mx = mx, my = my,
             )
             // CL's stick is the one system module that belongs to a column's worth of space;
             // everything else in these zones is pill-sized by definition.
@@ -88,6 +95,7 @@ object PadRenderer {
                     cy = slotCentreY(slot, module.slots),
                     w = right - left,
                     h = module.slots * SLOT_H,
+                    mx = mx, my = my,
                 )
                 val emitted = PadModules.emit(module, parts, box, scale, side, stickIndex)
                 if (module.family == PadModules.Family.STICK) stickIndex++

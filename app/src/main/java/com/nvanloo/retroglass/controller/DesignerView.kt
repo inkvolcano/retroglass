@@ -33,6 +33,9 @@ class DesignerView(context: Context) : View(context) {
     /** Called with the new layout when one of the in-screen setting pills is tapped. */
     var onLayoutChange: ((PadLayout) -> Unit)? = null
 
+    /** Called by the layout row's rotate pill: switch which orientation is being edited. */
+    var onRotate: (() -> Unit)? = null
+
     var selected: Pair<String, Int?>? = null
         set(value) { field = value; invalidate() }
 
@@ -40,16 +43,24 @@ class DesignerView(context: Context) : View(context) {
     private var parts: PadParts = PadParts()
     private var console: Console? = null
     private var screenFraction: Float = 0.42f
+    private var landscape: Boolean = false
     private var preview: Bitmap? = null
 
     /** Tappable rects built during draw: the setting pills, the overlay zones, then the slots. */
     private val hits = mutableListOf<Pair<RectF, () -> Unit>>()
 
-    fun bind(console: Console, layout: PadLayout, parts: PadParts, screenFraction: Float) {
+    fun bind(
+        console: Console,
+        layout: PadLayout,
+        parts: PadParts,
+        screenFraction: Float,
+        landscape: Boolean,
+    ) {
         this.console = console
         this.layout = layout
         this.parts = parts
         this.screenFraction = screenFraction.coerceIn(0.22f, 0.62f)
+        this.landscape = landscape
         preview = null
         invalidate()
     }
@@ -88,10 +99,28 @@ class DesignerView(context: Context) : View(context) {
         fill.color = bg
         canvas.drawRoundRect(RectF(0f, 0f, w, h), 10f * unit, 10f * unit, fill)
 
-        val screenBottom = inset + (h - inset * 2f) * screenFraction
-        drawScreen(canvas, RectF(inset, inset, w - inset, screenBottom), unit)
+        if (landscape) {
+            // Landscape puts the controls *over* the picture rather than under it, so the pad
+            // band is the whole canvas and the screen is the box the columns leave between them.
+            drawScreen(canvas, landscapeScreenRect(w, h, inset), unit)
+            drawPad(canvas, w, inset, h - inset, unit)
+        } else {
+            val screenBottom = inset + (h - inset * 2f) * screenFraction
+            drawScreen(canvas, RectF(inset, inset, w - inset, screenBottom), unit)
+            drawPad(canvas, w, screenBottom + 4f * unit, h - inset, unit)
+        }
+    }
 
-        drawPad(canvas, w, screenBottom + 4f * unit, h - inset, unit)
+    /** What the picture is left after the columns and any occupied overlay zones take their band. */
+    private fun landscapeScreenRect(w: Float, h: Float, inset: Float): RectF {
+        val (_, lcR) = PadRenderer.columnBounds(layout, PadLayout.ZONE_LC, landscape = true)
+        val (rcL, _) = PadRenderer.columnBounds(layout, PadLayout.ZONE_RC, landscape = true)
+        val padH = h - inset * 2f
+        // An empty overlay zone gives its band back to the picture, which is the wireframe's rule
+        // and the reason the filler module exists at all.
+        val top = if (layout.ct != null) inset + 0.19f * padH else inset
+        val bottom = if (layout.cl != null) h - inset - 0.19f * padH else h - inset
+        return RectF(lcR * w + 6f, top, rcL * w - 6f, bottom)
     }
 
     /** The picture, with the settings panel inside it exactly as the wireframe draws it. */
@@ -108,6 +137,12 @@ class DesignerView(context: Context) : View(context) {
         canvas.drawText("◉ SCREEN 4:3", r.centerX(), r.top + 14f * unit, text)
 
         val rows = listOf(
+            "layout" to listOf(
+                Triple(
+                    "\u27F3 " + (if (landscape) "Landscape" else "Portrait"),
+                    false,
+                ) { onRotate?.invoke(); layout },
+            ),
             "width" to PadLayout.SPLITS.map { id ->
                 Triple(PadLayout.splitLabel(id), layout.split == id) { layout.copy(split = id) }
             },
@@ -168,7 +203,12 @@ class DesignerView(context: Context) : View(context) {
                 canvas.drawRoundRect(pill, pillH / 2f, pillH / 2f, fill)
                 text.color = if (on) Color.parseColor("#1A1A1A") else pillText
                 canvas.drawText(caption, pill.centerX(), pill.centerY() + text.textSize * 0.36f, text)
-                hits += RectF(pill) to { onLayoutChange?.invoke(apply()) }
+                hits += RectF(pill) to {
+                    // The rotate pill returns the layout unchanged and switches orientation
+                    // through its own callback; everything else is a real edit.
+                    val next = apply()
+                    if (next !== layout) onLayoutChange?.invoke(next)
+                }
                 x += tw + gap
             }
             y += pillH + gap
@@ -179,7 +219,8 @@ class DesignerView(context: Context) : View(context) {
     private fun drawPad(canvas: Canvas, w: Float, top: Float, bottom: Float, unit: Float) {
         val padH = bottom - top
         if (padH <= 0) return
-        val defs = PadRenderer.render(layout, parts, landscape = false)
+        val padHeight = padH
+        val defs = PadRenderer.render(layout, parts, landscape, aspect = width.toFloat() / padHeight)
 
         console?.let { target ->
             val bmp = preview
@@ -193,7 +234,7 @@ class DesignerView(context: Context) : View(context) {
 
         val slotHits = mutableListOf<Pair<RectF, () -> Unit>>()
         for (zone in listOf(PadLayout.ZONE_LC, PadLayout.ZONE_RC)) {
-            val (l, _) = PadRenderer.columnBounds(layout, zone, landscape = false)
+            val (l, _) = PadRenderer.columnBounds(layout, zone, landscape)
             for (slot in 1..PadLayout.SLOT_COUNT) {
                 val rect = slotRect(zone, slot, 1, w, top, padH)
                 canvas.drawRoundRect(rect, 5f * unit, 5f * unit, dashed)
@@ -247,15 +288,15 @@ class DesignerView(context: Context) : View(context) {
     }
 
     private fun slotRect(zone: String, slot: Int, span: Int, w: Float, top: Float, padH: Float): RectF {
-        val (l, r) = PadRenderer.columnBounds(layout, zone, landscape = false)
+        val (l, r) = PadRenderer.columnBounds(layout, zone, landscape)
         val y0 = top + PadRenderer.slotTop(slot) * padH
         val y1 = top + (PadRenderer.slotTop(slot + span - 1) + PadRenderer.slotHeight()) * padH
         return RectF(l * w + 2f, y0, r * w - 2f, y1)
     }
 
     private fun centreRect(zone: String, w: Float, top: Float, padH: Float): RectF {
-        val (l, r) = PadRenderer.centreBounds(zone, landscape = false)
-        val cy = top + PadRenderer.centreY(zone, landscape = false) * padH
+        val (l, r) = PadRenderer.centreBounds(zone, landscape)
+        val cy = top + PadRenderer.centreY(zone, landscape) * padH
         val half = PadRenderer.slotHeight() * padH / 2f
         return RectF(l * w, cy - half, r * w, cy + half)
     }
