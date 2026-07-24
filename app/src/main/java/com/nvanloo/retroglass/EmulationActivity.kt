@@ -1528,89 +1528,58 @@ class EmulationActivity : AppCompatActivity() {
     /**
      * The zone picker - the handoff's replacement for the free-form drag editor. The user
      * chooses a module design and an anchor per zone; ZoneComposer solves the positions.
+     * Height and reach are separate flat rows: they were chained behind each other at first,
+     * and the horizontal picker was effectively undiscoverable.
      */
     private fun menuZonePickerScreen(): View = with(gameMenu) {
-        val spec = layoutStore.zoneSpec(console)
-        fun update(newSpec: com.nvanloo.retroglass.controller.ZoneComposer.ZoneSpec) {
-            layoutStore.setZoneSpec(console, newSpec)
-            controllerView.refreshLayout()
-            gameMenu.refresh()
-        }
-
-        val dpadStyles = listOf("Cross", "Disc", "Octagon", "Split arrows", "Square plate", "Dished round")
-        val stickStyles = listOf("Concentric", "Dished cap", "Ring + nub", "Square gate", "Dimpled cap", "Knurled cap")
         val vAnchors = listOf(getString(R.string.zone_pos_default), "Top", "Middle", "Low")
         val hAnchors = listOf(getString(R.string.zone_pos_default), "Inner", "Centre", "Outer")
-        fun vOf(i: Int) = when (i) {
-            1 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.TOP
-            2 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.MID
-            3 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.LOW
-            else -> null
+        val dpadStyles = listOf("Cross", "Disc", "Octagon", "Split arrows", "Square plate", "Dished round")
+        val stickStyles = listOf("Concentric", "Dished cap", "Ring + nub", "Square gate", "Dimpled cap", "Knurled cap")
+
+        fun spec() = layoutStore.zoneSpec(console)
+        fun save(newSpec: com.nvanloo.retroglass.controller.ZoneComposer.ZoneSpec) {
+            layoutStore.setZoneSpec(console, newSpec)
+            controllerView.refreshLayout()
         }
-        fun hOf(i: Int) = when (i) {
-            1 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.INNER
-            2 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.CENTER
-            3 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.OUTER
-            else -> null
-        }
-        fun vIndex(v: com.nvanloo.retroglass.controller.ZoneGrid.VAnchor?) = when (v) {
-            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.TOP -> 1
-            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.MID -> 2
-            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.LOW -> 3
-            null -> 0
-        }
-        fun hIndex(h: com.nvanloo.retroglass.controller.ZoneGrid.HAnchor?) = when (h) {
-            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.INNER -> 1
-            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.CENTER -> 2
-            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.OUTER -> 3
-            null -> 0
-        }
+        fun vOf(i: Int) = com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.entries.getOrNull(i - 1)
+        fun hOf(i: Int) = com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.entries.getOrNull(i - 1)
+        fun vIx(v: com.nvanloo.retroglass.controller.ZoneGrid.VAnchor?) = v?.let { it.ordinal + 1 } ?: 0
+        fun hIx(h: com.nvanloo.retroglass.controller.ZoneGrid.HAnchor?) = h?.let { it.ordinal + 1 } ?: 0
 
         val hasDpad = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.DPAD }
         val hasStick = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.STICK }
+        val sp = spec()
 
         body {
             if (hasDpad) {
-                addView(navRow(null, getString(R.string.zone_dpad_style), dpadStyles[spec.dpadDesign]) {
-                    pushSelect(getString(R.string.zone_dpad_style), dpadStyles, spec.dpadDesign) {
-                        update(spec.copy(dpadDesign = it))
-                    }
+                addView(navRow(null, getString(R.string.zone_dpad_style), dpadStyles[sp.dpadDesign]) {
+                    pushSelect(getString(R.string.zone_dpad_style), dpadStyles, sp.dpadDesign) { save(spec().copy(dpadDesign = it)) }
                 })
-                addView(navRow(null, getString(R.string.zone_dpad_pos),
-                    vAnchors[vIndex(spec.dpadV)] + " · " + hAnchors[hIndex(spec.dpadH)]) {
-                    pushSelect(getString(R.string.zone_dpad_pos) + " ↕", vAnchors, vIndex(spec.dpadV)) { vi ->
-                        update(spec.copy(dpadV = vOf(vi)))
-                        pushSelect(getString(R.string.zone_dpad_pos) + " ↔", hAnchors, hIndex(spec.dpadH)) { hi ->
-                            update(layoutStore.zoneSpec(console).copy(dpadH = hOf(hi)))
-                        }
-                    }
+                addView(navRow(null, "D-pad · " + getString(R.string.zone_height), vAnchors[vIx(sp.dpadV)]) {
+                    pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.dpadV)) { save(spec().copy(dpadV = vOf(it))) }
+                })
+                addView(navRow(null, "D-pad · " + getString(R.string.zone_reach), hAnchors[hIx(sp.dpadH)]) {
+                    pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.dpadH)) { save(spec().copy(dpadH = hOf(it))) }
                 })
             }
-            if (hasStick) {
-                addView(navRow(null, getString(R.string.zone_stick_style), stickStyles[spec.stickDesign]) {
-                    pushSelect(getString(R.string.zone_stick_style), stickStyles, spec.stickDesign) {
-                        update(spec.copy(stickDesign = it))
-                    }
-                })
-                addView(navRow(null, getString(R.string.zone_stick_pos),
-                    vAnchors[vIndex(spec.stickV)] + " · " + hAnchors[hIndex(spec.stickH)]) {
-                    pushSelect(getString(R.string.zone_stick_pos) + " ↕", vAnchors, vIndex(spec.stickV)) { vi ->
-                        update(spec.copy(stickV = vOf(vi)))
-                        pushSelect(getString(R.string.zone_stick_pos) + " ↔", hAnchors, hIndex(spec.stickH)) { hi ->
-                            update(layoutStore.zoneSpec(console).copy(stickH = hOf(hi)))
-                        }
-                    }
-                })
-            }
-            addView(navRow(null, getString(R.string.zone_face_pos),
-                vAnchors[vIndex(spec.faceV)] + " · " + hAnchors[hIndex(spec.faceH)]) {
-                pushSelect(getString(R.string.zone_face_pos) + " ↕", vAnchors, vIndex(spec.faceV)) { vi ->
-                    update(spec.copy(faceV = vOf(vi)))
-                    pushSelect(getString(R.string.zone_face_pos) + " ↔", hAnchors, hIndex(spec.faceH)) { hi ->
-                        update(layoutStore.zoneSpec(console).copy(faceH = hOf(hi)))
-                    }
-                }
+            addView(navRow(null, "Buttons · " + getString(R.string.zone_height), vAnchors[vIx(sp.faceV)]) {
+                pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.faceV)) { save(spec().copy(faceV = vOf(it))) }
             })
+            addView(navRow(null, "Buttons · " + getString(R.string.zone_reach), hAnchors[hIx(sp.faceH)]) {
+                pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.faceH)) { save(spec().copy(faceH = hOf(it))) }
+            })
+            if (hasStick) {
+                addView(navRow(null, getString(R.string.zone_stick_style), stickStyles[sp.stickDesign]) {
+                    pushSelect(getString(R.string.zone_stick_style), stickStyles, sp.stickDesign) { save(spec().copy(stickDesign = it)) }
+                })
+                addView(navRow(null, "Stick · " + getString(R.string.zone_height), vAnchors[vIx(sp.stickV)]) {
+                    pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.stickV)) { save(spec().copy(stickV = vOf(it))) }
+                })
+                addView(navRow(null, "Stick · " + getString(R.string.zone_reach), hAnchors[hIx(sp.stickH)]) {
+                    pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.stickH)) { save(spec().copy(stickH = hOf(it))) }
+                })
+            }
             addView(spacer())
             addView(navRow(null, getString(R.string.zone_reset)) {
                 layoutStore.resetZoneSpec(console)

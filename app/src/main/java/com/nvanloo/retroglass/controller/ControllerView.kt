@@ -363,12 +363,21 @@ class ControllerView @JvmOverloads constructor(
             val widths = row.map { 2f * halfPx(it) }
             val totalW = widths.sum() + gapPx * (row.size - 1)
             if (totalW <= width * 0.5f) {
+                // When the row lives in the top band alongside the shoulder bars, sit it on
+                // the bars' own line - the handoff draws LT / CT / RT as one row, and a pill
+                // row floating a little below the shoulders reads as a misalignment.
+                val topBars = defs.filter { it.shape == ControlShape.BAR && it.y < 0.30f }
+                val rowY = if (anchor.y < 0.30f && topBars.isNotEmpty()) {
+                    topBars.map { it.y }.average().toFloat()
+                } else {
+                    anchor.y
+                }
                 var cursor = width * 0.5f - totalW / 2f
                 for (m in row) {
                     val w = 2f * halfPx(m)
                     replaced[m.id] = m.copy(
                         x = (cursor + w / 2f) / width,
-                        y = anchor.y,
+                        y = rowY,
                     )
                     cursor += w + gapPx
                 }
