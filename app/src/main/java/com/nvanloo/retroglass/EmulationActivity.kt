@@ -1,5 +1,6 @@
 package com.nvanloo.retroglass
 
+import com.nvanloo.retroglass.model.BiosCatalog
 import android.annotation.SuppressLint
 import android.app.Presentation
 import android.content.Context
@@ -804,6 +805,14 @@ class EmulationActivity : AppCompatActivity() {
             val merged = LinkedHashMap<String, String>()
             coreOptions.overrides(consoleKey).forEach { (k, v) -> merged[k] = v }
             console.forcedCoreVariables.forEach { (k, v) -> merged[k] = v }
+            // A core given no BIOS is on its own; several just misbehave. Fall back to the
+            // core's own high-level BIOS and log which files were missing, so a later failure
+            // has a breadcrumb instead of being silent.
+            val missingBios = BiosCatalog.missingFiles(this@EmulationActivity, console)
+            if (missingBios.isNotEmpty()) {
+                console.hleBiosVariable?.let { (k, v) -> merged[k] = v }
+                Log.w(TAG, "missing BIOS for ${console.displayName}: $missingBios")
+            }
             // With 3+ controllers assigned, arm the core's multitap (option-based cores only;
             // device-based multitaps are enabled in applyMultitap() after the core loads).
             if (activePortCount() > 2) {

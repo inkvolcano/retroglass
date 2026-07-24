@@ -312,6 +312,22 @@ enum class Console(
             // NES, PSX, N64, PC Engine (+CD), 3DO, Atari 5200/7800/8-bit and anything else.
             else -> 240
         }
+    /**
+     * A core option that boots without the real BIOS, used when required files are missing.
+     *
+     * Flycast does not degrade on its own when BIOS files are absent, so this switches it to
+     * its high-level BIOS rather than letting it run without one.
+     *
+     * Note: this does **not** fix the SIGSEGV in `addrspace::write32` seen on Android 16 —
+     * that was measured with HLE enabled and still crashed, so the missing dc_flash.bin is a
+     * separate (real) problem, not the cause of that crash.
+     */
+    val hleBiosVariable: Pair<String, String>?
+        get() = when (this) {
+            DREAMCAST -> "reicast_hle_bios" to "enabled"
+            else -> null
+        }
+
 
     /** Core options that MUST be forced for this system (applied at load). Used where one
      *  core serves several machines — e.g. atari800 runs both the 5200 console and the 8-bit
