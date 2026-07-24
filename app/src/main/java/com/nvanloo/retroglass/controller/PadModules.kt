@@ -66,23 +66,23 @@ object PadModules {
     )
 
     private val DPADS = listOf(
-        "dpadCross" to "✛ Cross",
-        "dpadDisc" to "⬤ Disc (8-way)",
-        "dpadOcta" to "⯃ Octagon (8-way)",
-        "dpadSplit" to "✧ Split arrows",
-        "dpadPlate" to "▣ Square plate (8-way)",
-        "dpadDish" to "◎ Dished round (8-way)",
+        "dpadCross" to "Cross",
+        "dpadDisc" to "Disc (8-way)",
+        "dpadOcta" to "Octagon (8-way)",
+        "dpadSplit" to "Split arrows",
+        "dpadPlate" to "Square plate (8-way)",
+        "dpadDish" to "Dished round (8-way)",
     ).mapIndexed { i, (id, name) ->
         Module(id, name, Cat.BLOCK, Family.DPAD, slots = 2, variant = true, design = i)
     }
 
     private val STICKS = listOf(
-        "stickConcentric" to "◉ Stick — concentric",
-        "stickDish" to "◉ Stick — dished cap",
-        "stickRing" to "◉ Stick — ring + nub",
-        "stickGate" to "◉ Stick — square gate",
-        "stickDimple" to "◉ Stick — dimpled cap",
-        "stickKnurl" to "◉ Stick — knurled cap",
+        "stickConcentric" to "Stick — concentric",
+        "stickDish" to "Stick — dished cap",
+        "stickRing" to "Stick — ring + nub",
+        "stickGate" to "Stick — square gate",
+        "stickDimple" to "Stick — dimpled cap",
+        "stickKnurl" to "Stick — knurled cap",
     ).mapIndexed { i, (id, name) ->
         Module(id, name, Cat.BLOCK, Family.STICK, slots = 2, variant = true, design = i)
     }
@@ -102,8 +102,8 @@ object PadModules {
         Module("sysDual", "SELECT · START", Cat.SYSTEM, Family.SYSTEM),
         Module("sysComb", "Combined SEL | ⚙ | START", Cat.SYSTEM, Family.SYSTEM),
         Module("sysGearOnly", "⚙ only", Cat.SYSTEM, Family.NONE),
-        Module("sysFiller", "□ Filler — keeps the screen small", Cat.SYSTEM, Family.NONE),
-        Module("sysStick", "◉ Stick (CL only)", Cat.SYSTEM, Family.STICK),
+        Module("sysFiller", "Filler — keeps the screen small", Cat.SYSTEM, Family.NONE),
+        Module("sysStick", "Stick (CL only)", Cat.SYSTEM, Family.STICK),
     )
 
     val ALL: List<Module> = FACE + DPADS + STICKS + SHOULDERS + SYSTEM
@@ -243,9 +243,15 @@ object PadModules {
         return if (m.id == "sysGearOnly") listOf(gear(box.cx, box.cy, size)) else emptyList()
     }
 
+    /**
+     * The settings gear. keyCode -1 marks it as the menu button rather than a core input, and the
+     * styling matches what the app has always drawn: a small, near-circular translucent pill.
+     */
     fun gear(x: Float, y: Float, size: Float): ControlDef = ControlDef(
-        MENU_ID, ControlType.BUTTON, "⚙", 0, x, y, size,
-        ControlShape.PILL, fillColor = Color.parseColor("#2E2E33"), labelColor = LIGHT,
+        MENU_ID, ControlType.BUTTON, "⚙", -1, x, y, size,
+        ControlShape.PILL,
+        fillColor = Color.parseColor("#33FFFFFF"),
+        labelColor = Color.parseColor("#DDFFFFFF"),
         widthScale = 0.62f,
         // Tagged into the system group so that if it ever shares a row with START/SELECT the
         // device-time resolver spreads or fuses them, rather than stacking the gear on top.
@@ -400,6 +406,22 @@ object PadModules {
                 size = it.size * scale,
             )
         }
+    }
+
+    /**
+     * How many copies of a family a console can support at once. Every module draws its buttons
+     * from the console's own controls, so placing the same family twice would put two live copies
+     * of the same physical buttons on the pad — two START pills, two d-pads — which is not a
+     * layout choice but a duplicate. To put a cluster somewhere else you move it, not add it
+     * again, which is exactly what the Move action is for.
+     */
+    fun capacity(family: Family, parts: PadParts): Int = when (family) {
+        Family.FACE -> if (parts.face.isEmpty()) 0 else 1
+        Family.DPAD -> if (parts.dpad == null) 0 else 1
+        Family.STICK -> parts.sticks.size
+        Family.SHOULDER -> 1
+        Family.SYSTEM -> if (parts.system.isEmpty()) 0 else 1
+        Family.NONE -> Int.MAX_VALUE
     }
 
     /**

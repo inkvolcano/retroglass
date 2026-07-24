@@ -53,6 +53,11 @@ class DesignerView(context: Context) : View(context) {
         color = Color.parseColor("#FFD54F")
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val gearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        color = Color.parseColor("#99000000")
+    }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#88FFFFFF")
         textAlign = Paint.Align.CENTER
@@ -72,6 +77,15 @@ class DesignerView(context: Context) : View(context) {
         canvas.drawRoundRect(RectF(0f, 0f, w, h), 18f, 18f, fillPaint)
         labelPaint.textSize = h * 0.026f
 
+        // The pad exactly as it will be built, then the field grid over it. The preview bitmap is
+        // opaque, so drawing the grid first hid the thing you are meant to be aiming at.
+        val target = console
+        val defs = PadRenderer.render(layout, parts, landscape = false)
+        if (target != null) {
+            val bmp = preview ?: LayoutPreview.render(target, defs, width, height).also { preview = it }
+            canvas.drawBitmap(bmp, 0f, 0f, null)
+        }
+
         for (zone in listOf(PadLayout.ZONE_LC, PadLayout.ZONE_RC)) {
             val (l, r) = PadRenderer.columnBounds(layout, zone, landscape = false)
             for (slot in 1..PadLayout.SLOT_COUNT) {
@@ -82,21 +96,16 @@ class DesignerView(context: Context) : View(context) {
             }
         }
         for (zone in listOf(PadLayout.ZONE_CT, PadLayout.ZONE_CL)) {
-            canvas.drawRoundRect(centreRect(zone, w, h), 8f, 8f, zonePaint)
             val rect = centreRect(zone, w, h)
+            canvas.drawRoundRect(rect, 8f, 8f, zonePaint)
             canvas.drawText(zone, rect.left + 16f, rect.top + labelPaint.textSize + 6f, labelPaint)
         }
 
-        // The controls layer, rendered exactly as the pad will build it.
-        val target = console
-        if (target != null) {
-            val bmp = preview ?: LayoutPreview.render(
-                target,
-                PadRenderer.render(layout, parts, landscape = false),
-                width,
-                height,
-            ).also { preview = it }
-            canvas.drawBitmap(bmp, 0f, 0f, null)
+        // The gear is translucent by design, which makes it almost invisible against a light pad.
+        // Ring it here so you can see at a glance that the way back to the settings still exists.
+        defs.firstOrNull { it.id == PadModules.MENU_ID }?.let { gear ->
+            val r = gear.size * minOf(w, h) / 2f
+            canvas.drawCircle(gear.x * w, gear.y * h, r, gearPaint)
         }
 
         selected?.let { (zone, slot) ->
@@ -139,8 +148,8 @@ class DesignerView(context: Context) : View(context) {
         val zone = if (x <= 0.5f) PadLayout.ZONE_LC else PadLayout.ZONE_RC
         val (l, r) = PadRenderer.columnBounds(layout, zone, landscape = false)
         if (x < l || x > r) return true
-        val slot = (1..PadLayout.SLOT_COUNT).firstOrNull {
-            y >= PadRenderer.slotTop(it) && y <= PadRenderer.slotTop(it) + PadRenderer.slotHeight()
+        val slot = (1..PadLayout.SLOT_COUNT).minByOrNull {
+            kotlin.math.abs(PadRenderer.slotTop(it) + PadRenderer.slotHeight() / 2f - y)
         } ?: return true
         // Tapping anywhere on a two-slot module selects the module, not its lower half.
         val owner = layout.covering(zone, slot, 1).firstOrNull()?.first ?: slot

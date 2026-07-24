@@ -1682,12 +1682,12 @@ class EmulationActivity : AppCompatActivity() {
         val thumbH = (56 * resources.displayMetrics.density).toInt()
         val thumbW = (thumbH / LayoutPreview.ASPECT).toInt()
 
-        val options = if (centre) {
+        val options = (if (centre) {
             PadModules.optionsFor(PadModules.Cat.SYSTEM, parts, zone)
         } else {
             PadModules.optionsFor(PadModules.Cat.BLOCK, parts, zone) +
                 PadModules.optionsFor(PadModules.Cat.SHOULDER, parts, zone)
-        }
+        }).filter { hasRoomFor(layout, parts, zone, slot, it) }
 
         for (module in options) {
             val blocked = blockedReason(layout, zone, slot, module)
@@ -1696,13 +1696,14 @@ class EmulationActivity : AppCompatActivity() {
             val shot = LayoutPreview.render(
                 console, PadRenderer.render(next, parts, landscape = false), thumbW, thumbH,
             )
-            val subtitle = blocked ?: replaces
             root.addView(
-                previewRow(shot, module.name + (subtitle?.let { "\n$it" } ?: ""), module.id == current) {
-                    if (blocked == null) {
-                        designerMode = MODE_MENU
-                        savePad(next)
-                    }
+                modulePickRow(
+                    shot, module.name, blocked ?: replaces,
+                    selected = module.id == current,
+                    enabled = blocked == null,
+                ) {
+                    designerMode = MODE_MENU
+                    savePad(next)
                 },
             )
         }
@@ -1836,6 +1837,81 @@ class EmulationActivity : AppCompatActivity() {
             R.string.designer_replaces,
             hit.joinToString(", ") { PadModules.byId(it.second)?.name.orEmpty() },
         )
+    }
+
+    /**
+     * Whether the console still has an unplaced copy of what this module draws — ignoring the
+     * field being edited, since replacing a d-pad with another d-pad design is always fine.
+     */
+    private fun hasRoomFor(
+        layout: PadLayout,
+        parts: PadParts,
+        zone: String,
+        slot: Int?,
+        module: PadModules.Module,
+    ): Boolean {
+        val capacity = PadModules.capacity(module.family, parts)
+        if (capacity == Int.MAX_VALUE) return true
+        if (capacity == 0) return false
+        var used = 0
+        fun count(atZone: String, atSlot: Int?, id: String?) {
+            if (atZone == zone && atSlot == slot) return
+            // Shoulders are per-column: the left stack being placed says nothing about the right.
+            val family = PadModules.byId(id)?.family ?: return
+            if (family != module.family) return
+            if (family == PadModules.Family.SHOULDER && atZone != zone) return
+            used++
+        }
+        count(PadLayout.ZONE_CT, null, layout.ct)
+        count(PadLayout.ZONE_CL, null, layout.cl)
+        for (z in listOf(PadLayout.ZONE_LC, PadLayout.ZONE_RC)) {
+            layout.column(z).forEach { (s, id) -> count(z, s, id) }
+        }
+        return used < capacity
+    }
+
+    /** An image plus a two-line label — [previewRow] ellipsizes, which hid every rule message. */
+    private fun modulePickRow(
+        image: android.graphics.Bitmap,
+        name: String,
+        subtitle: String?,
+        selected: Boolean,
+        enabled: Boolean,
+        onClick: () -> Unit,
+    ): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        val d = resources.displayMetrics.density
+        setPadding((10 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+        if (enabled) setOnClickListener { onClick() }
+        addView(android.widget.ImageView(this@EmulationActivity).apply {
+            setImageBitmap(image)
+        }, LinearLayout.LayoutParams(image.width, image.height))
+        addView(LinearLayout(this@EmulationActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@EmulationActivity).apply {
+                text = name
+                textSize = 15f
+                setTextColor(
+                    when {
+                        !enabled -> Color.parseColor("#FF8A80")
+                        selected -> Color.parseColor("#C6FF4A")
+                        else -> Color.parseColor("#E8E8F0")
+                    },
+                )
+            })
+            if (subtitle != null) {
+                addView(TextView(this@EmulationActivity).apply {
+                    text = subtitle
+                    textSize = 12f
+                    setTextColor(
+                        if (enabled) Color.parseColor("#FFC46B") else Color.parseColor("#FF8A80"),
+                    )
+                })
+            }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = (14 * d).toInt()
+        })
     }
 
     private fun place(

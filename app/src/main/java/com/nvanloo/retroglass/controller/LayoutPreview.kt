@@ -137,8 +137,39 @@ object LayoutPreview {
     private fun drawDpad(canvas: Canvas, def: ControlDef, cx: Float, cy: Float, r: Float) {
         val armW = r * 0.62f
         val half = armW / 2f
-        val gap = if (def.shape == ControlShape.PSX_CROSS) r * 0.06f else 0f
+        val gap = if (def.shape == ControlShape.PSX_CROSS || def.design == 3) r * 0.06f else 0f
         val corner = armW * 0.28f
+
+        // The base plate that distinguishes the designs. Without it every d-pad thumbnail in the
+        // designer's module list looked identical, which made choosing between six of them a
+        // guess rather than a decision.
+        when (def.design) {
+            1 -> {
+                fill.color = darken(def.fillColor)
+                canvas.drawCircle(cx, cy, r, fill)
+            }
+            2 -> {
+                fill.color = darken(def.fillColor)
+                val k = r * 0.42f
+                val path = Path()
+                path.moveTo(cx - k, cy - r); path.lineTo(cx + k, cy - r)
+                path.lineTo(cx + r, cy - k); path.lineTo(cx + r, cy + k)
+                path.lineTo(cx + k, cy + r); path.lineTo(cx - k, cy + r)
+                path.lineTo(cx - r, cy + k); path.lineTo(cx - r, cy - k)
+                path.close()
+                canvas.drawPath(path, fill)
+            }
+            4 -> {
+                fill.color = darken(def.fillColor)
+                canvas.drawRoundRect(RectF(cx - r, cy - r, cx + r, cy + r), r * 0.22f, r * 0.22f, fill)
+            }
+            5 -> {
+                fill.color = darken(def.fillColor)
+                canvas.drawCircle(cx, cy, r, fill)
+                fill.color = def.fillColor
+                canvas.drawCircle(cx, cy, r * 0.66f, fill)
+            }
+        }
 
         fill.color = def.fillColor
         canvas.drawRoundRect(RectF(cx - r, cy - half, cx - half - gap, cy + half), corner, corner, fill)

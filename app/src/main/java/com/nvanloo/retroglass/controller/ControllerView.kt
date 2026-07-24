@@ -293,7 +293,12 @@ class ControllerView @JvmOverloads constructor(
             val design = layoutStore.padDesign(console) ?: PadDeriver.derive(parts)
             base = PadRenderer.render(design.portrait, parts, landscape = false)
         }
-        val defs = resolveCombineGroups(if (monitorMode) base else base + menuControl())
+        // Portrait's gear comes from the designer's own system module (or PadRenderer's
+        // guarantee that one exists however the pad has been rearranged), so appending the
+        // frontend's own gear here would draw a second one beside it. Landscape still needs it:
+        // LandscapeLayout makes no such guarantee.
+        val needsMenuButton = !monitorMode && landscape
+        val defs = resolveCombineGroups(if (needsMenuButton) base + menuControl() else base)
         controls = defs.map { def ->
             // Both orientations are computed now — landscape by its own solver, portrait by the
             // designer — so the drag editor's saved per-control offsets are no longer applied.
