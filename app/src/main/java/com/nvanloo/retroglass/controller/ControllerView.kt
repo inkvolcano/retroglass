@@ -310,6 +310,8 @@ class ControllerView @JvmOverloads constructor(
     // The settings gear the design puts in the CT zone (handoff 2d): the app's own ⚙ glyph
     // (U+2699, matching the library and in-game menu buttons), as a pill rather than the old ≡
     // circle. Always injected here, never authored per console, so every pad has exactly one.
+    private fun gapPxOf(): Float = sizeBase() * 0.012f
+
     /**
      * Merges tagged pills into one combined divided pill when they would actually collide on
      * *this* pad — the handoff's degrade-rather-than-overlap rule (docs/controls-layout-handoff.md).
@@ -350,28 +352,53 @@ class ControllerView @JvmOverloads constructor(
                 val b = members[i + 1]
                 a.x * width + halfPx(a) > b.x * width - halfPx(b)
             }
-            if (!collides) continue
+            // The user can pin an arrangement in the designer; Auto only intervenes when the
+            // authored positions actually collide.
+            val pillMode = layoutStore.zoneSpec(console).pillMode
+            if (pillMode == 0 && !collides) continue
+
+            fun shoulderAlignedY(): Float {
+                val topBars = defs.filter { it.shape == ControlShape.BAR && it.y < 0.30f }
+                return if (anchor.y < 0.30f && topBars.isNotEmpty()) {
+                    topBars.map { it.y }.average().toFloat()
+                } else {
+                    anchor.y
+                }
+            }
+
+            // STACKED: pills and gear on top of each other with small spacing, centred on the
+            // screen - the on-device amendment to handoff 2d. Grows downward from the shoulder
+            // line in the top band, so the stack never climbs into the screen.
+            if (pillMode == 2) {
+                val rowStack = members.map {
+                    if (it.id == "_menu") it.copy(size = anchor.size) else it
+                }
+                var cy = shoulderAlignedY()
+                var prevHalf = 0f
+                rowStack.forEachIndexed { i, m ->
+                    val halfH = m.size * base / 2f * 0.8f
+                    if (i > 0) cy += (prevHalf + gapPxOf() + halfH) / height
+                    replaced[m.id] = m.copy(x = 0.5f, y = cy.coerceIn(0.02f, 0.98f))
+                    prevHalf = halfH
+                }
+                continue
+            }
 
             // First choice: keep them SEPARATE - the wireframe shows Start/Select and the
             // gear as distinct pills in a row. All members share the anchor's height (the
             // gear used to ride shorter than START next to it), and the whole row is centred
             // on the screen, since the centre zone is screen-centred by definition.
-            val gapPx = base * 0.012f
+            val gapPx = gapPxOf()
             val row = members.map {
                 if (it.id == "_menu") it.copy(size = anchor.size) else it
             }
             val widths = row.map { 2f * halfPx(it) }
             val totalW = widths.sum() + gapPx * (row.size - 1)
-            if (totalW <= width * 0.5f) {
+            if (pillMode != 3 && totalW <= width * (if (pillMode == 1) 0.9f else 0.5f)) {
                 // When the row lives in the top band alongside the shoulder bars, sit it on
                 // the bars' own line - the handoff draws LT / CT / RT as one row, and a pill
                 // row floating a little below the shoulders reads as a misalignment.
-                val topBars = defs.filter { it.shape == ControlShape.BAR && it.y < 0.30f }
-                val rowY = if (anchor.y < 0.30f && topBars.isNotEmpty()) {
-                    topBars.map { it.y }.average().toFloat()
-                } else {
-                    anchor.y
-                }
+                val rowY = shoulderAlignedY()
                 var cursor = width * 0.5f - totalW / 2f
                 for (m in row) {
                     val w = 2f * halfPx(m)

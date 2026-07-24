@@ -111,6 +111,7 @@
     <string name="zone_pos_default">Default</string>
     <string name="zone_height">Height</string>
     <string name="zone_reach">Reach</string>
+    <string name="zone_pills">Start &amp; gear</string>
     <string name="menu_turbo">Turbo / autofire buttons…</string>
     <string name="turbo_none">This layout has no buttons to turbo.</string>
     <string name="menu_exit">Save &amp; exit</string>

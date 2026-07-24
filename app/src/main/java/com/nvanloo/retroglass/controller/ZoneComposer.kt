@@ -32,12 +32,15 @@ object ZoneComposer {
         val faceH: HAnchor? = null,
         val stickV: VAnchor? = null,
         val stickH: HAnchor? = null,
+        /** Centre pills + gear: 0 auto · 1 side-by-side row · 2 stacked · 3 combined pill. */
+        val pillMode: Int = 0,
     ) {
         fun serialize(): String = listOf(
             "dd=$dpadDesign", "sd=$stickDesign",
             "dv=${dpadV?.name ?: "-"}", "dh=${dpadH?.name ?: "-"}",
             "fv=${faceV?.name ?: "-"}", "fh=${faceH?.name ?: "-"}",
             "sv=${stickV?.name ?: "-"}", "sh=${stickH?.name ?: "-"}",
+            "pm=$pillMode",
         ).joinToString(";")
 
         companion object {
@@ -59,6 +62,7 @@ object ZoneComposer {
                     dpadV = v("dv"), dpadH = h("dh"),
                     faceV = v("fv"), faceH = h("fh"),
                     stickV = v("sv"), stickH = h("sh"),
+                    pillMode = map["pm"]?.toIntOrNull()?.coerceIn(0, 3) ?: 0,
                 )
             }
         }

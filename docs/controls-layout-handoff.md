@@ -121,6 +121,25 @@ These are schematic only — the app applies its real theming.
 
 ---
 
+## 4b. Amendments from on-device review (2026-07-24)
+
+Agreed while iterating on the real pad; these refine §2d and are implemented:
+
+- **Separate is the default, combined is the fallback.** Start/Select and the gear render as
+  *distinct* pills in a row (as the 2d wireframe draws them). The combined divided pill only
+  fires when the row genuinely cannot fit the centre zone — the degrade-rather-than-overlap
+  rule, applied in that order: separate → row → combined.
+- **The gear is a small round pill,** the same height as the pills beside it, never taller or
+  shorter.
+- **The row is centred on the screen** (the centre zone is screen-centred by definition), and
+  when it lives in the top band it sits **on the shoulder bars' own line** — LT · CT · RT read
+  as one row, exactly as §1's landscape sketch draws them.
+- **New arrangement: stacked.** Start/Select and the gear may also stack *vertically* with
+  small spacing, growing downward from the shoulder line so the stack never climbs into the
+  screen. The arrangement is user-selectable per console in the Controller designer:
+  **Auto · Side by side · Stacked · Combined pill** (Auto separates when it can and combines
+  when it must).
+
 ## 5. Decisions / open questions carried forward
 - Layout is **preset-driven per console**, re-solved automatically for portrait ↔ landscape.
 - Center boxes (CT/CL) overlap the LC/RC seam by **40%** on one side.

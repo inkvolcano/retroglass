@@ -1580,6 +1580,10 @@ class EmulationActivity : AppCompatActivity() {
                     pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.stickH)) { save(spec().copy(stickH = hOf(it))) }
                 })
             }
+            val pillModes = listOf("Auto", "Side by side", "Stacked", "Combined pill")
+            addView(navRow(null, getString(R.string.zone_pills), pillModes[sp.pillMode]) {
+                pushSelect(getString(R.string.zone_pills), pillModes, sp.pillMode) { save(spec().copy(pillMode = it)) }
+            })
             addView(spacer())
             addView(navRow(null, getString(R.string.zone_reset)) {
                 layoutStore.resetZoneSpec(console)
