@@ -41,6 +41,15 @@ data class ControlDef(
     /** Multiplies a pill's width, so N segments can share one pill's footprint (1/N each). */
     val widthScale: Float = 1f,
     /**
+     * Which of the handoff's visual designs this control renders as (docs/controls-layout-handoff.md §2).
+     *
+     * Interpreted per type. DPAD: 0 cross · 1 disc · 2 octagon · 3 split arrows · 4 square
+     * plate · 5 dished round — all functionally identical 8-way pads, drawn differently.
+     * STICK: 0 concentric · 1 dished cap · 2 ring + nub · 3 square gate · 4 dimpled cap ·
+     * 5 knurled cap. Ignored by other types.
+     */
+    val design: Int = 0,
+    /**
      * Pills sharing a group may be merged into one combined divided pill *if they would
      * otherwise overlap on this device*. The decision is made at layout time by
      * `ControllerView.resolveCombineGroups`, because it needs real pixels: a control's size is a

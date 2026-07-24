@@ -328,7 +328,18 @@ class ControllerView @JvmOverloads constructor(
 
         for ((_, raw) in groups) {
             if (raw.size < 2) continue
-            val members = raw.sortedBy { it.x }
+            fun halfHPx(d: ControlDef) = d.size * base / 2f * 0.8f
+            fun verticallyMeets(a: ControlDef, b: ControlDef) =
+                kotlin.math.abs(a.y - b.y) * height < halfHPx(a) + halfHPx(b)
+
+            // Only members that overlap the group horizontally AND vertically merge. The gear
+            // rides the same group as the system pills but sits at the top of the pad on most
+            // consoles while their pills sit at the bottom - those must stay apart.
+            val anchor = raw.firstOrNull { it.id != "_menu" } ?: continue
+            val members = raw
+                .filter { it.id == anchor.id || verticallyMeets(it, anchor) }
+                .sortedBy { it.x }
+            if (members.size < 2) continue
             val collides = (0 until members.size - 1).any { i ->
                 val a = members[i]
                 val b = members[i + 1]
@@ -363,6 +374,10 @@ class ControllerView @JvmOverloads constructor(
         shape = ControlShape.PILL,
         fillColor = Color.parseColor("#33FFFFFF"),
         labelColor = Color.parseColor("#DDFFFFFF"),
+        // Handoff 2d: the gear can sit in the centre of the Start/Select pill. Sharing their
+        // combine group means that whenever the gear and the system pills crowd each other,
+        // all of them merge into one divided pill - SELECT | ⚙ | START - instead of stacking.
+        combineGroup = ZoneLayout.SYSTEM_PILLS,
     )
 
     fun saveLayout() =
@@ -1144,16 +1159,63 @@ class ControllerView @JvmOverloads constructor(
             ControlShape.CROSS, ControlShape.PSX_CROSS -> drawDpad(canvas, c, cx, cy, r, alpha)
 
             ControlShape.STICK -> {
-                fillPaint.color = withAlpha(def.fillColor, alpha)
-                canvas.drawCircle(cx, cy, r, fillPaint)
+                // Base well, varied by the handoff's stick designs (2f).
+                when (def.design) {
+                    2 -> { // ring + nub: hollow ring instead of a filled well
+                        strokePaint.color = withAlpha(def.fillColor, alpha)
+                        strokePaint.strokeWidth = r * 0.14f
+                        canvas.drawCircle(cx, cy, r * 0.93f, strokePaint)
+                    }
+                    3 -> { // square gate
+                        fillPaint.color = withAlpha(def.fillColor, alpha)
+                        canvas.drawRoundRect(RectF(cx - r, cy - r, cx + r, cy + r), r * 0.28f, r * 0.28f, fillPaint)
+                    }
+                    else -> {
+                        fillPaint.color = withAlpha(def.fillColor, alpha)
+                        canvas.drawCircle(cx, cy, r, fillPaint)
+                    }
+                }
                 strokePaint.color = withAlpha(Color.parseColor("#22FFFFFF"), alpha)
                 strokePaint.strokeWidth = r * 0.05f
-                canvas.drawCircle(cx, cy, r * 0.98f, strokePaint)
-                val knobR = r * 0.52f
+                if (def.design != 3) canvas.drawCircle(cx, cy, r * 0.98f, strokePaint)
+
+                if (def.design == 1 || def.design == 5) {
+                    // dished / knurled: a recessed middle under the cap
+                    fillPaint.color = withAlpha(darken(def.fillColor), alpha)
+                    canvas.drawCircle(cx, cy, r * 0.66f, fillPaint)
+                }
+                if (def.design == 5) {
+                    // knurl ticks around the dish
+                    strokePaint.color = withAlpha(Color.argb(90, 255, 255, 255), alpha)
+                    strokePaint.strokeWidth = r * 0.03f
+                    for (i in 0 until 24) {
+                        val a = (i / 24f) * (2f * Math.PI).toFloat()
+                        val c1 = 0.70f
+                        val c2 = 0.84f
+                        canvas.drawLine(
+                            cx + kotlin.math.cos(a) * r * c1, cy + kotlin.math.sin(a) * r * c1,
+                            cx + kotlin.math.cos(a) * r * c2, cy + kotlin.math.sin(a) * r * c2,
+                            strokePaint,
+                        )
+                    }
+                }
+
+                val knobR = if (def.design == 2) r * 0.34f else r * 0.52f
                 val kx = cx + c.valueX * r * 0.48f
                 val ky = cy + c.valueY * r * 0.48f
                 fillPaint.color = withAlpha(if (c.pressed) lighten(darken(def.fillColor)) else darken(def.fillColor), alpha)
                 canvas.drawCircle(kx, ky, knobR, fillPaint)
+                when (def.design) {
+                    1 -> { // dished cap: bright rim, sunken middle
+                        strokePaint.color = withAlpha(Color.argb(70, 255, 255, 255), alpha)
+                        strokePaint.strokeWidth = knobR * 0.16f
+                        canvas.drawCircle(kx, ky, knobR * 0.86f, strokePaint)
+                    }
+                    4 -> { // dimpled cap: single centred finger dimple
+                        fillPaint.color = withAlpha(Color.argb(70, 0, 0, 0), alpha)
+                        canvas.drawCircle(kx, ky, knobR * 0.38f, fillPaint)
+                    }
+                }
                 fillPaint.color = withAlpha(Color.argb(30, 255, 255, 255), alpha)
                 canvas.drawCircle(kx - knobR * 0.2f, ky - knobR * 0.25f, knobR * 0.55f, fillPaint)
                 textPaint.color = withAlpha(def.labelColor, (alpha * 0.5f).toInt())
@@ -1168,6 +1230,48 @@ class ControllerView @JvmOverloads constructor(
         val armW = r * 0.62f
         val half = armW / 2f
         val gap = if (def.shape == ControlShape.PSX_CROSS) r * 0.06f else 0f
+
+        // The handoff's directional designs (2e). All render the same cross of arms on top so
+        // the pad stays functionally identical; the design only changes the base it sits on.
+        when (def.design) {
+            1 -> { // disc
+                fillPaint.color = withAlpha(lighten(def.fillColor), alpha)
+                canvas.drawCircle(cx, cy, r, fillPaint)
+            }
+            2 -> { // octagon (8-way gate)
+                fillPaint.color = withAlpha(lighten(def.fillColor), alpha)
+                canvas.drawPath(octagonPath(cx, cy, r), fillPaint)
+            }
+            4 -> { // square plate
+                fillPaint.color = withAlpha(darken(def.fillColor), alpha)
+                canvas.drawRoundRect(RectF(cx - r, cy - r, cx + r, cy + r), r * 0.16f, r * 0.16f, fillPaint)
+            }
+            5 -> { // dished round: outer ring + recessed centre
+                fillPaint.color = withAlpha(lighten(def.fillColor), alpha)
+                canvas.drawCircle(cx, cy, r, fillPaint)
+                fillPaint.color = withAlpha(darken(def.fillColor), alpha)
+                canvas.drawCircle(cx, cy, r * 0.64f, fillPaint)
+            }
+        }
+        if (def.design == 3) { // split arrows: four separated keys, no connecting cross
+            val ks = armW * 0.92f
+            val off = r - ks / 2f
+            fun key(px: Float, py: Float, active: Boolean) {
+                fillPaint.color = withAlpha(if (active) lighten(def.fillColor) else def.fillColor, alpha)
+                canvas.drawRoundRect(
+                    RectF(px - ks / 2f, py - ks / 2f, px + ks / 2f, py + ks / 2f),
+                    ks * 0.24f, ks * 0.24f, fillPaint,
+                )
+            }
+            key(cx, cy - off, c.valueY < 0)
+            key(cx, cy + off, c.valueY > 0)
+            key(cx - off, cy, c.valueX < 0)
+            key(cx + off, cy, c.valueX > 0)
+            fillPaint.color = withAlpha(def.labelColor, (alpha * 0.85f).toInt())
+            val ar2 = armW * 0.30f
+            drawDpadArrows(canvas, cx, cy, r, armW, ar2)
+            return
+        }
 
         fun armColor(active: Boolean): Int =
             withAlpha(if (active) lighten(def.fillColor) else def.fillColor, alpha)
@@ -1193,7 +1297,10 @@ class ControllerView @JvmOverloads constructor(
 
         // direction arrows
         fillPaint.color = withAlpha(def.labelColor, (alpha * 0.85f).toInt())
-        val ar = armW * 0.30f
+        drawDpadArrows(canvas, cx, cy, r, armW, armW * 0.30f)
+    }
+
+    private fun drawDpadArrows(canvas: Canvas, cx: Float, cy: Float, r: Float, armW: Float, ar: Float) {
         fun arrow(px: Float, py: Float, dirX: Float, dirY: Float) {
             val path = android.graphics.Path()
             val perpX = -dirY
@@ -1208,6 +1315,21 @@ class ControllerView @JvmOverloads constructor(
         arrow(cx + r - armW * 0.55f, cy, 1f, 0f)
         arrow(cx, cy - r + armW * 0.55f, 0f, -1f)
         arrow(cx, cy + r - armW * 0.55f, 0f, 1f)
+    }
+
+    private fun octagonPath(cx: Float, cy: Float, r: Float): android.graphics.Path {
+        val p = android.graphics.Path()
+        val k = 0.4142f // tan(22.5°): regular octagon inscribed in the square
+        p.moveTo(cx - r * k, cy - r)
+        p.lineTo(cx + r * k, cy - r)
+        p.lineTo(cx + r, cy - r * k)
+        p.lineTo(cx + r, cy + r * k)
+        p.lineTo(cx + r * k, cy + r)
+        p.lineTo(cx - r * k, cy + r)
+        p.lineTo(cx - r, cy + r * k)
+        p.lineTo(cx - r, cy - r * k)
+        p.close()
+        return p
     }
 
     private fun lighten(color: Int): Int = Color.argb(

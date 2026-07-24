@@ -149,7 +149,14 @@ object ZoneLayout {
             select: Btn?, start: Btn,
             cy: Float = LOW_Y, size: Float = 0.12f, gap: Float = 0.24f,
         ) {
-            if (select != null) pillPair(select, start, cy, size, gap) else pill(start, 0.5f, cy, size)
+            if (select != null) {
+                pillPair(select, start, cy, size, gap)
+            } else {
+                // Tagged too: a lone START can still collide with the gear (Dreamcast, N64
+                // both centre it near the top), and the handoff seats the gear inside the
+                // pill in exactly that case.
+                pill(start, 0.5f, cy, size, group = SYSTEM_PILLS)
+            }
         }
 
         /** Two centre-low pills in explicit left/right order (3DO puts Play on the left). */
