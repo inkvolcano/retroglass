@@ -476,3 +476,26 @@ Not by severity — by cost-to-value.
 The pattern-level fix worth doing alongside: **make failures speak.** A shared result type for
 save/load/import that carries a reason, surfaced in the UI, would collapse C4, H4, H5, H7, H8
 and M20 into one change.
+
+## Dreamcast audio speed — theory disproven (2026-07-25)
+
+Reported as "audio runs very quick". The first theory was that the phone's adaptive panel
+switches to 120 Hz after LibretroDroid samples the refresh rate, so the vsync-paced loop would
+unblock twice as often and run the game at double speed. A 60 Hz pin was written for that.
+
+Measured on device, the theory does not hold:
+
+```
+Starting game with fps 59.945300 on a screen with refresh rate 120.000008. Using vsync: 0
+```
+
+The panel really is at 120 Hz — but `useVSync` is **0**, because FPSSync only takes the vsync path
+when content and screen rates are within 5 Hz of each other. At |59.945 − 120| it paces by timer
+(`sleep_until`) instead, and the panel rate never enters the calculation. The in-game FPS overlay
+confirms it: a steady **60 fps**. `getTimeStretchFactor()` returns 1.0 on that path, so the audio
+input rate is an unstretched 44100, and `frameSpeed` is 1 outside fast-forward.
+
+So video speed is correct and the frontend's audio conversion is correct. The pin was removed
+rather than left in with a comment claiming a fix it does not make. Whatever is fast is either
+inside Flycast (AICA/GD-ROM streaming) or specific to what was being listened to; the next step
+needs an ear on the current build to confirm the symptom still exists at all.
