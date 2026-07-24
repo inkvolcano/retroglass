@@ -352,6 +352,27 @@ class ControllerView @JvmOverloads constructor(
             }
             if (!collides) continue
 
+            // First choice: keep them SEPARATE - the wireframe shows Start/Select and the
+            // gear as distinct pills in a row. Lay the group out side by side with small
+            // gaps, centred on its own centroid and aligned to one baseline.
+            val gapPx = base * 0.012f
+            val widths = members.map { 2f * halfPx(it) }
+            val totalW = widths.sum() + gapPx * (members.size - 1)
+            if (totalW <= width * 0.5f) {
+                val centrePx = (members.map { it.x }.average() * width).toFloat()
+                var cursor = centrePx - totalW / 2f
+                for (m in members) {
+                    val w = 2f * halfPx(m)
+                    replaced[m.id] = m.copy(
+                        x = (cursor + w / 2f) / width,
+                        y = anchor.y,
+                    )
+                    cursor += w + gapPx
+                }
+                continue
+            }
+
+            // Only when the row genuinely cannot fit: fuse into one divided pill.
             // Pack them into the footprint of a single pill, centred on the group's span.
             val n = members.size
             val centre = (members.first().x + members.last().x) / 2f
@@ -375,8 +396,9 @@ class ControllerView @JvmOverloads constructor(
     private fun menuControl() = ControlDef(
         id = "_menu", type = ControlType.BUTTON, label = "⚙",
         keyCode = -1,
-        x = 0.5f, y = 0.09f, size = 0.11f,
+        x = 0.5f, y = 0.09f, size = 0.10f,
         shape = ControlShape.PILL,
+        widthScale = 0.62f, // near-circular: the wireframe draws the gear as a small round pill
         fillColor = Color.parseColor("#33FFFFFF"),
         labelColor = Color.parseColor("#DDFFFFFF"),
         // Handoff 2d: the gear can sit in the centre of the Start/Select pill. Sharing their
@@ -1191,14 +1213,14 @@ class ControllerView @JvmOverloads constructor(
                 if (def.design != 3) canvas.drawCircle(cx, cy, r * 0.98f, strokePaint)
 
                 if (def.design == 1 || def.design == 5) {
-                    // dished / knurled: a recessed middle under the cap
-                    fillPaint.color = withAlpha(darken(def.fillColor), alpha)
+                    // dished / knurled: a clearly recessed middle under the cap
+                    fillPaint.color = withAlpha(Color.argb(140, 0, 0, 0), alpha)
                     canvas.drawCircle(cx, cy, r * 0.66f, fillPaint)
                 }
                 if (def.design == 5) {
                     // knurl ticks around the dish
-                    strokePaint.color = withAlpha(Color.argb(90, 255, 255, 255), alpha)
-                    strokePaint.strokeWidth = r * 0.03f
+                    strokePaint.color = withAlpha(Color.argb(160, 255, 255, 255), alpha)
+                    strokePaint.strokeWidth = r * 0.035f
                     for (i in 0 until 24) {
                         val a = (i / 24f) * (2f * Math.PI).toFloat()
                         val c1 = 0.70f
@@ -1218,13 +1240,13 @@ class ControllerView @JvmOverloads constructor(
                 canvas.drawCircle(kx, ky, knobR, fillPaint)
                 when (def.design) {
                     1 -> { // dished cap: bright rim, sunken middle
-                        strokePaint.color = withAlpha(Color.argb(70, 255, 255, 255), alpha)
-                        strokePaint.strokeWidth = knobR * 0.16f
-                        canvas.drawCircle(kx, ky, knobR * 0.86f, strokePaint)
+                        strokePaint.color = withAlpha(Color.argb(150, 255, 255, 255), alpha)
+                        strokePaint.strokeWidth = knobR * 0.20f
+                        canvas.drawCircle(kx, ky, knobR * 0.82f, strokePaint)
                     }
                     4 -> { // dimpled cap: single centred finger dimple
-                        fillPaint.color = withAlpha(Color.argb(70, 0, 0, 0), alpha)
-                        canvas.drawCircle(kx, ky, knobR * 0.38f, fillPaint)
+                        fillPaint.color = withAlpha(Color.argb(130, 0, 0, 0), alpha)
+                        canvas.drawCircle(kx, ky, knobR * 0.42f, fillPaint)
                     }
                 }
                 fillPaint.color = withAlpha(Color.argb(30, 255, 255, 255), alpha)
