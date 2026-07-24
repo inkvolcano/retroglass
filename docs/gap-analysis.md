@@ -63,6 +63,42 @@ Two things worth knowing:
 
 ---
 
+## Known issue: Dreamcast crashes on Android 11+ (2026-07-24)
+
+Reported as "a bug when opening a Dreamcast game"; it is a hard native crash that kills the
+process, so no Java trace and no crash log.
+
+```
+tid: Flycast-emu   signal 11 (SIGSEGV), code 2 (SEGV_ACCERR)  (write)
+#00  libflycast.so (addrspace::write32(unsigned int, unsigned int)+44)
+#01  [anon:.bss]                      <- dynarec-generated code
+```
+
+Cause, from the core's own log: `[VMEM] Virtual memory file allocation failed: errno 13`
+(EACCES) → `nvmem is DISABLED` → `BASE 0x0`. Flycast reserves its fast guest-memory mapping via a
+shared-memory file (`core/linux/posix_vmem.cpp`) and tries `/dev/ashmem`, `$TMPDIR`, then
+`/data/local/tmp`. On Android 11+ ashmem is gone, `/data/local/tmp` is shell-only, and Android
+sets no TMPDIR — so all three fail. The core continues anyway and its dynarec still writes
+through the absent base, so the first guest write segfaults.
+
+Ruled out, each by measurement rather than reasoning:
+
+- **Not the layout work.** No app frame in the trace.
+- **Not the BIOS.** `dc_flash.bin` was genuinely missing (it is in the user's BIOS pack as
+  `system/dc/flash.bin`, which is why a name-matching extract skipped it). Installing it did not
+  change the crash, and neither did forcing the core's HLE BIOS.
+- **Not a stale core.** Re-fetched the nightly — a genuinely different build, still 16 KB-aligned
+  — and it fails identically.
+- **Not fixable via TMPDIR.** Set it to a writable cache dir; no change. Flycast does not consult
+  it on this path.
+
+No libretro option exposes the dynarec or fastmem (`config::DynarecEnabled` and an interpreter
+fallback exist inside the binary but are not surfaced), so there is no lever left on the app
+side. This needs a Flycast build that uses `ASharedMemory_create` on modern Android. NAOMI and
+Atomiswave share this core and are presumably affected the same way — untested.
+
+---
+
 ## The five patterns underneath
 
 Most individual findings are instances of five root causes. Fixing the pattern is worth more
