@@ -44,6 +44,15 @@ import com.nvanloo.retroglass.model.Console
 import com.nvanloo.retroglass.model.RomLibrary
 import com.nvanloo.retroglass.ui.GameMenuView
 import com.nvanloo.retroglass.ui.MenuTheme
+import com.nvanloo.retroglass.controller.DesignerView
+import com.nvanloo.retroglass.controller.LayoutPreview
+import com.nvanloo.retroglass.controller.PadDeriver
+import com.nvanloo.retroglass.controller.PadDesign
+import com.nvanloo.retroglass.controller.PadLayout
+import com.nvanloo.retroglass.controller.PadModules
+import com.nvanloo.retroglass.controller.PadParts
+import com.nvanloo.retroglass.controller.PadRenderer
+import com.nvanloo.retroglass.model.ControllerDefs
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
@@ -73,6 +82,9 @@ class EmulationActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ROM_PATH = "rom_path"
+        private const val MODE_MENU = "menu"
+        private const val MODE_LIST = "list"
+        private const val MODE_MOVE = "move"
         const val EXTRA_CONSOLE = "console"
         private const val TAG = "RetroGlass"
 
@@ -1554,80 +1566,334 @@ class EmulationActivity : AppCompatActivity() {
         return if (stored == LayoutStore.UPSCALE_AUTO) "×${autoUpscale()}" else "×$stored"
     }
 
+    // ---- controls designer ---------------------------------------------------------------
+
+    /** The field being edited: zone code plus slot number for the LC/RC columns. */
+    private var designerField: Pair<String, Int?>? = null
+
+    /** "menu" (what to do with this field) · "list" (pick a module) · "move" (pick a destination). */
+    private var designerMode: String = MODE_MENU
+
+    /** While moving: the module being carried and the field it came from. */
+    private var designerMove: Triple<String, Int?, String>? = null
+
+    private fun padParts() = PadParts.from(ControllerDefs.controlsFor(console))
+
+    private fun padDesign(): PadDesign =
+        layoutStore.padDesign(console) ?: PadDeriver.derive(padParts())
+
+    private fun savePad(layout: PadLayout) {
+        layoutStore.setPadDesign(console, padDesign().copy(portrait = layout))
+        controllerView.refreshLayout()
+        gameMenu.refresh()
+    }
+
     /**
-     * The zone picker - the handoff's replacement for the free-form drag editor. The user
-     * chooses a module design and an anchor per zone; ZoneComposer solves the positions.
-     * Height and reach are separate flat rows: they were chained behind each other at first,
-     * and the horizontal picker was effectively undiscoverable.
+     * The controls designer (docs/controls-layout-handoff.md §6).
+     *
+     * Field-first, and that ordering is the whole point: you tap the part of the pad you want to
+     * change and are then shown only the modules that can go there, rather than picking a module
+     * and hunting for somewhere it will fit. Rules surface as row states — amber for "this
+     * replaces what is already here", red with a reason for "this cannot go here" — so a blocked
+     * combination explains itself instead of silently doing nothing.
      */
-    private fun menuZonePickerScreen(): View = with(gameMenu) {
-        val vAnchors = listOf(getString(R.string.zone_pos_default), "Top", "Middle", "Low")
-        val hAnchors = listOf(getString(R.string.zone_pos_default), "Inner", "Centre", "Outer")
-        val dpadStyles = listOf("Cross", "Disc", "Octagon", "Split arrows", "Square plate", "Dished round")
-        val stickStyles = listOf("Concentric", "Dished cap", "Ring + nub", "Square gate", "Dimpled cap", "Knurled cap")
+    private fun menuDesignerScreen(): View = with(gameMenu) {
+        val parts = padParts()
+        val layout = padDesign().portrait
+        val density = resources.displayMetrics.density
+        fun dp(v: Float) = (v * density).toInt()
 
-        fun spec() = layoutStore.zoneSpec(console)
-        fun save(newSpec: com.nvanloo.retroglass.controller.ZoneComposer.ZoneSpec) {
-            layoutStore.setZoneSpec(console, newSpec)
-            controllerView.refreshLayout()
+        val previewH = dp(300f)
+        val previewW = (previewH / LayoutPreview.ASPECT).toInt()
+        val preview = DesignerView(this@EmulationActivity).apply {
+            bind(console, layout, parts)
+            selected = designerField
+            onFieldTap = { zone, slot ->
+                val moving = designerMove
+                if (designerMode == MODE_MOVE && moving != null) {
+                    moveModule(layout, moving, zone, slot)
+                } else {
+                    designerField = zone to slot
+                    designerMode = MODE_MENU
+                    gameMenu.refresh()
+                }
+            }
         }
-        fun vOf(i: Int) = com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.entries.getOrNull(i - 1)
-        fun hOf(i: Int) = com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.entries.getOrNull(i - 1)
-        fun vIx(v: com.nvanloo.retroglass.controller.ZoneGrid.VAnchor?) = v?.let { it.ordinal + 1 } ?: 0
-        fun hIx(h: com.nvanloo.retroglass.controller.ZoneGrid.HAnchor?) = h?.let { it.ordinal + 1 } ?: 0
-
-        val hasDpad = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.DPAD }
-        val hasStick = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.STICK }
-        val sp = spec()
 
         body {
-            if (hasDpad) {
-                addView(navRow(null, getString(R.string.zone_dpad_style), dpadStyles[sp.dpadDesign]) {
-                    pushSelect(getString(R.string.zone_dpad_style), dpadStyles, sp.dpadDesign) { save(spec().copy(dpadDesign = it)) }
-                })
-                addView(navRow(null, "D-pad · " + getString(R.string.zone_height), vAnchors[vIx(sp.dpadV)]) {
-                    pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.dpadV)) { save(spec().copy(dpadV = vOf(it))) }
-                })
-                addView(navRow(null, "D-pad · " + getString(R.string.zone_reach), hAnchors[hIx(sp.dpadH)]) {
-                    pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.dpadH)) { save(spec().copy(dpadH = hOf(it))) }
-                })
+            addView(
+                preview,
+                LinearLayout.LayoutParams(previewW, previewH).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    bottomMargin = dp(10f)
+                },
+            )
+            when {
+                designerMode == MODE_MOVE && designerMove != null ->
+                    designerMovePanel(this, layout)
+                designerField == null ->
+                    addView(note(getString(R.string.designer_hint)))
+                designerMode == MODE_LIST -> designerListPanel(this, layout, parts)
+                else -> designerMenuPanel(this, layout)
             }
-            addView(navRow(null, "Buttons · " + getString(R.string.zone_height), vAnchors[vIx(sp.faceV)]) {
-                pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.faceV)) { save(spec().copy(faceV = vOf(it))) }
-            })
-            addView(navRow(null, "Buttons · " + getString(R.string.zone_reach), hAnchors[hIx(sp.faceH)]) {
-                pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.faceH)) { save(spec().copy(faceH = hOf(it))) }
-            })
-            if (hasStick) {
-                addView(navRow(null, getString(R.string.zone_stick_style), stickStyles[sp.stickDesign]) {
-                    pushSelect(getString(R.string.zone_stick_style), stickStyles, sp.stickDesign) { save(spec().copy(stickDesign = it)) }
-                })
-                addView(navRow(null, "Stick · " + getString(R.string.zone_height), vAnchors[vIx(sp.stickV)]) {
-                    pushSelect(getString(R.string.zone_height), vAnchors, vIx(sp.stickV)) { save(spec().copy(stickV = vOf(it))) }
-                })
-                addView(navRow(null, "Stick · " + getString(R.string.zone_reach), hAnchors[hIx(sp.stickH)]) {
-                    pushSelect(getString(R.string.zone_reach), hAnchors, hIx(sp.stickH)) { save(spec().copy(stickH = hOf(it))) }
-                })
-            }
-            val pillModes = listOf("Auto", "Side by side", "Stacked", "Combined pill")
-            addView(navRow(null, getString(R.string.zone_pills), pillModes[sp.pillMode]) {
-                pushSelect(getString(R.string.zone_pills), pillModes, sp.pillMode) { save(spec().copy(pillMode = it)) }
-            })
             addView(spacer())
-            addView(navRow(null, getString(R.string.zone_reset)) {
-                layoutStore.resetZoneSpec(console)
-                controllerView.refreshLayout()
+            designerSettingsPanel(this, layout)
+        }
+    }
+
+    /** Step 1: what to do with the tapped field. */
+    private fun designerMenuPanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
+        val (zone, slot) = designerField ?: return@with
+        val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
+        val id = layout.moduleAt(zone, start ?: slot)
+        val module = PadModules.byId(id)
+        root.addView(group(fieldTitle(zone, slot, module)))
+        if (module == null) {
+            root.addView(navRow(null, getString(R.string.designer_add)) {
+                designerMode = MODE_LIST
                 gameMenu.refresh()
             })
+        } else {
+            root.addView(navRow(null, getString(R.string.designer_edit)) {
+                designerMode = MODE_LIST
+                gameMenu.refresh()
+            })
+            root.addView(navRow(null, getString(R.string.designer_move)) {
+                designerMove = Triple(zone, start ?: slot, id!!)
+                designerMode = MODE_MOVE
+                gameMenu.refresh()
+            })
+            root.addView(navRow(null, getString(R.string.designer_remove)) {
+                savePad(removeAt(layout, zone, start ?: slot))
+            })
         }
+    }
+
+    /** Step 2: the modules that fit this field, with the rules shown rather than enforced silently. */
+    private fun designerListPanel(
+        root: LinearLayout,
+        layout: PadLayout,
+        parts: PadParts,
+    ) = with(gameMenu) {
+        val (zone, slot) = designerField ?: return@with
+        val centre = slot == null
+        val cat = if (centre) PadModules.Cat.SYSTEM else null
+        val current = layout.moduleAt(zone, slot)
+        val thumbH = (56 * resources.displayMetrics.density).toInt()
+        val thumbW = (thumbH / LayoutPreview.ASPECT).toInt()
+
+        val options = if (centre) {
+            PadModules.optionsFor(PadModules.Cat.SYSTEM, parts, zone)
+        } else {
+            PadModules.optionsFor(PadModules.Cat.BLOCK, parts, zone) +
+                PadModules.optionsFor(PadModules.Cat.SHOULDER, parts, zone)
+        }
+
+        for (module in options) {
+            val blocked = blockedReason(layout, zone, slot, module)
+            val next = if (blocked == null) place(layout, zone, slot, module) else layout
+            val replaces = if (blocked == null) replacedNames(layout, zone, slot, module) else null
+            val shot = LayoutPreview.render(
+                console, PadRenderer.render(next, parts, landscape = false), thumbW, thumbH,
+            )
+            val subtitle = blocked ?: replaces
+            root.addView(
+                previewRow(shot, module.name + (subtitle?.let { "\n$it" } ?: ""), module.id == current) {
+                    if (blocked == null) {
+                        designerMode = MODE_MENU
+                        savePad(next)
+                    }
+                },
+            )
+        }
+        if (!centre && PadModules.byId(current)?.cat == PadModules.Cat.BLOCK) {
+            root.addView(designerAlignRow(layout, zone, slot!!))
+        }
+        root.addView(navRow(null, getString(R.string.designer_back)) {
+            designerMode = MODE_MENU
+            gameMenu.refresh()
+        })
+    }
+
+    private fun designerMovePanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
+        val moving = designerMove ?: return@with
+        val name = PadModules.byId(moving.third)?.name.orEmpty()
+        root.addView(note(getString(R.string.designer_moving, name)))
+        root.addView(navRow(null, getString(R.string.designer_move_cancel)) {
+            designerMode = MODE_MENU
+            designerMove = null
+            gameMenu.refresh()
+        })
+    }
+
+    /** Alignment is visual: three boxes, and the module slides in the preview as you pick one. */
+    private fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View = with(gameMenu) {
+        val key = zone + slot
+        val current = layout.align[key] ?: 'c'
+        val labels = listOf(
+            'l' to getString(R.string.designer_align_left),
+            'c' to getString(R.string.designer_align_centre),
+            'r' to getString(R.string.designer_align_right),
+        )
+        return navRow(null, getString(R.string.designer_align), labels.first { it.first == current }.second) {
+            pushSelect(
+                getString(R.string.designer_align),
+                labels.map { it.second },
+                labels.indexOfFirst { it.first == current },
+            ) { which ->
+                savePad(layout.copy(align = layout.align + (key to labels[which].first)))
+            }
+        }
+    }
+
+    /** The in-screen settings panel: width split, shadows, scale, reset. */
+    private fun designerSettingsPanel(root: LinearLayout, layout: PadLayout) = with(gameMenu) {
+        root.addView(
+            navRow(null, getString(R.string.designer_width), PadLayout.splitLabel(layout.split)) {
+                pushSelect(
+                    getString(R.string.designer_width),
+                    PadLayout.SPLITS.map { PadLayout.splitLabel(it) },
+                    PadLayout.SPLITS.indexOf(layout.split),
+                ) { which -> savePad(layout.copy(split = PadLayout.SPLITS[which])) }
+            },
+        )
+        val scales = listOf('s' to getString(R.string.designer_scale_small),
+            'n' to getString(R.string.designer_scale_normal),
+            'l' to getString(R.string.designer_scale_large))
+        root.addView(
+            navRow(null, getString(R.string.designer_scale), scales.first { it.first == layout.scale }.second) {
+                pushSelect(
+                    getString(R.string.designer_scale),
+                    scales.map { it.second },
+                    scales.indexOfFirst { it.first == layout.scale },
+                ) { which -> savePad(layout.copy(scale = scales[which].first)) }
+            },
+        )
+        root.addView(toggleRow(getString(R.string.designer_shadow_buttons), layout.shadowButtons) {
+            savePad(layout.copy(shadowButtons = it))
+        })
+        root.addView(toggleRow(getString(R.string.designer_shadow_dpad), layout.shadowDpad) {
+            savePad(layout.copy(shadowDpad = it))
+        })
+        root.addView(toggleRow(getString(R.string.designer_shadow_stick), layout.shadowStick) {
+            savePad(layout.copy(shadowStick = it))
+        })
+        root.addView(navRow(null, getString(R.string.designer_reset)) {
+            layoutStore.resetPadDesign(console)
+            designerField = null
+            designerMode = MODE_MENU
+            controllerView.refreshLayout()
+            gameMenu.refresh()
+        })
+    }
+
+    // ---- designer rules ---------------------------------------------------------------------
+
+    /**
+     * Why a module cannot go in a field, in words, or null when it can.
+     *
+     * The one cross-zone rule the handoff defines: a combined shoulder pill and a two-button CT
+     * module share the top row, so whichever is placed second would sit on top of the first.
+     * Enforced in both directions, since either can be picked first.
+     */
+    private fun blockedReason(
+        layout: PadLayout,
+        zone: String,
+        slot: Int?,
+        module: PadModules.Module,
+    ): String? {
+        if (slot == null) {
+            if (zone == PadLayout.ZONE_CT && PadModules.isMultiSystem(module.id) &&
+                (PadModules.isCombinedShoulder(layout.lc[1]) || PadModules.isCombinedShoulder(layout.rc[1]))
+            ) return getString(R.string.designer_blocked_shoulder)
+            return null
+        }
+        if (module.cat == PadModules.Cat.SHOULDER) {
+            if (slot > 2) return getString(R.string.designer_blocked_slot)
+            if (slot == 1 && PadModules.isCombinedShoulder(module.id) &&
+                PadModules.isMultiSystem(layout.ct)
+            ) return getString(R.string.designer_blocked_ct)
+        }
+        return null
+    }
+
+    private fun replacedNames(
+        layout: PadLayout,
+        zone: String,
+        slot: Int?,
+        module: PadModules.Module,
+    ): String? {
+        if (slot == null) {
+            val current = layout.moduleAt(zone, null) ?: return null
+            if (current == module.id) return null
+            return getString(R.string.designer_replaces, PadModules.byId(current)?.name.orEmpty())
+        }
+        val start = if (module.cat == PadModules.Cat.SHOULDER) slot
+        else layout.clampStart(slot, module.slots)
+        val hit = layout.covering(zone, start, module.slots).filter { it.second != module.id }
+        if (hit.isEmpty()) return null
+        return getString(
+            R.string.designer_replaces,
+            hit.joinToString(", ") { PadModules.byId(it.second)?.name.orEmpty() },
+        )
+    }
+
+    private fun place(
+        layout: PadLayout,
+        zone: String,
+        slot: Int?,
+        module: PadModules.Module,
+    ): PadLayout {
+        if (slot == null) return layout.withZone(zone, module.id)
+        // Shoulders keep the row you tapped; anything taller slides up so it fits in the column.
+        val start = if (module.cat == PadModules.Cat.SHOULDER) slot
+        else layout.clampStart(slot, module.slots)
+        val column = layout.column(zone).toMutableMap()
+        layout.covering(zone, start, module.slots).forEach { column.remove(it.first) }
+        column[start] = module.id
+        return layout.withColumn(zone, column)
+    }
+
+    private fun removeAt(layout: PadLayout, zone: String, slot: Int?): PadLayout {
+        if (slot == null) return layout.withZone(zone, null)
+        return layout.withColumn(zone, layout.column(zone) - slot)
+    }
+
+    private fun moveModule(
+        layout: PadLayout,
+        moving: Triple<String, Int?, String>,
+        zone: String,
+        slot: Int?,
+    ) {
+        val (fromZone, fromSlot, id) = moving
+        val module = PadModules.byId(id) ?: return
+        val centre = slot == null
+        // A module can only land where its own kind is allowed, so a stick cannot be carried into
+        // the shoulder row and a START pill cannot be dropped into a block column.
+        val allowed = if (centre) module.cat == PadModules.Cat.SYSTEM &&
+            (!PadModules.isClOnly(id) || zone == PadLayout.ZONE_CL)
+        else module.cat != PadModules.Cat.SYSTEM
+        if (!allowed || blockedReason(layout, zone, slot, module) != null) return
+        val cleared = removeAt(layout, fromZone, fromSlot)
+        designerMove = null
+        designerMode = MODE_MENU
+        designerField = zone to slot
+        savePad(place(cleared, zone, slot, module))
+    }
+
+    private fun fieldTitle(zone: String, slot: Int?, module: PadModules.Module?): String {
+        val where = if (slot == null) zone else getString(R.string.designer_slot, zone, slot)
+        return module?.let { "$where — ${it.name}" } ?: getString(R.string.designer_empty, where)
     }
 
     private fun menuControlsScreen(): View = with(gameMenu) {
         body {
             if (controllerView.visibility == View.VISIBLE) {
-                addView(navRow(null, getString(R.string.menu_choose_layout)) { showLayoutPicker() })
                 addView(navRow(null, getString(R.string.menu_edit_layout)) {
-                    gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuZonePickerScreen() }
+                    designerField = null
+                    designerMode = MODE_MENU
+                    designerMove = null
+                    gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuDesignerScreen() }
                 })
                 addView(navRow(null, getString(R.string.menu_turbo)) { showTurboConfig() })
             }
@@ -2780,36 +3046,6 @@ class EmulationActivity : AppCompatActivity() {
             Toast.LENGTH_SHORT,
         ).show()
     }
-
-    private fun showLayoutPicker() {
-        ensureMenu()
-        gameMenu.push(menuTitle(R.string.menu_choose_layout)) { menuLayoutScreen() }
-    }
-
-    /**
-     * Controller layouts, each shown as a rendered thumbnail. The picture is what you are
-     * actually choosing between — the names ("Default", "Z in D-pad") only make sense once you
-     * have seen the arrangement they describe.
-     */
-    private fun menuLayoutScreen(): View = with(gameMenu) {
-        val presets = controllerView.availablePresets()
-        val currentId = controllerView.currentPresetId()
-        val w = (76 * resources.displayMetrics.density).toInt()
-        val h = (w * com.nvanloo.retroglass.controller.LayoutPreview.ASPECT).toInt()
-        body {
-            for (preset in presets) {
-                val shot = com.nvanloo.retroglass.controller.LayoutPreview.render(
-                    console, preset.controls, w, h,
-                )
-                addView(previewRow(shot, preset.name, preset.id == currentId) {
-                    // setPreset persists the choice itself; nothing to do here but go back.
-                    controllerView.setPreset(preset.id)
-                    pop()
-                })
-            }
-        }
-    }
-
 
     private fun showScreenSizeDialog() {
         ensureMenu()

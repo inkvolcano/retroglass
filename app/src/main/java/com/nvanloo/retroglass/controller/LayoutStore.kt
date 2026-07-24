@@ -200,17 +200,26 @@ class LayoutStore(context: Context) {
         prefs.edit().putFloat("filter_sharpness", v.coerceIn(0f, 1f)).apply()
     }
 
-    /** The zone-picker's choices for a console (designs + anchors). See ZoneComposer. */
-    fun zoneSpec(console: Console): ZoneComposer.ZoneSpec =
-        ZoneComposer.ZoneSpec.parse(prefs.getString("zonespec_${console.prefKey}", null))
+    /**
+     * The designer's saved pad for a console, or null while it still uses the shipped arrangement.
+     *
+     * Null is meaningful rather than a missing value: it means "never edited", and the caller
+     * derives a starting design from the console's authored layout instead. Storing a derived
+     * design eagerly would freeze today's derivation into every user's preferences and make later
+     * improvements to it invisible to anyone who had merely opened the screen.
+     */
+    fun padDesign(console: Console): PadDesign? =
+        PadDesign.parse(prefs.getString(padKey(console), null))
 
-    fun setZoneSpec(console: Console, spec: ZoneComposer.ZoneSpec) {
-        prefs.edit().putString("zonespec_${console.prefKey}", spec.serialize()).apply()
+    fun setPadDesign(console: Console, design: PadDesign) {
+        prefs.edit().putString(padKey(console), design.serialize()).apply()
     }
 
-    fun resetZoneSpec(console: Console) {
-        prefs.edit().remove("zonespec_${console.prefKey}").apply()
+    fun resetPadDesign(console: Console) {
+        prefs.edit().remove(padKey(console)).apply()
     }
+
+    private fun padKey(console: Console) = "paddesign_${console.prefKey}"
 
     /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
     fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)

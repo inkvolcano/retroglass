@@ -275,23 +275,31 @@ class ControllerView @JvmOverloads constructor(
     }
 
     private fun reloadControls() {
-        val overrides = layoutStore.load(console, presetId)
         var base = ControllerDefs.presetOrDefault(console, presetId).controls
         val landscape = layoutMode != LAYOUT_PORTRAIT
         if (landscape && width > 0 && height > 0) {
             base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
                 w = width.toFloat(), h = height.toFloat())
         }
-        // The zone spec re-places module groups on the grid and stamps the chosen designs.
-        // Portrait only: landscape still runs through LandscapeLayout's own solver.
+        // Portrait is built from the designer's slot map: which module sits in which field, with
+        // coordinates computed here rather than authored. Landscape still runs through
+        // LandscapeLayout, whose aspect-corrected face clusters have no equivalent in the slot
+        // renderer yet — see docs/controls-layout-handoff.md §6.10.
         if (!landscape) {
-            base = ZoneComposer.apply(base, layoutStore.zoneSpec(console))
+            // Always from the console's own controls, never the selected preset: the preset
+            // picker is retired and the designer is the single portrait model, so deriving from
+            // a leftover preset would make the designer's preview disagree with the live pad.
+            val parts = PadParts.from(ControllerDefs.controlsFor(console))
+            val design = layoutStore.padDesign(console) ?: PadDeriver.derive(parts)
+            base = PadRenderer.render(design.portrait, parts, landscape = false)
         }
         val defs = resolveCombineGroups(if (monitorMode) base else base + menuControl())
         controls = defs.map { def ->
-            // Landscape layouts are computed, not user-tweaked, so ignore the per-preset portrait overrides.
-            val p = if (landscape) ControlPlacement(def.x, def.y, 1f)
-            else overrides[def.id] ?: ControlPlacement(def.x, def.y, 1f)
+            // Both orientations are computed now — landscape by its own solver, portrait by the
+            // designer — so the drag editor's saved per-control offsets are no longer applied.
+            // Reading them back would drag a freshly designed pad toward wherever the old free
+            // editor last left each button.
+            val p = ControlPlacement(def.x, def.y, 1f)
             ControlState(def, p)
         }.toMutableList()
         pointerTargets.clear()
@@ -352,10 +360,11 @@ class ControllerView @JvmOverloads constructor(
                 val b = members[i + 1]
                 a.x * width + halfPx(a) > b.x * width - halfPx(b)
             }
-            // The user can pin an arrangement in the designer; Auto only intervenes when the
-            // authored positions actually collide.
-            val pillMode = layoutStore.zoneSpec(console).pillMode
-            if (pillMode == 0 && !collides) continue
+            // The designer's system modules already say what arrangement the user wants, so this
+            // pass is only the degrade-rather-than-overlap safety net: it fires when the chosen
+            // pills would actually collide at this device's real size, and otherwise leaves the
+            // arrangement exactly as placed.
+            if (!collides) continue
 
             fun shoulderAlignedY(): Float {
                 val topBars = defs.filter { it.shape == ControlShape.BAR && it.y < 0.30f }
@@ -366,35 +375,16 @@ class ControllerView @JvmOverloads constructor(
                 }
             }
 
-            // STACKED: pills and gear on top of each other with small spacing, centred on the
-            // screen - the on-device amendment to handoff 2d. Grows downward from the shoulder
-            // line in the top band, so the stack never climbs into the screen.
-            if (pillMode == 2) {
-                val rowStack = members.map {
-                    if (it.id == "_menu") it.copy(size = anchor.size) else it
-                }
-                var cy = shoulderAlignedY()
-                var prevHalf = 0f
-                rowStack.forEachIndexed { i, m ->
-                    val halfH = m.size * base / 2f * 0.8f
-                    if (i > 0) cy += (prevHalf + gapPxOf() + halfH) / height
-                    replaced[m.id] = m.copy(x = 0.5f, y = cy.coerceIn(0.02f, 0.98f))
-                    prevHalf = halfH
-                }
-                continue
-            }
-
-            // First choice: keep them SEPARATE - the wireframe shows Start/Select and the
-            // gear as distinct pills in a row. All members share the anchor's height (the
-            // gear used to ride shorter than START next to it), and the whole row is centred
-            // on the screen, since the centre zone is screen-centred by definition.
+            // First fallback: keep them SEPARATE but re-spaced. All members share the anchor's
+            // height (the gear used to ride shorter than START next to it), and the whole row is
+            // centred on the screen, since the centre zone is screen-centred by definition.
             val gapPx = gapPxOf()
             val row = members.map {
                 if (it.id == "_menu") it.copy(size = anchor.size) else it
             }
             val widths = row.map { 2f * halfPx(it) }
             val totalW = widths.sum() + gapPx * (row.size - 1)
-            if (pillMode != 3 && totalW <= width * (if (pillMode == 1) 0.9f else 0.5f)) {
+            if (totalW <= width * 0.9f) {
                 // When the row lives in the top band alongside the shoulder bars, sit it on
                 // the bars' own line - the handoff draws LT / CT / RT as one row, and a pill
                 // row floating a little below the shoulders reads as a misalignment.
