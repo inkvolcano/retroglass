@@ -101,7 +101,14 @@
     <string name="menu_screen_size">Screen size (display)</string>
     <string name="menu_choose_layout">Choose controller layout</string>
     <string name="menu_reset">Reset game</string>
-    <string name="menu_edit_layout">Edit layout (move / resize)</string>
+    <string name="menu_edit_layout">Controller designer</string>
+    <string name="zone_dpad_style">D-pad style</string>
+    <string name="zone_stick_style">Stick style</string>
+    <string name="zone_dpad_pos">D-pad position</string>
+    <string name="zone_face_pos">Buttons position</string>
+    <string name="zone_stick_pos">Stick position</string>
+    <string name="zone_reset">Reset to default look</string>
+    <string name="zone_pos_default">Default</string>
     <string name="menu_turbo">Turbo / autofire buttons…</string>
     <string name="turbo_none">This layout has no buttons to turbo.</string>
     <string name="menu_exit">Save &amp; exit</string>

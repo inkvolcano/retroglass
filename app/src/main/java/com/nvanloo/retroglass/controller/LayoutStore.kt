@@ -200,6 +200,18 @@ class LayoutStore(context: Context) {
         prefs.edit().putFloat("filter_sharpness", v.coerceIn(0f, 1f)).apply()
     }
 
+    /** The zone-picker's choices for a console (designs + anchors). See ZoneComposer. */
+    fun zoneSpec(console: Console): ZoneComposer.ZoneSpec =
+        ZoneComposer.ZoneSpec.parse(prefs.getString("zonespec_${console.prefKey}", null))
+
+    fun setZoneSpec(console: Console, spec: ZoneComposer.ZoneSpec) {
+        prefs.edit().putString("zonespec_${console.prefKey}", spec.serialize()).apply()
+    }
+
+    fun resetZoneSpec(console: Console) {
+        prefs.edit().remove("zonespec_${console.prefKey}").apply()
+    }
+
     /** Local co-op: keep the phone touch pad as Player 1 and route gamepads to P2+. */
     fun localMultiplayer(): Boolean = prefs.getBoolean("local_mp", false)
     fun setLocalMultiplayer(v: Boolean) { prefs.edit().putBoolean("local_mp", v).apply() }

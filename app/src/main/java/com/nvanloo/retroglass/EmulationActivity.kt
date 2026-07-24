@@ -1525,12 +1525,107 @@ class EmulationActivity : AppCompatActivity() {
         return if (stored == LayoutStore.UPSCALE_AUTO) "×${autoUpscale()}" else "×$stored"
     }
 
+    /**
+     * The zone picker - the handoff's replacement for the free-form drag editor. The user
+     * chooses a module design and an anchor per zone; ZoneComposer solves the positions.
+     */
+    private fun menuZonePickerScreen(): View = with(gameMenu) {
+        val spec = layoutStore.zoneSpec(console)
+        fun update(newSpec: com.nvanloo.retroglass.controller.ZoneComposer.ZoneSpec) {
+            layoutStore.setZoneSpec(console, newSpec)
+            controllerView.refreshLayout()
+            gameMenu.refresh()
+        }
+
+        val dpadStyles = listOf("Cross", "Disc", "Octagon", "Split arrows", "Square plate", "Dished round")
+        val stickStyles = listOf("Concentric", "Dished cap", "Ring + nub", "Square gate", "Dimpled cap", "Knurled cap")
+        val vAnchors = listOf(getString(R.string.zone_pos_default), "Top", "Middle", "Low")
+        val hAnchors = listOf(getString(R.string.zone_pos_default), "Inner", "Centre", "Outer")
+        fun vOf(i: Int) = when (i) {
+            1 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.TOP
+            2 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.MID
+            3 -> com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.LOW
+            else -> null
+        }
+        fun hOf(i: Int) = when (i) {
+            1 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.INNER
+            2 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.CENTER
+            3 -> com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.OUTER
+            else -> null
+        }
+        fun vIndex(v: com.nvanloo.retroglass.controller.ZoneGrid.VAnchor?) = when (v) {
+            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.TOP -> 1
+            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.MID -> 2
+            com.nvanloo.retroglass.controller.ZoneGrid.VAnchor.LOW -> 3
+            null -> 0
+        }
+        fun hIndex(h: com.nvanloo.retroglass.controller.ZoneGrid.HAnchor?) = when (h) {
+            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.INNER -> 1
+            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.CENTER -> 2
+            com.nvanloo.retroglass.controller.ZoneGrid.HAnchor.OUTER -> 3
+            null -> 0
+        }
+
+        val hasDpad = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.DPAD }
+        val hasStick = controllerView.currentControls().any { it.type == com.nvanloo.retroglass.controller.ControlType.STICK }
+
+        body {
+            if (hasDpad) {
+                addView(navRow(null, getString(R.string.zone_dpad_style), dpadStyles[spec.dpadDesign]) {
+                    pushSelect(getString(R.string.zone_dpad_style), dpadStyles, spec.dpadDesign) {
+                        update(spec.copy(dpadDesign = it))
+                    }
+                })
+                addView(navRow(null, getString(R.string.zone_dpad_pos),
+                    vAnchors[vIndex(spec.dpadV)] + " · " + hAnchors[hIndex(spec.dpadH)]) {
+                    pushSelect(getString(R.string.zone_dpad_pos) + " ↕", vAnchors, vIndex(spec.dpadV)) { vi ->
+                        update(spec.copy(dpadV = vOf(vi)))
+                        pushSelect(getString(R.string.zone_dpad_pos) + " ↔", hAnchors, hIndex(spec.dpadH)) { hi ->
+                            update(layoutStore.zoneSpec(console).copy(dpadH = hOf(hi)))
+                        }
+                    }
+                })
+            }
+            if (hasStick) {
+                addView(navRow(null, getString(R.string.zone_stick_style), stickStyles[spec.stickDesign]) {
+                    pushSelect(getString(R.string.zone_stick_style), stickStyles, spec.stickDesign) {
+                        update(spec.copy(stickDesign = it))
+                    }
+                })
+                addView(navRow(null, getString(R.string.zone_stick_pos),
+                    vAnchors[vIndex(spec.stickV)] + " · " + hAnchors[hIndex(spec.stickH)]) {
+                    pushSelect(getString(R.string.zone_stick_pos) + " ↕", vAnchors, vIndex(spec.stickV)) { vi ->
+                        update(spec.copy(stickV = vOf(vi)))
+                        pushSelect(getString(R.string.zone_stick_pos) + " ↔", hAnchors, hIndex(spec.stickH)) { hi ->
+                            update(layoutStore.zoneSpec(console).copy(stickH = hOf(hi)))
+                        }
+                    }
+                })
+            }
+            addView(navRow(null, getString(R.string.zone_face_pos),
+                vAnchors[vIndex(spec.faceV)] + " · " + hAnchors[hIndex(spec.faceH)]) {
+                pushSelect(getString(R.string.zone_face_pos) + " ↕", vAnchors, vIndex(spec.faceV)) { vi ->
+                    update(spec.copy(faceV = vOf(vi)))
+                    pushSelect(getString(R.string.zone_face_pos) + " ↔", hAnchors, hIndex(spec.faceH)) { hi ->
+                        update(layoutStore.zoneSpec(console).copy(faceH = hOf(hi)))
+                    }
+                }
+            })
+            addView(spacer())
+            addView(navRow(null, getString(R.string.zone_reset)) {
+                layoutStore.resetZoneSpec(console)
+                controllerView.refreshLayout()
+                gameMenu.refresh()
+            })
+        }
+    }
+
     private fun menuControlsScreen(): View = with(gameMenu) {
         body {
             if (controllerView.visibility == View.VISIBLE) {
                 addView(navRow(null, getString(R.string.menu_choose_layout)) { showLayoutPicker() })
                 addView(navRow(null, getString(R.string.menu_edit_layout)) {
-                    gameMenu.close(); setEditMode(true)
+                    gameMenu.push(menuTitle(R.string.menu_edit_layout)) { menuZonePickerScreen() }
                 })
                 addView(navRow(null, getString(R.string.menu_turbo)) { showTurboConfig() })
             }

@@ -282,6 +282,11 @@ class ControllerView @JvmOverloads constructor(
             base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
                 w = width.toFloat(), h = height.toFloat())
         }
+        // The zone spec re-places module groups on the grid and stamps the chosen designs.
+        // Portrait only: landscape still runs through LandscapeLayout's own solver.
+        if (!landscape) {
+            base = ZoneComposer.apply(base, layoutStore.zoneSpec(console))
+        }
         val defs = resolveCombineGroups(if (monitorMode) base else base + menuControl())
         controls = defs.map { def ->
             // Landscape layouts are computed, not user-tweaked, so ignore the per-preset portrait overrides.
@@ -379,6 +384,12 @@ class ControllerView @JvmOverloads constructor(
         // all of them merge into one divided pill - SELECT | ⚙ | START - instead of stacking.
         combineGroup = ZoneLayout.SYSTEM_PILLS,
     )
+
+    /** Re-derives the controls (zone spec, presets, merges) without touching saved placements. */
+    fun refreshLayout() = reloadControls()
+
+    /** The controls currently on the pad, for menus that adapt to what the console has. */
+    fun currentControls(): List<ControlDef> = controls.map { it.def }
 
     fun saveLayout() =
         layoutStore.save(console, presetId, controls.associate { it.def.id to it.placement })
