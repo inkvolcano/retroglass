@@ -17,11 +17,11 @@ below; this is the index.
 
 | Batch | Closed | Commit |
 |---|---|---|
-| Saves | C1 collision, C2 atomic writes, H4 + H8 silent failures | `008c22e` |
-| Input/UI | H1 stuck input, H2 preset overlap, H13 back in editor, H14 focus, M21 target, M27 units | `7f5998f` |
-| Import | C4 dead classifier, C5 `.exe`, H5 free space, H6 overwrite, M7 inconsistency | `0f58015` |
+| Saves | C1 collision, C2 atomic writes, H4 + H8 silent failures | `9d3dc0a` |
+| Input/UI | H1 stuck input, H2 preset overlap, H13 back in editor, H14 focus, M21 target, M27 units | `91bacb4` |
+| Import | C4 dead classifier, C5 `.exe`, H5 free space, H6 overwrite, M7 inconsistency | `9b60da3` |
 | Release | C6 signing, H16 committed binaries, H18 traceability, H19 CI | this commit |
-| Earlier | H17 artwork marks, and `GameCovers.load` from pattern 5 | `05a05bf`, `bc94157` |
+| Earlier | H17 artwork marks, and `GameCovers.load` from pattern 5 | `5a4a607`, `6e6a567` |
 
 Three things came out differently than the audit assumed, and are worth keeping:
 
@@ -40,6 +40,26 @@ Three things came out differently than the audit assumed, and are worth keeping:
 Still open and unchanged: **C3** (the glasses GL trap) needs a device, and remains the single
 highest-value thing to test. H3, H7, H9-H12, H15, H19's core-build reproducibility, H20, and
 the Medium/Low list below are untouched.
+
+---
+
+## History rewrite — 2026-07-23
+
+`git filter-repo` purged the trademarked console photos (`consoles.png`, `consoles2.png`, and
+their `drawable-nodpi/console_photos*.png` copies) and the six committed GPL core binaries
+(`libretrodroid/app/src/main/jniLibs/`) from all 108 commits, and `main` was force-pushed.
+`.git` went 28 MB → 12 MB; every purged path now reports 0 reachable objects. The originals are
+backed up outside the repo (`Desktop/retroglass-purged-backup/`, including a full pre-rewrite
+bundle). This closes the "still in history" caveat on H17 and H16.
+
+Two things worth knowing:
+
+- **Every commit SHA changed.** The references in this file were remapped from filter-repo's
+  commit-map; SHAs quoted inside older *commit messages* still point at nothing.
+- **A force-push does not guarantee erasure from GitHub.** Orphaned commits can stay reachable
+  by direct SHA until GitHub garbage-collects, which is not on a published schedule. If the
+  photos genuinely must be unreachable, that needs GitHub Support (or a fresh repo), not just
+  this rewrite.
 
 ---
 
@@ -68,7 +88,8 @@ scenario, and rests on a GL-lifecycle assumption that appears to contradict how 
 behaves on reparent.
 
 **4. Nothing about a build is reproducible or traceable.** Cores are fetched from `latest`
-nightly with no pin, there are no git tags, `versionCode` has never moved off 1, release is
+nightly with no pin, release tags exist but are sparse (`v0.4.0`, `v0.5.0` only), `versionCode`
+has never moved off 1, release is
 signed with the debug key, and the 16 KB-aligned core set exists only as a state once produced
 by hand. It is not currently possible to say what any given APK contained.
 
@@ -159,7 +180,7 @@ independently against the real transform and clamp code, for the Coleco/Intelliv
 `Console.kt:501-516, 570-579`; `ControllerView.kt:348-355`.
 *Failure:* picking "Large buttons" or "Full-screen" on ColecoVision or Intellivision makes half
 the keypad touch-ambiguous — the keys those games need to start. Directly undercuts the keypad
-work committed in `92f64bd`. **Verified by recomputation.**
+work committed in `4aa3c4a`. **Verified by recomputation.**
 
 **H3. Core-mutating calls race `retro_run()` with no lock and no thread hop.**
 `setControllerType`, `updateVariables`, `getVariables`, `getControllers` call straight into
@@ -251,7 +272,8 @@ non-green pixels in the sheet, so the red Atari fuji is gone too. Provenance rec
 decision (rewrite vs accept) and has not been made.
 
 **H18. Cores are fetched unpinned, so no build can be reproduced or GPL-corresponded.**
-`scripts/fetch_cores.sh:7` points at `nightly/android/latest`; there are no git tags. A core
+`scripts/fetch_cores.sh:7` points at `nightly/android/latest`; the only release tags are
+`v0.4.0` and `v0.5.0`, neither recent. A core
 update has already changed GL behaviour between runs once (`README.md:56-64`).
 *Failure:* "the source is public" cannot be honoured for a specific shipped binary, because
 nothing records which commit produced it. **Verified.**
@@ -353,7 +375,10 @@ lists a virtual keyboard under **Library-blocked features**. **Verified** for VI
 - **L4.** Disconnect auto-pause calls `retroView.onPause()` directly, bypassing the lifecycle
   path that stops audio. `EmulationActivity.kt:1291-1306`.
 - **L5.** `MainActivity` is exported with no intent filter. `AndroidManifest.xml:40-42`.
-- **L6.** `versionCode` is still 1 and no git tags exist — no build can be traced to a commit.
+- **L6.** `versionCode` is still 1, and the only tags are `v0.4.0`/`v0.5.0` (both well behind
+  `main`) — no recent build can be traced to a commit. **Correction:** earlier passes of this
+  audit said "no git tags exist"; that came from a local `git tag -l` before the remote had been
+  fetched. The tags are on the remote.
 - **L7.** Storage cost of copy-based import is never surfaced, and there is no cleanup tool.
 - **L8.** Temp import paths are name-derived with no uniqueness; concurrent imports can collide.
   `RomLibrary.kt:462, 491, 527, 610, 630`.
@@ -361,7 +386,7 @@ lists a virtual keyboard under **Library-blocked features**. **Verified** for VI
   `strings.xml:49`.
 - **L10.** `aspectRatio()` now reads a float written by the emulation thread with no
   synchronisation — a real regression from the previously-synchronised design, introduced in
-  `ad242e5` to fix UI-thread blocking. Practically a one-frame-stale value, not corruption.
+  `15e98e8` to fix UI-thread blocking. Practically a one-frame-stale value, not corruption.
 - **L11.** Dead code that reads as features: `classifyFile`, `addReferences`,
   `LayoutStore.localMultiplayer()` (documented, no callers), `CompanionView.clearInput()`.
   `GameCovers.load()` was a fifth and is now wired up (see pattern 5).
