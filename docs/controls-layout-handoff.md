@@ -144,3 +144,135 @@ Agreed while iterating on the real pad; these refine §2d and are implemented:
 - Layout is **preset-driven per console**, re-solved automatically for portrait ↔ landscape.
 - Center boxes (CT/CL) overlap the LC/RC seam by **40%** on one side.
 - Confirm whether presets are strictly fixed or allow small per-module nudges (still open).
+
+---
+
+## 6. The layout DESIGNER (wireframe turn 4) — interaction spec
+
+Replaces the preset-only picker and the zone picker. Field-first editing, one orientation at a time.
+
+### 6.1 Structure
+- **LC and RC are single 6-slot columns** (slots 1–6, top to bottom) — the old LT/RT boxes are
+  merged in. **Shoulder modules only fit slots 1–2.** CT and CL remain overlay zones on the seam.
+- Big modules occupy 1 or 2 slots: face layouts of ≤3 buttons = 1 slot; 4+ button layouts, d-pads
+  and analog sticks = 2 slots.
+- **Portrait**: screen slit pinned top (4:3); CT aligned with the slot-1 row; CL pinned bottom.
+- **Landscape**: LC/RC full height at the outer edges; CT top-centre; **CL spans the full bottom
+  band between LC and RC**. The screen box fills the area between LC/RC/CT/CL, with the true 4:3
+  game area drawn as a centred inner rect.
+- If **CT or CL is empty** in landscape the screen box expands over that row. A **□ filler module**
+  occupies the zone to force the screen small — invisible in the actual game, a ghost outline in
+  the editor.
+
+### 6.2 Interaction flow
+1. **Tap a field** (an LC/RC slot, or CT/CL) → an **action menu**: empty field → "Add module";
+   occupied → "Change module" / "Move module" / "Remove module", with a "contains: <name>" subtitle.
+2. **Add/Change** → contextual module list, filtered to what fits that field, each row showing the
+   resulting pad. Row states: current = highlighted; **"replaces <name>"** = would overwrite;
+   **blocked, with the reason** = not pickable.
+3. **Move** → "moving <name> — tap where it should go"; all placement rules enforced at the
+   destination; cancel available.
+4. **Alignment** is visual: inner / centre / outer within the block, and the module shifts live.
+5. **Rotate** switches Portrait ↔ Landscape.
+
+### 6.3 Portrait and landscape are SEPARATE layouts
+Each orientation stores its own module map, alignment map, split, shadows and scale. Editing one
+never touches the other.
+
+### 6.4 Rules engine
+- Shoulder modules: slots 1–2 only.
+- **If CT holds a multi-button module** (SELECT·START dual, or the combined pill), **combined
+  shoulder pills are blocked in slot 1** — they share the top row. Exempt: single START, ⚙ only,
+  filler, and START + ⚙ below. Enforced in both directions, since either can be picked first.
+- Placing over occupied slots replaces the overlapped modules, after the warning.
+
+### 6.5 In-screen settings panel (per orientation)
+- **width** — LC/RC split: 40/60 · 50/50 (default) · 60/40 · 40/20/40 (empty middle band).
+- **shadow** — separate toggles for screen, buttons, d-pad, stick.
+- **scale** — global module scale: small (0.8×) · normal (1×) · large (1.25×).
+
+### 6.6 Landscape shoulder widening
+When CT is occupied, slot 1 of LC/RC widens inward up to the CT edge and a shoulder pill placed
+there stretches across it, vertically aligned with the CT row. When CT is empty (screen covering
+the top), the widening is disabled so nothing overlaps the screen.
+
+### 6.7 Module catalogue
+
+A module is an **arrangement, not a set of buttons**. The buttons always come from the console —
+ids, labels, keycodes and colours are fixed by the hardware being emulated — so picking a different
+arrangement never changes what a button does. Remap, turbo and hit-testing are identical whichever
+one is chosen. That split is what keeps the catalogue short across 35 very different pads: a
+twelve-key Intellivision keypad and a four-key NeoGeo row are the same kind of thing, a cluster of
+N buttons, differing only in N and in which arrangement reads best.
+
+Because of that, the list is **filtered by button count**. A three-button cluster is never offered
+the diamond; a console with no analog stick is never offered a stick.
+
+**Blocks — LC/RC, any slot (2 slots unless noted)**
+
+| Module | Buttons | Notes |
+| --- | --- | --- |
+| Console default | any | The shipped hand-tuned cluster, moved as a rigid group. The default for every console. |
+| Row | any (1 slot) | One horizontal guide. |
+| Rising diagonal | any (1 slot) | Low-left → high-right, the handheld placement. |
+| Column | any | One vertical guide. |
+| Arc | any (1 slot) | Shallow bow, middle button proud of the line through the ends (Genesis). |
+| Two rows | any | Splits across two rows. |
+| 2×2 square | 4 | Y/X top, B/A bottom. |
+| Diamond | 4 | SNES: X top, A right, B bottom, Y left. |
+| N64 A/B + C diamond | 6 | Four C keys as a diamond, A and B on a rising diagonal clear of it. |
+| Keypad (3 per row) | any | Row-major grid, three columns (Intellivision, ColecoVision, Atari 5200). |
+| One + row of three | 4 | Vectrex. |
+| Two stacked + one | 3 (1 slot) | ColecoVision's pair with the third on the guide between them. |
+
+**Directional variants** (2 slots, all functionally 8-way): ✛ cross · ⬤ disc · ⯃ octagon ·
+✧ split arrows · ▣ square plate · ◎ dished round. A console whose directional carries a centre
+button (N64's Z) keeps it concentric in every variant, because the co-centred hit test is what lets
+one thumb hold a direction and press it at the same time.
+
+**Stick variants** (2 slots): concentric · dished cap · ring + nub · square gate · dimpled cap ·
+knurled cap.
+
+**Shoulders — LC/RC slots 1–2 only**: single L1/R1 · double stack · triple stack · combined L1|L2 ·
+combined L1|L2|L3 · L3/R3 separate. Each is offered only when the console has enough shoulder
+buttons to fill it.
+
+**System — CT/CL**: single START · START + ⚙ below · SELECT·START dual · combined SEL|⚙|START
+(gear centred, no outer divider lines) · ⚙ only · □ filler · ◉ stick (CL only).
+
+The gear is never allowed to go missing: if no placed system module carries one, the renderer adds
+it to the top centre, tagged into the system pill group so it spreads or fuses with START/SELECT
+rather than landing on top of them.
+
+### 6.8 Persistence model
+Per console: `{ portrait: Layout, landscape: Layout }` where
+`Layout = { CT, CL, LC:{slot:moduleId}, RC:{slot:moduleId}, align:{zone+slot:'l'|'c'|'r'},
+split, shadowScreen, shadowButtons, shadowDpad, shadowStick, scale }`.
+
+Nothing is stored until the user edits: an unsaved console derives its design from its own authored
+layout each time. Writing a derived design eagerly would freeze today's derivation into every
+user's preferences and make later improvements to it invisible to anyone who had merely opened the
+screen.
+
+### 6.9 Implementation status (app)
+
+Portrait is fully slot-driven: `PadDesign`/`PadLayout` (model), `PadModules` (catalogue),
+`PadParts` (decomposition), `PadDeriver` (starting design per console), `PadRenderer` (geometry),
+`DesignerView` (preview). The zone picker and the preset thumbnail picker are removed, as is the
+drag editor's saved per-control offset map — reading it back would pull a freshly designed pad
+toward wherever the old free editor last left each button.
+
+**Landscape still runs through `LandscapeLayout`.** Its face clusters are rebuilt aspect-corrected
+so up/down spacing equals left/right spacing in real pixels; the slot renderer has no equivalent
+yet, and dropping an authored diamond into a wide landscape column would render it flat. The
+designer therefore edits the portrait layout only for now. Landscape modules, the CT widening of
+§6.6 and the CL bottom band are the next piece.
+
+Alignment is applied by measuring what a module actually emitted and sliding the group, rather than
+by asking each arrangement to declare its own footprint — a declaration can drift out of step with
+the drawing, a measurement cannot.
+
+### 6.10 Known gaps (acknowledged, not yet designed)
+CL collision rule for bottom slots · bottom-slot widening toward CL · turbo/fast-forward/state
+quick buttons · per-layout opacity · left-handed mirror button · per-console screen aspect
+(GBA 3:2, PSP 16:9) · named save/reset UI.
