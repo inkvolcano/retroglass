@@ -40,6 +40,14 @@ data class ControlDef(
     val segment: PillSegment = PillSegment.NONE,
     /** Multiplies a pill's width, so N segments can share one pill's footprint (1/N each). */
     val widthScale: Float = 1f,
+    /**
+     * Pills sharing a group may be merged into one combined divided pill *if they would
+     * otherwise overlap on this device*. The decision is made at layout time by
+     * `ControllerView.resolveCombineGroups`, because it needs real pixels: a control's size is a
+     * fraction of the pad's shorter edge while zone widths are fractions of its width, so
+     * whether two pills collide depends on the pad's aspect ratio, not on authored numbers.
+     */
+    val combineGroup: String? = null,
 )
 
 /** User-adjustable placement of a control: position plus a scale multiplier. */

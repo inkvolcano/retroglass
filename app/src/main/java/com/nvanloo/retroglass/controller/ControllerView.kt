@@ -282,7 +282,7 @@ class ControllerView @JvmOverloads constructor(
             base = LandscapeLayout.transform(base, screen = layoutMode == LAYOUT_FRAME,
                 w = width.toFloat(), h = height.toFloat())
         }
-        val defs = if (monitorMode) base else base + menuControl()
+        val defs = resolveCombineGroups(if (monitorMode) base else base + menuControl())
         controls = defs.map { def ->
             // Landscape layouts are computed, not user-tweaked, so ignore the per-preset portrait overrides.
             val p = if (landscape) ControlPlacement(def.x, def.y, 1f)
@@ -297,12 +297,65 @@ class ControllerView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         // The landscape transform depends on the view's real width/height (aspect-correction and the
         // size cap), so recompute it once the view is measured or resized.
-        if (layoutMode != LAYOUT_PORTRAIT && (w != oldw || h != oldh)) reloadControls()
+        // Any size change re-runs the combine decision, so the pad adapts to the device it is
+        // actually on. Skipped while editing: reloading would discard an in-progress drag.
+        if ((w != oldw || h != oldh) && !editMode) reloadControls()
     }
 
     // The settings gear the design puts in the CT zone (handoff 2d): the app's own ⚙ glyph
     // (U+2699, matching the library and in-game menu buttons), as a pill rather than the old ≡
     // circle. Always injected here, never authored per console, so every pad has exactly one.
+    /**
+     * Merges tagged pills into one combined divided pill when they would actually collide on
+     * *this* pad — the handoff's degrade-rather-than-overlap rule (docs/controls-layout-handoff.md).
+     *
+     * This has to happen here rather than when a layout is authored, because it depends on real
+     * pixels. A control's `size` is a fraction of the pad's **shorter edge**, while a zone's
+     * width is a fraction of its **width**, so whether two pills fit side by side is a function
+     * of the pad's aspect ratio — not of any number written into a console's layout. Re-run on
+     * every size change, so a wider pad keeps the separate pills and a narrow one collapses them.
+     */
+    private fun resolveCombineGroups(defs: List<ControlDef>): List<ControlDef> {
+        if (width <= 0 || height <= 0) return defs
+        val groups = defs
+            .filter { it.combineGroup != null && it.shape == ControlShape.PILL }
+            .groupBy { it.combineGroup!! }
+        if (groups.isEmpty()) return defs
+
+        val base = sizeBase()
+        fun halfPx(d: ControlDef) = d.size * base * 1.85f / 2f
+        val replaced = HashMap<String, ControlDef>()
+
+        for ((_, raw) in groups) {
+            if (raw.size < 2) continue
+            val members = raw.sortedBy { it.x }
+            val collides = (0 until members.size - 1).any { i ->
+                val a = members[i]
+                val b = members[i + 1]
+                a.x * width + halfPx(a) > b.x * width - halfPx(b)
+            }
+            if (!collides) continue
+
+            // Pack them into the footprint of a single pill, centred on the group's span.
+            val n = members.size
+            val centre = (members.first().x + members.last().x) / 2f
+            val fullHalf = halfPx(members.first()) / width
+            val segHalf = fullHalf / n
+            members.forEachIndexed { i, d ->
+                replaced[d.id] = d.copy(
+                    x = centre - fullHalf + segHalf * (2 * i + 1),
+                    segment = when (i) {
+                        0 -> PillSegment.LEFT
+                        n - 1 -> PillSegment.RIGHT
+                        else -> PillSegment.MID
+                    },
+                    widthScale = 1f / n,
+                )
+            }
+        }
+        return if (replaced.isEmpty()) defs else defs.map { replaced[it.id] ?: it }
+    }
+
     private fun menuControl() = ControlDef(
         id = "_menu", type = ControlType.BUTTON, label = "⚙",
         keyCode = -1,

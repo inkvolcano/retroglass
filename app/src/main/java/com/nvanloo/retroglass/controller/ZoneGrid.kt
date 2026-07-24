@@ -27,7 +27,10 @@ package com.nvanloo.retroglass.controller
  * Because CT/CL sit on top of LC/RC, separate pills can collide with whatever the big blocks
  * hold. The rule is to degrade rather than overlap: when the separate arrangement does not fit,
  * the zone switches to its **combined** variant (one divided pill), which is narrower. The same
- * applies to LT/RT shoulders. [fitsSeparate] is that decision.
+ * applies to LT/RT shoulders. The decision is made at *layout* time by
+ * `ControllerView.resolveCombineGroups`, not here: it needs real pixels, because a control's
+ * size is a fraction of the pad's shorter edge while a zone's width is a fraction of its width,
+ * so whether two pills actually collide depends on the pad's aspect ratio.
  */
 object ZoneGrid {
 
@@ -101,27 +104,6 @@ object ZoneGrid {
     /** True for the zones on the left, which is what mirrors [HAnchor]. */
     private fun isLeft(zone: Zone) = zone == Zone.LT || zone == Zone.LC
 
-    /**
-     * Whether [count] separate pills of width [pillW] fit inside [zone] without colliding, given
-     * a gap of [gap] between them. When this is false the caller uses the zone's **combined**
-     * variant instead — one divided pill, which packs the same inputs into the width of one.
-     *
-     * This is the handoff's degradation rule (see the class note) and it applies to CT/CL's
-     * Start/Select and to LT/RT's shoulders alike. Degrading is always preferable to overlapping:
-     * two pills drawn on top of each other are not just ugly, they are ambiguous to hit-test,
-     * which is exactly how the ColecoVision keypad bug hid.
-     */
-    fun fitsSeparate(
-        zone: Zone,
-        landscape: Boolean,
-        count: Int,
-        pillW: Float,
-        gap: Float = 0.02f,
-    ): Boolean {
-        if (count <= 1) return true
-        val needed = count * pillW + (count - 1) * gap
-        return needed <= rect(zone, landscape).w + 1e-4f
-    }
 
     /**
      * Solves a module's centre inside [zone].

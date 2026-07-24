@@ -162,26 +162,4 @@ class ZoneGridTest {
         assertEquals("one button is an ordinary pill", PillSegment.NONE, out[0].segment)
         assertEquals(1f, out[0].widthScale, 1e-5f)
     }
-
-    @Test
-    fun `the zone falls back to combined only when separate will not fit`() {
-        // CL is 40% of the pad wide. Two narrow pills fit; two wide ones do not, and that is
-        // when the handoff says to degrade rather than overlap.
-        assertTrue(
-            "two narrow pills should fit CL",
-            ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 2, pillW = 0.15f),
-        )
-        assertTrue(
-            "two wide pills should not fit CL",
-            !ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 2, pillW = 0.30f),
-        )
-        // A lone button always "fits" - there is nothing to collide with.
-        assertTrue(ZoneGrid.fitsSeparate(Zone.CL, landscape = false, count = 1, pillW = 0.9f))
-        // The same rule governs the shoulder zones.
-        assertTrue(
-            "three wide shoulder pills should not fit LT",
-            !ZoneGrid.fitsSeparate(Zone.LT, landscape = false, count = 3, pillW = 0.25f),
-        )
-    }
-
 }

@@ -154,8 +154,10 @@ object ZoneLayout {
 
         /** Two centre-low pills in explicit left/right order (3DO puts Play on the left). */
         fun pillPair(left: Btn, right: Btn, cy: Float = LOW_Y, size: Float = 0.12f, gap: Float = 0.24f) {
-            pill(left, 0.5f - gap / 2f, cy, size)
-            pill(right, 0.5f + gap / 2f, cy, size)
+            // Tagged so the device merges them into a combined divided pill if they would
+            // overlap at this pad's real size - the handoff's degrade-rather-than-collide rule.
+            pill(left, 0.5f - gap / 2f, cy, size, group = SYSTEM_PILLS)
+            pill(right, 0.5f + gap / 2f, cy, size, group = SYSTEM_PILLS)
         }
 
         /**
@@ -163,7 +165,7 @@ object ZoneLayout {
          * footprint, outer corners rounded, dividers on the inner edges only.
          *
          * This is what a zone degrades to when separate pills will not fit — see
-         * [ZoneGrid.fitsSeparate]. Each segment stays its own control, so hit-testing, remap and
+         * `ControllerView.resolveCombineGroups`. Each segment stays its own control, so hit-testing, remap and
          * turbo are unchanged; only the drawing joins them up.
          */
         fun pillsCombined(
@@ -193,26 +195,6 @@ object ZoneLayout {
             }
         }
 
-        /**
-         * Start/Select for a centre zone, degrading automatically: separate pills when the zone
-         * has room, one combined divided pill when it does not.
-         */
-        fun systemPillsAuto(
-            btns: List<Btn>,
-            zone: ZoneGrid.Zone = ZoneGrid.Zone.CL,
-            landscape: Boolean = false,
-            cy: Float = LOW_Y,
-            size: Float = 0.12f,
-            gap: Float = 0.24f,
-        ) {
-            val pillW = size * 1.85f
-            if (ZoneGrid.fitsSeparate(zone, landscape, btns.size, pillW)) {
-                val span = (btns.size - 1) * gap
-                btns.forEachIndexed { i, b -> pill(b, 0.5f - span / 2f + i * gap, cy, size) }
-            } else {
-                pillsCombined(btns, 0.5f, cy, size)
-            }
-        }
 
         /** Shoulder buttons in the top corners. Either side may be null (Pokémon Mini has one). */
         fun shoulders(l: Btn?, r: Btn?, cy: Float = TOP_Y, size: Float = 0.18f, lx: Float = 0.15f, rx: Float = 0.85f) {
@@ -256,9 +238,10 @@ object ZoneLayout {
                 strokeColor = b.stroke, plateColor = b.plate)
         }
 
-        private fun pill(b: Btn, x: Float, y: Float, size: Float) {
+        private fun pill(b: Btn, x: Float, y: Float, size: Float, group: String? = null) {
             out += ControlDef(b.id, ControlType.BUTTON, b.label, b.keyCode, x, y, size,
-                ControlShape.PILL, fillColor = b.fill, labelColor = b.labelColor)
+                ControlShape.PILL, fillColor = b.fill, labelColor = b.labelColor,
+                combineGroup = group)
         }
 
         private fun bar(b: Btn, x: Float, y: Float, size: Float) =
@@ -279,6 +262,9 @@ object ZoneLayout {
         val plate: Int = Color.TRANSPARENT,
         val stroke: Int = Color.TRANSPARENT,
     )
+
+    /** Group name for the Start/Select pills, merged on-device when they would collide. */
+    const val SYSTEM_PILLS = "sys"
 
     /** Build a pad from a declarative block. */
     fun pad(block: Pad.() -> Unit): List<ControlDef> = Pad().apply(block).build()
