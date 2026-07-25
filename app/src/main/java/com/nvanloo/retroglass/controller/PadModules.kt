@@ -143,7 +143,22 @@ object PadModules {
         /** Widen a bar to fill the box rather than keeping its authored width (handoff §6.6). */
         val stretch: Boolean = false,
     ) {
+        /**
+         * Caps a control's size so the module keeps inside the rows it was given.
+         *
+         * A size is a fraction of the pad's shorter edge, so the same number covers a very
+         * different share of the height depending on the pad's shape: a d-pad that sits neatly in
+         * two portrait rows is half again too tall for two landscape ones, and ran off the bottom
+         * of the pad entirely. The allowance lets a module bleed slightly past its rows — clusters
+         * have always done so and it reads fine — while stopping the overflow that clips.
+         */
+        fun fit(size: Float): Float =
+            if (my <= 0f) size else minOf(size, h / my * BAND_ALLOWANCE)
+
         companion object {
+            /** How far past its own rows a module may bleed before it is capped. */
+            const val BAND_ALLOWANCE = 1.15f
+
             /** Builds the unit converters for a pad of the given width/height ratio. */
             fun units(aspect: Float): Pair<Float, Float> =
                 if (aspect < 1f) 1f to aspect else (1f / aspect) to 1f
@@ -178,7 +193,7 @@ object PadModules {
 
     private fun emitDpad(m: Module, parts: PadParts, box: Box, scale: Float): List<ControlDef> {
         val dpad = parts.dpad ?: return emptyList()
-        val size = dpad.size * scale
+        val size = box.fit(dpad.size * scale)
         val out = mutableListOf(dpad.copy(x = box.cx, y = box.cy, size = size, design = m.design))
         // The centre button (N64's Z) rides with the pad: ControllerView's co-centre hit test
         // lets one thumb hold a direction and press it, which only works if they stay concentric.
@@ -196,7 +211,8 @@ object PadModules {
         stickIndex: Int,
     ): List<ControlDef> {
         val stick = parts.sticks.getOrNull(stickIndex) ?: parts.sticks.firstOrNull() ?: return emptyList()
-        return listOf(stick.copy(x = box.cx, y = box.cy, size = stick.size * scale, design = m.design))
+        val size = box.fit(stick.size * scale)
+        return listOf(stick.copy(x = box.cx, y = box.cy, size = size, design = m.design))
     }
 
     private fun emitShoulder(
@@ -220,10 +236,10 @@ object PadModules {
         if (take.isEmpty()) return emptyList()
         // A widened landscape slot-1 band is meant to be filled end to end; everywhere else the
         // shoulder keeps the width the console authored for it.
-        // box.w is a width fraction; size is a fraction of the shorter edge. A bar of `size`
-        // spans `size * mx * BAR_ASPECT` of the width, so filling the band means dividing by both.
-        val size = if (box.stretch && box.mx > 0f) box.w / (BAR_ASPECT * box.mx)
-        else take.first().size * scale
+        // A BAR is the one shape whose length ControllerView measures against the view *width*
+        // rather than the shorter edge (barHalfLen), so a bar filling a band is simply the band's
+        // own width. Everywhere else the shoulder keeps the width the console authored.
+        val size = if (box.stretch) box.w else take.first().size * scale
         return if (m.id == "shComb2" || m.id == "shComb3") {
             combinedPill(take, box.cx, box.cy, size)
         } else {
@@ -330,7 +346,7 @@ object PadModules {
     ): List<ControlDef> {
         if (face.isEmpty()) return emptyList()
         val n = face.size
-        val size = face.maxOf { it.size } * scale
+        val size = box.fit(face.maxOf { it.size } * scale)
         // One physical step, then the same step expressed in each axis's own units, so a diamond
         // stays a diamond whichever way round the phone is.
         val step = size * 1.30f

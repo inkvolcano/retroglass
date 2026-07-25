@@ -105,7 +105,7 @@ object PadRenderer {
                 val emitted = PadModules.emit(module, parts, box, scale, side, stickIndex)
                 if (module.family == PadModules.Family.STICK) stickIndex++
                 val align = layout.align[zone + slot] ?: 'c'
-                out += alignGroup(emitted, align, l, r, mx)
+                out += keepInside(alignGroup(emitted, align, l, r, mx), mx, my)
             }
         }
 
@@ -151,8 +151,8 @@ object PadRenderer {
         mx: Float,
     ): List<ControlDef> {
         if (defs.isEmpty() || align == 'c') return defs
-        val minX = defs.minOf { it.x - halfWidth(it) * mx }
-        val maxX = defs.maxOf { it.x + halfWidth(it) * mx }
+        val minX = defs.minOf { it.x - halfWidth(it, mx) }
+        val maxX = defs.maxOf { it.x + halfWidth(it, mx) }
         val dx = when (align) {
             'l' -> left + EDGE_INSET - minX
             'r' -> right - EDGE_INSET - maxX
@@ -162,12 +162,44 @@ object PadRenderer {
     }
 
     /**
-     * A control's half-width as a fraction of the pad's *shorter edge* — pills and bars are wider
-     * than they are tall. Multiply by `Box.mx` to get a width fraction.
+     * A control's half-width as a fraction of the pad *width*, matching how ControllerView
+     * actually measures each shape.
+     *
+     * A BAR is the odd one out: its length is taken against the view width, while every other
+     * shape is sized from the shorter edge. Treating them alike is what made a stretched shoulder
+     * overshoot its band by the whole aspect ratio.
      */
-    fun halfWidth(def: ControlDef): Float = when (def.shape) {
-        ControlShape.PILL -> def.size / 2f * 1.85f * def.widthScale
-        ControlShape.BAR -> def.size / 2f * 1.85f
-        else -> def.size / 2f
+    fun halfWidth(def: ControlDef, mx: Float = 1f): Float = when (def.shape) {
+        ControlShape.BAR -> def.size / 2f
+        ControlShape.PILL -> def.size / 2f * 1.85f * def.widthScale * mx
+        else -> def.size / 2f * mx
+    }
+
+    /** A control's half-height as a fraction of the pad height. */
+    private fun halfHeight(def: ControlDef, my: Float): Float = when (def.shape) {
+        ControlShape.BAR -> 0.062f * my
+        else -> def.size / 2f * my
+    }
+
+    /**
+     * Nudges a group back inside the pad if it hangs over an edge.
+     *
+     * Slot bands are fractions of the pad, but a module's size is not, so a big module in an end
+     * slot can reach past the pad itself — which is how the analog stick ended up with its lower
+     * third cut off the bottom of the screen in landscape. Shifting the whole group keeps the
+     * cluster's internal geometry intact, which clamping each control separately would destroy.
+     */
+    private fun keepInside(defs: List<ControlDef>, mx: Float, my: Float): List<ControlDef> {
+        if (defs.isEmpty()) return defs
+        val minX = defs.minOf { it.x - halfWidth(it, mx) }
+        val maxX = defs.maxOf { it.x + halfWidth(it, mx) }
+        val minY = defs.minOf { it.y - halfHeight(it, my) }
+        val maxY = defs.maxOf { it.y + halfHeight(it, my) }
+        var dx = 0f
+        var dy = 0f
+        if (minX < 0f) dx = -minX else if (maxX > 1f) dx = 1f - maxX
+        if (minY < 0f) dy = -minY else if (maxY > 1f) dy = 1f - maxY
+        return if (dx == 0f && dy == 0f) defs
+        else defs.map { it.copy(x = it.x + dx, y = it.y + dy) }
     }
 }
