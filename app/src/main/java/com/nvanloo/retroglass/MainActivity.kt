@@ -775,6 +775,19 @@ class MainActivity : AppCompatActivity() {
             addView(navRow("▣", getString(R.string.screen_mode_title), screenModeShort(layoutStore.screenMode())) {
                 libraryMenu.close(); showScreenModePicker()
             })
+            // Scoped to the console the carousel is showing: a pad belongs to a console, not to
+            // a game, so there is no reason to make someone start one to lay one out.
+            listConsoles.getOrNull(realIndex())?.let { target ->
+                addView(navRow("◎", getString(R.string.menu_edit_layout), target.displayName) {
+                    com.nvanloo.retroglass.controller.ControllerDesigner(
+                        activity = this@MainActivity,
+                        menu = libraryMenu,
+                        console = target,
+                        layoutStore = layoutStore,
+                        onDone = { libraryMenu.close() },
+                    ).open()
+                })
+            }
         }
     }
 

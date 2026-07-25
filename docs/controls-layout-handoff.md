@@ -258,7 +258,15 @@ layout each time. Writing a derived design eagerly would freeze today's derivati
 user's preferences and make later improvements to it invisible to anyone who had merely opened the
 screen.
 
-### 6.9 Implementation status (app)
+### 6.9 Where it lives
+
+`ControllerDesigner` takes its host as parameters, so both the in-game menu and the library open
+the same editor. A pad belongs to a console rather than to a game — the design is derived from the
+console's shipped controls and saved against the console — so requiring a game to be running before
+you could lay one out was an accident of where the code first sat, and impossible for a console you
+own no games for yet. The library entry is scoped to whichever console the carousel is showing.
+
+### 6.10 Implementation status (app)
 
 Portrait is fully slot-driven: `PadDesign`/`PadLayout` (model), `PadModules` (catalogue),
 `PadParts` (decomposition), `PadDeriver` (starting design per console), `PadRenderer` (geometry),
@@ -282,7 +290,7 @@ Alignment is applied by measuring what a module actually emitted and sliding the
 by asking each arrangement to declare its own footprint — a declaration can drift out of step with
 the drawing, a measurement cannot.
 
-### 6.10 Known gaps (acknowledged, not yet designed)
+### 6.11 Known gaps (acknowledged, not yet designed)
 CL collision rule for bottom slots · bottom-slot widening toward CL · turbo/fast-forward/state
 quick buttons · per-layout opacity · left-handed mirror button · per-console screen aspect
 (GBA 3:2, PSP 16:9) · named save/reset UI.
