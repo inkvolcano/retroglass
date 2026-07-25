@@ -436,11 +436,16 @@ class ControllerDesigner(
         return used < capacity
     }
 
-    /** An image plus a two-line label — [previewRow] ellipsizes, which hid every rule message. */
-    fun modulePickRow(
+    /**
+     * A module row: its rendered pad, its name, and any rule message right-aligned beside it —
+     * the wireframe's three-part row. The shared preview row ellipsizes a single line, which hid
+     * every "replaces" warning, and stacking the message under the name pushed the rows so tall
+     * that fewer than four fitted on screen at once.
+     */
+    private fun modulePickRow(
         image: android.graphics.Bitmap,
         name: String,
-        subtitle: String?,
+        tag: String?,
         selected: Boolean,
         enabled: Boolean,
         onClick: () -> Unit,
@@ -450,12 +455,12 @@ class ControllerDesigner(
         val d = activity.resources.displayMetrics.density
         setPadding((10 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
         if (enabled) setOnClickListener { onClick() }
-        addView(android.widget.ImageView(activity).apply {
-            setImageBitmap(image)
-        }, LinearLayout.LayoutParams(image.width, image.height))
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(TextView(activity).apply {
+        addView(
+            android.widget.ImageView(activity).apply { setImageBitmap(image) },
+            LinearLayout.LayoutParams(image.width, image.height),
+        )
+        addView(
+            TextView(activity).apply {
                 text = name
                 textSize = 15f
                 setTextColor(
@@ -465,19 +470,26 @@ class ControllerDesigner(
                         else -> Color.parseColor("#E8E8F0")
                     },
                 )
-            })
-            if (subtitle != null) {
-                addView(TextView(activity).apply {
-                    text = subtitle
-                    textSize = 12f
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = (14 * d).toInt()
+            },
+        )
+        if (tag != null) {
+            addView(
+                TextView(activity).apply {
+                    text = tag
+                    textSize = 11f
+                    gravity = Gravity.END
                     setTextColor(
                         if (enabled) Color.parseColor("#FFC46B") else Color.parseColor("#FF8A80"),
                     )
-                })
-            }
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginStart = (14 * d).toInt()
-        })
+                },
+                LinearLayout.LayoutParams(
+                    (112 * d).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = (8 * d).toInt() },
+            )
+        }
     }
 
     fun place(

@@ -292,7 +292,10 @@ class DesignerView(context: Context) : View(context) {
         // A widened slot 1 has to be drawn and hit-tested at the width the module actually
         // occupies, or the field and the thing inside it would sit in different places.
         PadModules.byId(layout.column(zone)[slot])?.let { module ->
-            PadRenderer.widenedBand(layout, zone, slot, module, landscape)?.let { band ->
+            PadRenderer.widenedBand(
+                layout, parts, zone, slot, module, landscape,
+                aspect = if (height > 0) width.toFloat() / height else PadModules.PORTRAIT_ASPECT,
+            )?.let { band ->
                 l = band.first
                 r = band.second
             }

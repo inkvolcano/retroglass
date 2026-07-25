@@ -144,20 +144,28 @@ object PadModules {
         val stretch: Boolean = false,
     ) {
         /**
-         * Caps a control's size so the module keeps inside the rows it was given.
+         * Caps a control's size so the module sits inside its field with a margin all round.
          *
-         * A size is a fraction of the pad's shorter edge, so the same number covers a very
-         * different share of the height depending on the pad's shape: a d-pad that sits neatly in
-         * two portrait rows is half again too tall for two landscape ones, and ran off the bottom
-         * of the pad entirely. The allowance lets a module bleed slightly past its rows — clusters
-         * have always done so and it reads fine — while stopping the overflow that clips.
+         * A size is a fraction of the pad's shorter edge while a field is a fraction of the pad,
+         * so the same number covers a very different share of each depending on the pad's shape —
+         * a d-pad that sits neatly in two portrait rows is half again too tall for two landscape
+         * ones. Both axes are capped, because a module can be too wide for its column as easily as
+         * too tall for its rows, and [BAND_MARGIN] keeps a gap at every edge so neighbouring
+         * modules never look welded together.
          */
-        fun fit(size: Float): Float =
-            if (my <= 0f) size else minOf(size, h / my * BAND_ALLOWANCE)
+        fun fit(size: Float): Float {
+            var out = size
+            if (my > 0f) out = minOf(out, h / my * BAND_MARGIN)
+            if (mx > 0f) out = minOf(out, w / mx * BAND_MARGIN)
+            return out
+        }
+
+        /** A bar's length is measured against the pad width, so it fills the field directly. */
+        fun fitBar(): Float = w * BAND_MARGIN
 
         companion object {
-            /** How far past its own rows a module may bleed before it is capped. */
-            const val BAND_ALLOWANCE = 1.15f
+            /** Share of its field a module may occupy, leaving the rest as margin. */
+            const val BAND_MARGIN = 0.90f
 
             /** Builds the unit converters for a pad of the given width/height ratio. */
             fun units(aspect: Float): Pair<Float, Float> =
@@ -236,10 +244,12 @@ object PadModules {
         if (take.isEmpty()) return emptyList()
         // A widened landscape slot-1 band is meant to be filled end to end; everywhere else the
         // shoulder keeps the width the console authored for it.
-        // A BAR is the one shape whose length ControllerView measures against the view *width*
-        // rather than the shorter edge (barHalfLen), so a bar filling a band is simply the band's
-        // own width. Everywhere else the shoulder keeps the width the console authored.
-        val size = if (box.stretch) box.w else take.first().size * scale
+        // A shoulder fills the width it is given, in both orientations: its field is a whole
+        // column (or a widened landscape band), and a short bar floating in the middle of that
+        // leaves the reach it was supposed to provide unused. A BAR is also the one shape whose
+        // length ControllerView measures against the view width (barHalfLen), so filling the
+        // field is simply the field's own width.
+        val size = box.fitBar()
         return if (m.id == "shComb2" || m.id == "shComb3") {
             combinedPill(take, box.cx, box.cy, size)
         } else {

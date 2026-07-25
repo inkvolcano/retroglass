@@ -101,7 +101,7 @@ object PadRenderer {
             val side = if (zone == PadLayout.ZONE_LC) 'L' else 'R'
             for ((slot, id) in layout.column(zone).entries.sortedBy { it.key }) {
                 val module = PadModules.byId(id) ?: continue
-                val widen = widenedBand(layout, zone, slot, module, landscape)
+                val widen = widenedBand(layout, parts, zone, slot, module, landscape, aspect)
                 val l = widen?.first ?: left
                 val r = widen?.second ?: right
                 val box = PadModules.Box(
@@ -133,26 +133,58 @@ object PadRenderer {
     }
 
     /**
-     * The widened slot-1 band of handoff §6.6, or null when the rule does not apply.
+     * The slot-1 band a shoulder actually gets, or null when it simply takes its whole column.
      *
-     * In landscape an occupied CT already claims the top row, so a shoulder in slot 1 can run
-     * inward to meet it instead of staying inside its narrow column — the two read as one row,
-     * which is how the wireframe draws LT · CT · RT. With CT empty the picture covers that row
-     * and widening would push the shoulder over the game, so the rule is off.
+     * CT and slot 1 are the same row, and a shoulder fills the width it is given — so with CT
+     * occupied the two would be drawn straight through each other. The band therefore runs from
+     * the pad edge to the CT zone and stops there, which is both handoff §6.6's widening (in
+     * landscape the column is narrower than that, so the shoulder grows to meet CT) and its
+     * mirror image in portrait (the column is wider, so the shoulder gives way to it). LT · CT ·
+     * RT read as one row either way.
+     *
+     * With CT empty there is nothing to avoid and the shoulder keeps the full column — in
+     * landscape that row is the picture, which the widening must not cover.
      */
     fun widenedBand(
         layout: PadLayout,
+        parts: PadParts,
         zone: String,
         slot: Int,
         module: PadModules.Module,
         landscape: Boolean,
+        aspect: Float = PadModules.PORTRAIT_ASPECT,
     ): Pair<Float, Float>? {
-        if (!landscape || slot != 1 || layout.ct == null) return null
+        if (slot != 1 || layout.ct == null) return null
         if (module.cat != PadModules.Cat.SHOULDER) return null
-        val (left, right) = columnBounds(layout, zone, landscape = true)
-        val (ctL, ctR) = centreBounds(PadLayout.ZONE_CT, landscape = true)
-        return if (zone == PadLayout.ZONE_LC) left to (ctL - EDGE_INSET)
-        else (ctR + EDGE_INSET) to right
+        val (mx, my) = PadModules.Box.units(aspect)
+        val (left, right) = columnBounds(layout, zone, landscape)
+        // Yield to what CT actually holds, not to the zone it may occupy: a single START pill
+        // leaves most of that 40% box empty, and stopping at the box's edge throws away reach the
+        // shoulder could have had. Measured from the real module so it tracks whatever is placed.
+        val (ctL, ctR) = ctSpan(layout, parts, landscape, mx, my)
+            ?: centreBounds(PadLayout.ZONE_CT, landscape)
+        val gap = EDGE_INSET * 2f
+        return if (zone == PadLayout.ZONE_LC) left to minOf(right, ctL - gap)
+        else maxOf(left, ctR + gap) to right
+    }
+
+    /** Horizontal extent of whatever CT holds, in width fractions, or null when it is empty. */
+    private fun ctSpan(
+        layout: PadLayout,
+        parts: PadParts,
+        landscape: Boolean,
+        mx: Float,
+        my: Float,
+    ): Pair<Float, Float>? {
+        val module = PadModules.byId(layout.ct) ?: return null
+        val (l, r) = centreBounds(PadLayout.ZONE_CT, landscape)
+        val box = PadModules.Box(
+            cx = (l + r) / 2f, cy = centreY(PadLayout.ZONE_CT, landscape),
+            w = r - l, h = SLOT_H, mx = mx, my = my,
+        )
+        val defs = PadModules.emit(module, parts, box, layout.scaleFactor)
+        if (defs.isEmpty()) return null
+        return defs.minOf { it.x - halfWidth(it, mx) } to defs.maxOf { it.x + halfWidth(it, mx) }
     }
 
     /**
