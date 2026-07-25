@@ -220,7 +220,10 @@ object PadModules {
         if (take.isEmpty()) return emptyList()
         // A widened landscape slot-1 band is meant to be filled end to end; everywhere else the
         // shoulder keeps the width the console authored for it.
-        val size = if (box.stretch) box.w / BAR_ASPECT else take.first().size * scale
+        // box.w is a width fraction; size is a fraction of the shorter edge. A bar of `size`
+        // spans `size * mx * BAR_ASPECT` of the width, so filling the band means dividing by both.
+        val size = if (box.stretch && box.mx > 0f) box.w / (BAR_ASPECT * box.mx)
+        else take.first().size * scale
         return if (m.id == "shComb2" || m.id == "shComb3") {
             combinedPill(take, box.cx, box.cy, size)
         } else {

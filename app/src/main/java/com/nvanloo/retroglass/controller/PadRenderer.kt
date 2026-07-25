@@ -105,7 +105,7 @@ object PadRenderer {
                 val emitted = PadModules.emit(module, parts, box, scale, side, stickIndex)
                 if (module.family == PadModules.Family.STICK) stickIndex++
                 val align = layout.align[zone + slot] ?: 'c'
-                out += alignGroup(emitted, align, l, r)
+                out += alignGroup(emitted, align, l, r, mx)
             }
         }
 
@@ -148,10 +148,11 @@ object PadRenderer {
         align: Char,
         left: Float,
         right: Float,
+        mx: Float,
     ): List<ControlDef> {
         if (defs.isEmpty() || align == 'c') return defs
-        val minX = defs.minOf { it.x - halfWidth(it) }
-        val maxX = defs.maxOf { it.x + halfWidth(it) }
+        val minX = defs.minOf { it.x - halfWidth(it) * mx }
+        val maxX = defs.maxOf { it.x + halfWidth(it) * mx }
         val dx = when (align) {
             'l' -> left + EDGE_INSET - minX
             'r' -> right - EDGE_INSET - maxX
@@ -160,7 +161,10 @@ object PadRenderer {
         return defs.map { it.copy(x = it.x + dx) }
     }
 
-    /** A control's half-width in pad-width fractions — pills and bars are wider than they are tall. */
+    /**
+     * A control's half-width as a fraction of the pad's *shorter edge* — pills and bars are wider
+     * than they are tall. Multiply by `Box.mx` to get a width fraction.
+     */
     fun halfWidth(def: ControlDef): Float = when (def.shape) {
         ControlShape.PILL -> def.size / 2f * 1.85f * def.widthScale
         ControlShape.BAR -> def.size / 2f * 1.85f
