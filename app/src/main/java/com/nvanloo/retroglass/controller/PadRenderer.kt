@@ -21,8 +21,19 @@ object PadRenderer {
     /** Overlay zone width, centred on the seam — the handoff's 40% centre box. */
     private const val CENTRE_W = 0.40f
 
-    /** Landscape columns are this fraction of their portrait width, hugging the outer edges. */
-    private const val LANDSCAPE_COL = 0.40f
+    /** Width of the centre overlay zones in landscape. */
+    private const val CENTRE_LAND = 0.34f
+
+    /**
+     * How much of the pad the two landscape columns share between them.
+     *
+     * The handoff defines the screen as what LC/RC/CT/CL leave, so the columns own everything
+     * outside the centre band — `1 - CENTRE_LAND`, split between them in the layout's own ratio.
+     * Sizing them any narrower than that leaves a strip nobody owns between the column and the
+     * picture, and since a module centres in its column, every control ends up shoved against the
+     * outer edge with the slack stranded on the inside.
+     */
+    private const val LANDSCAPE_SPAN = 1f - CENTRE_LAND
 
     private const val EDGE_INSET = 0.012f
 
@@ -40,13 +51,13 @@ object PadRenderer {
     /** Left and right edges of a column, as fractions of the pad width. */
     fun columnBounds(layout: PadLayout, zone: String, landscape: Boolean): Pair<Float, Float> {
         val (lf, rf) = layout.splitFractions
-        val l = if (landscape) lf * LANDSCAPE_COL else lf
-        val r = if (landscape) rf * LANDSCAPE_COL else rf
+        val l = if (landscape) lf * LANDSCAPE_SPAN else lf
+        val r = if (landscape) rf * LANDSCAPE_SPAN else rf
         return if (zone == PadLayout.ZONE_LC) 0f to l else (1f - r) to 1f
     }
 
     fun centreBounds(zone: String, landscape: Boolean): Pair<Float, Float> {
-        val w = if (landscape) 0.34f else CENTRE_W
+        val w = if (landscape) CENTRE_LAND else CENTRE_W
         return (0.5f - w / 2f) to (0.5f + w / 2f)
     }
 
@@ -105,7 +116,9 @@ object PadRenderer {
                 val emitted = PadModules.emit(module, parts, box, scale, side, stickIndex)
                 if (module.family == PadModules.Family.STICK) stickIndex++
                 val align = layout.align[zone + slot] ?: 'c'
-                out += keepInside(alignGroup(emitted, align, l, r, mx), mx, my)
+                // Centre by what the module actually occupies before anything else moves it.
+                val centred = centreInBox(emitted, box.cx, box.cy, mx, my, centreX = align == 'c')
+                out += keepInside(alignGroup(centred, align, l, r, mx), mx, my)
             }
         }
 
@@ -140,6 +153,36 @@ object PadRenderer {
         val (ctL, ctR) = centreBounds(PadLayout.ZONE_CT, landscape = true)
         return if (zone == PadLayout.ZONE_LC) left to (ctL - EDGE_INSET)
         else (ctR + EDGE_INSET) to right
+    }
+
+    /**
+     * Centres a group on its field by the box it actually occupies.
+     *
+     * Modules are built around a centre point, but a cluster is rarely symmetrical about it: its
+     * buttons differ in size and count, so the average of their centres is not the middle of the
+     * shape you see. Kept as-is, an asymmetric cluster — a Genesis arc, the N64 faces, any
+     * hand-authored pad — sits visibly high or low in its rows. Measuring the group's real extent
+     * and centring that instead puts every module where its field says it should be.
+     */
+    private fun centreInBox(
+        defs: List<ControlDef>,
+        cx: Float,
+        cy: Float,
+        mx: Float,
+        my: Float,
+        centreX: Boolean,
+    ): List<ControlDef> {
+        if (defs.isEmpty()) return defs
+        val minY = defs.minOf { it.y - halfHeight(it, my) }
+        val maxY = defs.maxOf { it.y + halfHeight(it, my) }
+        val dy = cy - (minY + maxY) / 2f
+        val dx = if (!centreX) 0f else {
+            val minX = defs.minOf { it.x - halfWidth(it, mx) }
+            val maxX = defs.maxOf { it.x + halfWidth(it, mx) }
+            cx - (minX + maxX) / 2f
+        }
+        return if (dx == 0f && dy == 0f) defs
+        else defs.map { it.copy(x = it.x + dx, y = it.y + dy) }
     }
 
     /** Slides an emitted group so it sits left, centred or right within its column. */
