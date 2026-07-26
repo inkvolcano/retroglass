@@ -14,9 +14,19 @@ package com.nvanloo.retroglass.controller
  */
 object PadRenderer {
 
-    /** Slot band tops as fractions of the column's height, and each band's height. */
-    private val SLOT_TOPS = floatArrayOf(0.02f, 0.184f, 0.348f, 0.512f, 0.676f, 0.84f)
-    private const val SLOT_H = 0.15f
+    /**
+     * Row geometry, derived rather than tabulated (handoff §7.1).
+     *
+     * Row 1 keeps a fixed height whatever the count, because it is the shoulder row and has to
+     * stay aligned with CT — a shoulder that grew or shrank with the row count would break the
+     * LT · CT · RT line that the whole top of the pad is built around. The remaining rows divide
+     * what is left evenly.
+     */
+    private const val FIRST_TOP = 0.02f
+    private const val FIRST_H = 0.15f
+    private const val ROW_GAP = 0.014f
+    private const val COLUMN_BOTTOM = 0.99f
+    private const val SLOT_H = FIRST_H
 
     /** Overlay zone width, centred on the seam — the handoff's 40% centre box. */
     private const val CENTRE_W = 0.40f
@@ -37,22 +47,48 @@ object PadRenderer {
 
     private const val EDGE_INSET = 0.012f
 
-    /** Vertical centre of a module occupying [slots] rows starting at [start] (1-based). */
-    fun slotCentreY(start: Int, slots: Int): Float {
-        val top = SLOT_TOPS[(start - 1).coerceIn(0, SLOT_TOPS.lastIndex)]
-        val lastIx = (start + slots - 2).coerceIn(0, SLOT_TOPS.lastIndex)
-        return (top + SLOT_TOPS[lastIx] + SLOT_H) / 2f
+    /** Height of every row after the first, for a column of [zones] rows. */
+    private fun restHeight(zones: Int): Float {
+        val rest = zones - 1
+        if (rest <= 0) return FIRST_H
+        val available = COLUMN_BOTTOM - (FIRST_TOP + FIRST_H + ROW_GAP)
+        return (available - ROW_GAP * (rest - 1)) / rest
     }
 
-    fun slotTop(slot: Int): Float = SLOT_TOPS[(slot - 1).coerceIn(0, SLOT_TOPS.lastIndex)]
+    fun slotTop(slot: Int, zones: Int = PadLayout.DEFAULT_ZONES): Float {
+        val n = slot.coerceIn(1, zones)
+        if (n == 1) return FIRST_TOP
+        val h = restHeight(zones)
+        return FIRST_TOP + FIRST_H + ROW_GAP + (n - 2) * (h + ROW_GAP)
+    }
 
-    fun slotHeight(): Float = SLOT_H
+    fun slotHeight(slot: Int = 1, zones: Int = PadLayout.DEFAULT_ZONES): Float =
+        if (slot <= 1) FIRST_H else restHeight(zones)
 
-    /** Left and right edges of a column, as fractions of the pad width. */
+    /** Vertical centre of a module occupying [slots] rows starting at [start] (1-based). */
+    fun slotCentreY(start: Int, slots: Int, zones: Int = PadLayout.DEFAULT_ZONES): Float {
+        val last = (start + slots - 1).coerceIn(1, zones)
+        return (slotTop(start, zones) + slotTop(last, zones) + slotHeight(last, zones)) / 2f
+    }
+
+    /** Total height a module of [slots] rows starting at [start] is given. */
+    fun slotSpan(start: Int, slots: Int, zones: Int = PadLayout.DEFAULT_ZONES): Float {
+        val last = (start + slots - 1).coerceIn(1, zones)
+        return slotTop(last, zones) + slotHeight(last, zones) - slotTop(start, zones)
+    }
+
+    /**
+     * Left and right edges of a column, as fractions of the pad width.
+     *
+     * With the picture on the phone, the landscape columns share only what the centre band leaves.
+     * Reflowed — picture on the glasses — there is no centre band to leave, so they meet in the
+     * middle and the split divides the whole width, which is what the ratio says it should do.
+     */
     fun columnBounds(layout: PadLayout, zone: String, landscape: Boolean): Pair<Float, Float> {
         val (lf, rf) = layout.splitFractions
-        val l = if (landscape) lf * LANDSCAPE_SPAN else lf
-        val r = if (landscape) rf * LANDSCAPE_SPAN else rf
+        val span = if (!landscape || layout.reflowing) 1f else LANDSCAPE_SPAN
+        val l = lf * span
+        val r = rf * span
         return if (zone == PadLayout.ZONE_LC) 0f to l else (1f - r) to 1f
     }
 
@@ -61,11 +97,15 @@ object PadRenderer {
         return (0.5f - w / 2f) to (0.5f + w / 2f)
     }
 
-    fun centreY(zone: String, landscape: Boolean): Float = when {
-        zone == PadLayout.ZONE_CT && landscape -> 0.085f
-        zone == PadLayout.ZONE_CT -> slotCentreY(1, 1)
-        landscape -> 0.90f
-        else -> slotCentreY(6, 1)
+    fun centreY(zone: String, landscape: Boolean, layout: PadLayout? = null): Float {
+        val zones = layout?.zones ?: PadLayout.DEFAULT_ZONES
+        return when {
+            // CT follows row 1 wherever it goes, since they are the same row.
+            zone == PadLayout.ZONE_CT && landscape -> 0.085f
+            zone == PadLayout.ZONE_CT -> slotCentreY(1, 1, zones)
+            landscape -> 0.90f
+            else -> slotCentreY(zones, 1, zones)
+        }
     }
 
     /**
@@ -87,7 +127,7 @@ object PadRenderer {
             val module = PadModules.byId(layout.moduleAt(zone, null)) ?: continue
             val (l, r) = centreBounds(zone, landscape)
             val box = PadModules.Box(
-                cx = (l + r) / 2f, cy = centreY(zone, landscape), w = r - l, h = SLOT_H,
+                cx = (l + r) / 2f, cy = centreY(zone, landscape, layout), w = r - l, h = FIRST_H,
                 mx = mx, my = my,
             )
             // CL's stick is the one system module that belongs to a column's worth of space;
@@ -106,10 +146,10 @@ object PadRenderer {
                 val r = widen?.second ?: right
                 val box = PadModules.Box(
                     cx = (l + r) / 2f,
-                    cy = if (widen != null) centreY(PadLayout.ZONE_CT, landscape)
-                    else slotCentreY(slot, module.slots),
+                    cy = if (widen != null) centreY(PadLayout.ZONE_CT, landscape, layout)
+                    else slotCentreY(slot, module.slots, layout.zones),
                     w = r - l,
-                    h = module.slots * SLOT_H,
+                    h = slotSpan(slot, module.slots, layout.zones),
                     mx = mx, my = my,
                     stretch = widen != null,
                 )
@@ -127,7 +167,7 @@ object PadRenderer {
             // Losing the gear would strand the player in the game with no way back to the menu,
             // so it is re-seated at the top centre rather than allowed to go missing.
             val size = (parts.start?.size ?: 0.12f) * scale
-            out += PadModules.gear(0.5f, centreY(PadLayout.ZONE_CT, landscape), size)
+            out += PadModules.gear(0.5f, centreY(PadLayout.ZONE_CT, landscape, layout), size)
         }
         return out
     }
@@ -156,6 +196,9 @@ object PadRenderer {
     ): Pair<Float, Float>? {
         if (slot != 1 || layout.ct == null) return null
         if (module.cat != PadModules.Cat.SHOULDER) return null
+        // Reflowed landscape columns already meet in the middle: there is no band to grow into,
+        // and growing anyway would drive the two shoulders straight through each other.
+        if (landscape && layout.reflowing) return null
         val (mx, my) = PadModules.Box.units(aspect)
         val (left, right) = columnBounds(layout, zone, landscape)
         // Yield to what CT actually holds, not to the zone it may occupy: a single START pill
@@ -179,8 +222,8 @@ object PadRenderer {
         val module = PadModules.byId(layout.ct) ?: return null
         val (l, r) = centreBounds(PadLayout.ZONE_CT, landscape)
         val box = PadModules.Box(
-            cx = (l + r) / 2f, cy = centreY(PadLayout.ZONE_CT, landscape),
-            w = r - l, h = SLOT_H, mx = mx, my = my,
+            cx = (l + r) / 2f, cy = centreY(PadLayout.ZONE_CT, landscape, layout),
+            w = r - l, h = FIRST_H, mx = mx, my = my,
         )
         val defs = PadModules.emit(module, parts, box, layout.scaleFactor)
         if (defs.isEmpty()) return null

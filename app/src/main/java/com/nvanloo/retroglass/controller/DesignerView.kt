@@ -46,6 +46,10 @@ class DesignerView(context: Context) : View(context) {
     private var landscape: Boolean = false
     private var preview: Bitmap? = null
 
+    /** Editor chrome, not part of the saved layout, and shared by both orientations. */
+    private var collapsed = false
+    private var panelRect = RectF()
+
     /** Tappable rects built during draw: the setting pills, the overlay zones, then the slots. */
     private val hits = mutableListOf<Pair<RectF, () -> Unit>>()
 
@@ -107,7 +111,10 @@ class DesignerView(context: Context) : View(context) {
         } else {
             val screenBottom = inset + (h - inset * 2f) * screenFraction
             drawScreen(canvas, RectF(inset, inset, w - inset, screenBottom), unit)
-            drawPad(canvas, w, screenBottom + 4f * unit, h - inset, unit)
+            // Reflowed, the picture is on the glasses and the band it was holding belongs to the
+            // pad, so the columns start at the top of the phone rather than under the slit.
+            val padTop = if (layout.reflowing) inset else screenBottom + 4f * unit
+            drawPad(canvas, w, padTop, h - inset, unit)
         }
     }
 
@@ -125,6 +132,19 @@ class DesignerView(context: Context) : View(context) {
 
     /** The picture, with the settings panel inside it exactly as the wireframe draws it. */
     private fun drawScreen(canvas: Canvas, r: RectF, unit: Float) {
+        if (layout.noScr) {
+            // Nothing renders here: the game is on the glasses. The outline stays because the
+            // band is still reserved — the layout has to know what it is leaving room for — but
+            // it is drawn faint and never takes a tap, so the fields underneath stay reachable.
+            dashed.strokeWidth = 1.4f * unit
+            canvas.drawRoundRect(r, 6f * unit, 6f * unit, dashed)
+            text.color = zoneLabel
+            text.textAlign = Paint.Align.CENTER
+            text.textSize = 11f * unit
+            canvas.drawText("\u2931 EXTERNAL SCREEN", r.centerX(), r.top + 14f * unit, text)
+            drawSettings(canvas, r, unit)
+            return
+        }
         fill.color = screenBg
         canvas.drawRoundRect(r, 6f * unit, 6f * unit, fill)
         solid.color = Color.parseColor("#4A4A55")
@@ -136,23 +156,58 @@ class DesignerView(context: Context) : View(context) {
         text.textSize = 11f * unit
         canvas.drawText("◉ SCREEN 4:3", r.centerX(), r.top + 14f * unit, text)
 
+    }
+
+    /**
+     * The editor's own controls, sitting inside the screen box (handoff §7.3).
+     *
+     * They belong to the pad as a whole rather than to whichever module is selected, and keeping
+     * them here means the whole editor is one screen — no scrolling between the preview and the
+     * thing that changes it. The panel collapses to a corner pill for when it covers something you
+     * are trying to judge; that state is editor chrome, so it is deliberately not saved with the
+     * layout and is shared across both orientations.
+     */
+    private fun drawSettings(canvas: Canvas, r: RectF, unit: Float) {
+        if (collapsed) {
+            val label = "\u2303 settings"
+            text.textSize = 9f * unit
+            text.textAlign = Paint.Align.CENTER
+            val w = text.measureText(label) + 14f * unit
+            val pill = RectF(
+                r.right - 6f * unit - w, r.bottom - 6f * unit - 17f * unit,
+                r.right - 6f * unit, r.bottom - 6f * unit,
+            )
+            fill.color = Color.parseColor("#D90A0A0E")
+            canvas.drawRoundRect(pill, pill.height() / 2f, pill.height() / 2f, fill)
+            text.color = pillText
+            canvas.drawText(label, pill.centerX(), pill.centerY() + text.textSize * 0.36f, text)
+            hits += RectF(pill) to { collapsed = false; invalidate() }
+            return
+        }
+        // The two largest scales are offered only with the picture elsewhere; on-device they
+        // would bury the game, so they are hidden rather than shown and quietly ignored.
+        val scaleIds = PadLayout.SCALES + if (layout.noScr) PadLayout.EXTERNAL_SCALES else emptyList()
         val rows = listOf(
             "layout" to listOf(
-                Triple(
-                    "\u27F3 " + (if (landscape) "Landscape" else "Portrait"),
-                    false,
-                ) { onRotate?.invoke(); layout },
+                Triple("\u27F3 " + (if (landscape) "Landscape" else "Portrait"), false) {
+                    onRotate?.invoke(); layout
+                },
+                Triple("ext", layout.noScr) { layout.copy(noScr = !layout.noScr) },
             ),
+            "zones" to PadLayout.ZONE_COUNTS.map { n ->
+                Triple("$n", layout.zones == n) { layout.copy(zones = n).prunedToZones() }
+            } + Triple("\u21C5 reflow", layout.reflowing) { layout.copy(reflow = !layout.reflow) },
             "width" to PadLayout.SPLITS.map { id ->
                 Triple(PadLayout.splitLabel(id), layout.split == id) { layout.copy(split = id) }
             },
             "shadow" to listOf(
+                Triple("screen", layout.shadowScreen) { layout.copy(shadowScreen = !layout.shadowScreen) },
                 Triple("buttons", layout.shadowButtons) { layout.copy(shadowButtons = !layout.shadowButtons) },
                 Triple("d-pad", layout.shadowDpad) { layout.copy(shadowDpad = !layout.shadowDpad) },
                 Triple("stick", layout.shadowStick) { layout.copy(shadowStick = !layout.shadowStick) },
             ),
-            "scale" to listOf('s' to "small", 'n' to "normal", 'l' to "large").map { (key, label) ->
-                Triple(label, layout.scale == key) { layout.copy(scale = key) }
+            "scale" to scaleIds.map { id ->
+                Triple(PadLayout.scaleLabel(id), layout.scale == id) { layout.copy(scale = id) }
             },
         )
 
@@ -179,7 +234,8 @@ class DesignerView(context: Context) : View(context) {
             r.left + 6f * unit, r.bottom - panelH - 6f * unit,
             r.right - 6f * unit, r.bottom - 6f * unit,
         )
-        fill.color = Color.parseColor("#8C000000")
+        panelRect = panel
+        fill.color = Color.parseColor("#EB0A0A0E")
         canvas.drawRoundRect(panel, 6f * unit, 6f * unit, fill)
         solid.color = Color.parseColor("#4A4A55")
         canvas.drawRoundRect(panel, 6f * unit, 6f * unit, solid)
@@ -213,6 +269,17 @@ class DesignerView(context: Context) : View(context) {
             }
             y += pillH + gap
         }
+
+        // Collapse handle on the panel's own bottom-right corner.
+        val handle = RectF(
+            panelRect.right - 18f * unit, panelRect.bottom - 15f * unit,
+            panelRect.right - 3f * unit, panelRect.bottom - 2f * unit,
+        )
+        text.textSize = 10f * unit
+        text.textAlign = Paint.Align.CENTER
+        text.color = pillText
+        canvas.drawText("\u2304", handle.centerX(), handle.centerY() + 3f * unit, text)
+        hits += RectF(handle) to { collapsed = true; invalidate() }
     }
 
     /** Columns, slots, overlay zones and the live pad render, in the band below the screen. */
@@ -235,7 +302,7 @@ class DesignerView(context: Context) : View(context) {
         val slotHits = mutableListOf<Pair<RectF, () -> Unit>>()
         for (zone in listOf(PadLayout.ZONE_LC, PadLayout.ZONE_RC)) {
             val (l, _) = PadRenderer.columnBounds(layout, zone, landscape)
-            for (slot in 1..PadLayout.SLOT_COUNT) {
+            for (slot in 1..layout.zones) {
                 val rect = slotRect(zone, slot, 1, w, top, padH)
                 canvas.drawRoundRect(rect, 5f * unit, 5f * unit, dashed)
                 text.color = zoneLabel
@@ -300,15 +367,17 @@ class DesignerView(context: Context) : View(context) {
                 r = band.second
             }
         }
-        val y0 = top + PadRenderer.slotTop(slot) * padH
-        val y1 = top + (PadRenderer.slotTop(slot + span - 1) + PadRenderer.slotHeight()) * padH
+        val last = (slot + span - 1).coerceAtMost(layout.zones)
+        val y0 = top + PadRenderer.slotTop(slot, layout.zones) * padH
+        val y1 = top + (PadRenderer.slotTop(last, layout.zones) +
+            PadRenderer.slotHeight(last, layout.zones)) * padH
         return RectF(l * w + 2f, y0, r * w - 2f, y1)
     }
 
     private fun centreRect(zone: String, w: Float, top: Float, padH: Float): RectF {
         val (l, r) = PadRenderer.centreBounds(zone, landscape)
-        val cy = top + PadRenderer.centreY(zone, landscape) * padH
-        val half = PadRenderer.slotHeight() * padH / 2f
+        val cy = top + PadRenderer.centreY(zone, landscape, layout) * padH
+        val half = PadRenderer.slotHeight(1, layout.zones) * padH / 2f
         return RectF(l * w, cy - half, r * w, cy + half)
     }
 

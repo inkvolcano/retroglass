@@ -294,3 +294,48 @@ the drawing, a measurement cannot.
 CL collision rule for bottom slots · bottom-slot widening toward CL · turbo/fast-forward/state
 quick buttons · per-layout opacity · left-handed mirror button · per-console screen aspect
 (GBA 3:2, PSP 16:9) · named save/reset UI.
+
+---
+
+## 7. Changes — 2026-07-26 (implemented)
+
+Imported from the design project and built. Every setting is stored **per orientation** except the
+panel's collapse state, which is editor chrome.
+
+### 7.1 Configurable zone count (5–7)
+`zones` per orientation, default 6. Row 1 keeps a fixed height (top 2%, height 15%) whatever the
+count — it is the shoulder row and has to stay aligned with CT, and a shoulder that grew or shrank
+with the row count would break the LT · CT · RT line the whole top of the pad is built around. The
+remaining rows divide what is left evenly (1.4% gaps, down to 99%). The six-row case reproduces the
+old hard-coded table exactly, so nothing moves for a layout that never touches the setting.
+
+Shrinking the count prunes modules whose footprint would run past the new bottom row. Leaving them
+in the map would make them invisible but still occupy their rows, blocking placements for a reason
+nothing on screen explains.
+
+### 7.2 External-screen mode + reflow
+`noScr` puts the video on the glasses: the screen box becomes a faint dashed "⇱ EXTERNAL SCREEN"
+outline that never takes a tap, and the landscape 4:3 guide hides. The band stays drawn because it
+is still reserved — the layout has to know what it is leaving room for.
+
+`reflow` (only meaningful with `noScr`) hands that band back to the pad. Portrait: the columns start
+at the top of the phone instead of under the slit. Landscape: the columns meet in the middle, the
+split dividing the whole width, and the §6.6 shoulder widening switches off — the columns already
+meet, so growing into a band that is not there would drive the two shoulders through each other.
+
+Scale gains **XXL (1.6×)** and **XXXL (2×)**, offered only in external mode and falling back to
+normal otherwise, so a saved external layout opened on-device cannot bury the game under the pad.
+
+### 7.3 Settings panel
+Near-opaque, compact, with each category titled above its buttons: **layout** (⟳ orientation · ext)
+· **zones** (5 · 6 · 7 · ⇅ reflow) · **width** · **shadow** (screen · buttons · d-pad · stick) ·
+**scale**. A `⌄` handle on the panel's bottom-right corner collapses it to a `⌃ settings` pill, for
+when it covers the part of the layout you are trying to judge.
+
+The shadow toggles now drive the real pad: `ControllerView` skips the contact-shadow pass per module
+family, so a pad can lift its buttons off the glass while leaving a flat d-pad.
+
+### 7.4 Persistence
+`zones`, `noScr` and `reflow` join the serialised layout; `scale` widens from a single char to an id
+so it can carry `xxl`/`xxxl`. Older saved strings parse unchanged — every new key falls back to its
+default when absent.

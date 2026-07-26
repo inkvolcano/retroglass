@@ -115,6 +115,11 @@ class ControllerView @JvmOverloads constructor(
      *  state is driven from the physical gamepad via [monitorButton]/[monitorDpad]/[monitorStick]
      *  so the diagram lights up as the player presses their pad (companion-dashboard mode). */
     var monitorMode: Boolean = false
+
+    // Shadow toggles from the current layout, read on reload so drawing stays allocation-free.
+    private var padShadowButtons = true
+    private var padShadowDpad = true
+    private var padShadowStick = true
         set(value) {
             if (field == value) return
             field = value
@@ -282,6 +287,11 @@ class ControllerView @JvmOverloads constructor(
         // conversion is what landscape previously needed a separate solver for.
         val parts = PadParts.from(ControllerDefs.controlsFor(console))
         val design = layoutStore.padDesign(console) ?: PadDeriver.derive(parts)
+        design.forOrientation(landscape).let {
+            padShadowButtons = it.shadowButtons
+            padShadowDpad = it.shadowDpad
+            padShadowStick = it.shadowStick
+        }
         if (width > 0 && height > 0) {
             base = PadRenderer.render(
                 design.forOrientation(landscape), parts, landscape,
@@ -844,7 +854,9 @@ class ControllerView @JvmOverloads constructor(
         // Three passes make a control read as sitting on the glass rather than printed on it:
         // its shadow and side wall underneath, then the face, then the lit rim on top.
         if (tiltBezel && !editMode) {
-            for (c in controls) drawExtrusion(canvas, c, alpha)
+            // The designer's shadow toggles are per module family, so a pad can lift its
+            // buttons off the glass while leaving a flat d-pad, or the reverse.
+            for (c in controls) if (shadowsOn(c.def)) drawExtrusion(canvas, c, alpha)
         }
         for (c in controls) {
             drawControl(canvas, c, alpha)
@@ -872,6 +884,13 @@ class ControllerView @JvmOverloads constructor(
      * body's side wall. Both sit on the side away from the light, so they swing with the phone
      * and the control looks like it is standing off the surface rather than drawn onto it.
      */
+    /** Whether this control's family currently draws a drop shadow (handoff §6.5). */
+    private fun shadowsOn(def: ControlDef): Boolean = when (def.type) {
+        ControlType.DPAD -> padShadowDpad
+        ControlType.STICK -> padShadowStick
+        else -> padShadowButtons
+    }
+
     private fun drawExtrusion(canvas: Canvas, c: ControlState, alpha: Int) {
         val (hx, hy, strength) = lightVector()
         if (strength < LIGHT_CUTOFF) return  // flat at the resting pose, by design

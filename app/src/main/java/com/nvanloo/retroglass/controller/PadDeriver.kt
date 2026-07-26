@@ -96,7 +96,7 @@ object PadDeriver {
         module: String,
         preferLow: Boolean = true,
     ) {
-        val maxStart = PadLayout.SLOT_COUNT - slots + 1
+        val maxStart = PadLayout.DEFAULT_ZONES - slots + 1
         val candidates = (1..maxStart).sortedWith(
             compareBy({ abs(it - preferred) }, { if (preferLow) it else -it }),
         )
@@ -112,7 +112,7 @@ object PadDeriver {
 
     /** The slot whose band centre sits closest to an authored y. */
     private fun slotFor(y: Float, slots: Int): Int =
-        (1..(PadLayout.SLOT_COUNT - slots + 1)).minByOrNull {
+        (1..(PadLayout.DEFAULT_ZONES - slots + 1)).minByOrNull {
             abs(PadRenderer.slotCentreY(it, slots) - y)
         } ?: 1
 }
