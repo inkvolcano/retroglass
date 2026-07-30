@@ -20,10 +20,10 @@ import com.nvanloo.retroglass.model.Console
  * is and where the other modules sit, so the editor shows the whole thing and you tap the part you
  * want to change.
  *
- * The width/shadow/scale controls live *inside* the screen box, as the wireframe draws them. They
- * belong to the pad as a whole rather than to whichever module happens to be selected, and putting
- * them there keeps the editor on one screen instead of scrolling between the preview and the
- * controls that change it.
+ * The view is only the picture and the fields. The wireframe draws the pad's settings inside the
+ * screen box as small pills, and that is right for a drawing — at the size the preview has to be to
+ * judge reach by, those pills came out too small to hit, so the host lays them out as ordinary rows
+ * underneath instead.
  */
 class DesignerView(context: Context) : View(context) {
 
@@ -32,9 +32,6 @@ class DesignerView(context: Context) : View(context) {
 
     /** Called with the new layout when one of the in-screen setting pills is tapped. */
     var onLayoutChange: ((PadLayout) -> Unit)? = null
-
-    /** Called by the layout row's rotate pill: switch which orientation is being edited. */
-    var onRotate: (() -> Unit)? = null
 
     var selected: Pair<String, Int?>? = null
         set(value) { field = value; invalidate() }
@@ -46,9 +43,6 @@ class DesignerView(context: Context) : View(context) {
     private var landscape: Boolean = false
     private var preview: Bitmap? = null
 
-    /** Editor chrome, not part of the saved layout, and shared by both orientations. */
-    private var collapsed = false
-    private var panelRect = RectF()
 
     /** Tappable rects built during draw: the setting pills, the overlay zones, then the slots. */
     private val hits = mutableListOf<Pair<RectF, () -> Unit>>()
@@ -142,7 +136,6 @@ class DesignerView(context: Context) : View(context) {
             text.textAlign = Paint.Align.CENTER
             text.textSize = 11f * unit
             canvas.drawText("\u2931 EXTERNAL SCREEN", r.centerX(), r.top + 14f * unit, text)
-            drawSettings(canvas, r, unit)
             return
         }
         fill.color = screenBg
@@ -156,130 +149,6 @@ class DesignerView(context: Context) : View(context) {
         text.textSize = 11f * unit
         canvas.drawText("◉ SCREEN 4:3", r.centerX(), r.top + 14f * unit, text)
 
-    }
-
-    /**
-     * The editor's own controls, sitting inside the screen box (handoff §7.3).
-     *
-     * They belong to the pad as a whole rather than to whichever module is selected, and keeping
-     * them here means the whole editor is one screen — no scrolling between the preview and the
-     * thing that changes it. The panel collapses to a corner pill for when it covers something you
-     * are trying to judge; that state is editor chrome, so it is deliberately not saved with the
-     * layout and is shared across both orientations.
-     */
-    private fun drawSettings(canvas: Canvas, r: RectF, unit: Float) {
-        if (collapsed) {
-            val label = "\u2303 settings"
-            text.textSize = 9f * unit
-            text.textAlign = Paint.Align.CENTER
-            val w = text.measureText(label) + 14f * unit
-            val pill = RectF(
-                r.right - 6f * unit - w, r.bottom - 6f * unit - 17f * unit,
-                r.right - 6f * unit, r.bottom - 6f * unit,
-            )
-            fill.color = Color.parseColor("#D90A0A0E")
-            canvas.drawRoundRect(pill, pill.height() / 2f, pill.height() / 2f, fill)
-            text.color = pillText
-            canvas.drawText(label, pill.centerX(), pill.centerY() + text.textSize * 0.36f, text)
-            hits += RectF(pill) to { collapsed = false; invalidate() }
-            return
-        }
-        // The two largest scales are offered only with the picture elsewhere; on-device they
-        // would bury the game, so they are hidden rather than shown and quietly ignored.
-        val scaleIds = PadLayout.SCALES + if (layout.noScr) PadLayout.EXTERNAL_SCALES else emptyList()
-        val rows = listOf(
-            "layout" to listOf(
-                Triple("\u27F3 " + (if (landscape) "Landscape" else "Portrait"), false) {
-                    onRotate?.invoke(); layout
-                },
-                Triple("ext", layout.noScr) { layout.copy(noScr = !layout.noScr) },
-            ),
-            "zones" to PadLayout.ZONE_COUNTS.map { n ->
-                Triple("$n", layout.zones == n) { layout.copy(zones = n).prunedToZones() }
-            } + Triple("\u21C5 reflow", layout.reflowing) { layout.copy(reflow = !layout.reflow) },
-            "width" to PadLayout.SPLITS.map { id ->
-                Triple(PadLayout.splitLabel(id), layout.split == id) { layout.copy(split = id) }
-            },
-            "shadow" to listOf(
-                Triple("screen", layout.shadowScreen) { layout.copy(shadowScreen = !layout.shadowScreen) },
-                Triple("buttons", layout.shadowButtons) { layout.copy(shadowButtons = !layout.shadowButtons) },
-                Triple("d-pad", layout.shadowDpad) { layout.copy(shadowDpad = !layout.shadowDpad) },
-                Triple("stick", layout.shadowStick) { layout.copy(shadowStick = !layout.shadowStick) },
-            ),
-            "scale" to scaleIds.map { id ->
-                Triple(PadLayout.scaleLabel(id), layout.scale == id) { layout.copy(scale = id) }
-            },
-        )
-
-        val gap = 4f * unit
-        val pillH = 15f * unit
-        val labelH = 11f * unit
-        text.textSize = 9f * unit
-
-        // Measure first: the width row carries four options and wraps on a narrow preview, so the
-        // panel has to be as tall as the rows actually turn out to be, not as tall as one line each.
-        val innerW = r.width() - 12f * unit - gap * 4f
-        var lines = 0
-        for ((_, pills) in rows) {
-            var x = 0f
-            lines++
-            for ((caption, _, _) in pills) {
-                val tw = text.measureText(caption) + 10f * unit
-                if (x > 0f && x + tw > innerW) { lines++; x = 0f }
-                x += tw + gap
-            }
-        }
-        val panelH = rows.size * labelH + lines * (pillH + gap) + gap
-        val panel = RectF(
-            r.left + 6f * unit, r.bottom - panelH - 6f * unit,
-            r.right - 6f * unit, r.bottom - 6f * unit,
-        )
-        panelRect = panel
-        fill.color = Color.parseColor("#EB0A0A0E")
-        canvas.drawRoundRect(panel, 6f * unit, 6f * unit, fill)
-        solid.color = Color.parseColor("#4A4A55")
-        canvas.drawRoundRect(panel, 6f * unit, 6f * unit, solid)
-
-        var y = panel.top + gap
-        for ((label, pills) in rows) {
-            text.color = zoneLabel
-            text.textAlign = Paint.Align.LEFT
-            canvas.drawText(label, panel.left + gap * 1.5f, y + labelH * 0.8f, text)
-            y += labelH
-            text.textAlign = Paint.Align.CENTER
-            var x = panel.left + gap * 1.5f
-            for ((caption, on, apply) in pills) {
-                val tw = text.measureText(caption) + 10f * unit
-                if (x > panel.left + gap * 1.5f && x + tw > panel.right - gap) {
-                    x = panel.left + gap * 1.5f
-                    y += pillH + gap
-                }
-                val pill = RectF(x, y, x + tw, y + pillH)
-                fill.color = if (on) accent else pillOff
-                canvas.drawRoundRect(pill, pillH / 2f, pillH / 2f, fill)
-                text.color = if (on) Color.parseColor("#1A1A1A") else pillText
-                canvas.drawText(caption, pill.centerX(), pill.centerY() + text.textSize * 0.36f, text)
-                hits += RectF(pill) to {
-                    // The rotate pill returns the layout unchanged and switches orientation
-                    // through its own callback; everything else is a real edit.
-                    val next = apply()
-                    if (next !== layout) onLayoutChange?.invoke(next)
-                }
-                x += tw + gap
-            }
-            y += pillH + gap
-        }
-
-        // Collapse handle on the panel's own bottom-right corner.
-        val handle = RectF(
-            panelRect.right - 18f * unit, panelRect.bottom - 15f * unit,
-            panelRect.right - 3f * unit, panelRect.bottom - 2f * unit,
-        )
-        text.textSize = 10f * unit
-        text.textAlign = Paint.Align.CENTER
-        text.color = pillText
-        canvas.drawText("\u2304", handle.centerX(), handle.centerY() + 3f * unit, text)
-        hits += RectF(handle) to { collapsed = true; invalidate() }
     }
 
     /** Columns, slots, overlay zones and the live pad render, in the band below the screen. */

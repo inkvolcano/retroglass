@@ -49,6 +49,9 @@ class ControllerDesigner(
     /** While moving: the module being carried and the field it came from. */
     private var designerMove: Triple<String, Int?, String>? = null
 
+    /** Which rows sit under the preview: the field's actions, or its module list. */
+    private var designerMode = MODE_MENU
+
     /** The design being edited. Every edit is written through immediately. */
     private var designerDraft: PadDesign? = null
 
@@ -77,25 +80,23 @@ class ControllerDesigner(
         designerDraft = padDesign()
         designerField = null
         designerMove = null
-        // Open on whichever way the phone is actually being held: that is the layout you are
-        // looking at, and almost always the one you opened the editor to change.
+        designerMode = MODE_MENU
         designerLandscape = startLandscape
         menu.push(activity.getString(R.string.menu_edit_layout)) { menuDesignerScreen() }
     }
 
-
     /**
-     * The controls designer (docs/controls-layout-handoff.md §6).
+     * The designer: a preview you tap, and the controls for it underneath.
      *
-     * The canvas is the screen. It stands at the phone's own aspect and fills the menu, so a
-     * module's size and reach read the same here as they will under your thumbs — a thumbnail
-     * cannot tell you whether something is within reach, which is most of what this screen is for.
+     * The preview takes a fixed share of the screen rather than all of it. An earlier version
+     * filled the height and put every setting inside the picture as the wireframe draws them — at
+     * wireframe scale those are 7px labels, which is legible on a desktop mock-up and unusable
+     * under a thumb. The settings are ordinary rows now, and the preview keeps enough of the screen
+     * to judge reach by.
      *
-     * Field-first, and that ordering is the point: you tap the part of the pad you want to change
-     * and are then shown only the modules that can go there, rather than picking a module and
-     * hunting for somewhere it fits. Choosing takes over the whole screen rather than sharing it
-     * with the canvas, because the module list carries a rendered preview per row and those are
-     * useless at the size a split screen leaves them.
+     * Everything happens on this one screen. Picking a field swaps the rows beneath the preview
+     * instead of pushing a new screen over it, so the preview stays visible while you choose — the
+     * whole point of choosing is seeing where the thing lands.
      */
     fun menuDesignerScreen(): View = with(menu) {
         val parts = padParts()
@@ -106,14 +107,12 @@ class ControllerDesigner(
         val metrics = activity.resources.displayMetrics
         val shortSide = minOf(metrics.widthPixels, metrics.heightPixels)
         val longSide = maxOf(metrics.widthPixels, metrics.heightPixels)
-        // The canvas is the phone, turned the way the layout being edited is held: tall and narrow
-        // for portrait, short and wide for landscape. Fitted to whichever bound binds first.
         val ratio = if (designerLandscape) longSide / shortSide.toFloat()
         else shortSide / longSide.toFloat()
-        val availH = (metrics.heightPixels - dp(230f)).coerceAtLeast(dp(220f))
-        val availW = metrics.widthPixels - dp(24f)
-        var canvasH = availH
+        // 60% of the screen for the preview, then whatever width keeps the phone's shape.
+        var canvasH = (metrics.heightPixels * 0.6f).toInt()
         var canvasW = (canvasH * ratio).toInt()
+        val availW = metrics.widthPixels - dp(24f)
         if (canvasW > availW) {
             canvasW = availW
             canvasH = (canvasW / ratio).toInt()
@@ -123,35 +122,20 @@ class ControllerDesigner(
                 console, layout, parts,
                 layoutStore.portraitScreenFraction(), designerLandscape,
             )
-            onRotate = {
-                designerLandscape = !designerLandscape
-                designerField = null
-                menu.refresh()
-            }
             selected = designerField
-            onLayoutChange = { editDraft(it) }
             onFieldTap = { zone, slot ->
                 val moving = designerMove
                 if (moving != null) {
                     moveModule(layout, moving, zone, slot)
                 } else {
                     designerField = zone to slot
-                    pushDesignerField()
+                    designerMode = MODE_MENU
+                    menu.refresh()
                 }
             }
         }
 
         body(padSides = 10f) {
-            designerMove?.let { moving ->
-                addView(
-                    note(
-                        activity.getString(
-                            R.string.designer_moving,
-                            PadModules.byId(moving.third)?.name.orEmpty(),
-                        ),
-                    ),
-                )
-            }
             addView(
                 TextView(activity).apply {
                     text = activity.getString(
@@ -169,90 +153,67 @@ class ControllerDesigner(
                     gravity = Gravity.CENTER_HORIZONTAL
                 },
             )
-            addView(spacer())
-            if (designerMove != null) {
-                addView(navRow(null, activity.getString(R.string.designer_move_cancel)) {
-                    designerMove = null
-                    menu.refresh()
-                })
-            } else {
-                addView(
-                    pair(
-                        actionTile(
-                            activity.getString(R.string.designer_done),
-                            activity.getString(R.string.designer_done_sub),
-                        ) {
-                            designerDraft = null
-                            designerField = null
-                            onDone()
-                        },
-                        actionTile(
-                            activity.getString(R.string.designer_reset),
-                            activity.getString(R.string.designer_reset_sub),
-                        ) {
-                            layoutStore.resetPadDesign(console)
-                            designerDraft = padDesign()
-                            designerField = null
-                            onApplied()
-                            menu.refresh()
-                        },
-                    ),
-                )
+            when {
+                designerMove != null -> movePanel(this)
+                designerField != null && designerMode == MODE_LIST -> listPanel(this, layout, parts)
+                designerField != null -> fieldPanel(this, layout)
+                else -> {
+                    addView(note(activity.getString(R.string.designer_hint)))
+                    settingsPanel(this, layout)
+                    donePanel(this, parts)
+                }
             }
         }
     }
 
-    fun pushDesignerField() {
-        val (zone, slot) = designerField ?: return
-        val layout = draft().forOrientation(designerLandscape)
-        val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
-        val module = PadModules.byId(layout.moduleAt(zone, start ?: slot))
-        menu.push(fieldTitle(zone, slot, module)) { menuDesignerFieldScreen() }
-    }
-
-    /** What to do with the tapped field - its own screen, reached by tapping the canvas. */
-    fun menuDesignerFieldScreen(): View = with(menu) {
-        val layout = draft().forOrientation(designerLandscape)
-        val field = designerField ?: return@with body { }
+    /** Rows for the tapped field, kept above the settings so they need no scrolling. */
+    private fun fieldPanel(root: LinearLayout, layout: PadLayout) = with(menu) {
+        val field = designerField ?: return@with
         val zone = field.first
         val slot = field.second
         val start = slot?.let { layout.covering(zone, it, 1).firstOrNull()?.first }
         val id = layout.moduleAt(zone, start ?: slot)
         val module = PadModules.byId(id)
-        body {
-            if (module == null) {
-                addView(navRow(null, activity.getString(R.string.designer_add)) {
-                    push(activity.getString(R.string.designer_add)) { menuDesignerListScreen() }
-                })
-            } else {
-                addView(navRow(null, activity.getString(R.string.designer_edit), module.name) {
-                    push(activity.getString(R.string.designer_edit)) { menuDesignerListScreen() }
-                })
-                if (module.cat == PadModules.Cat.BLOCK && slot != null) {
-                    addView(designerAlignRow(layout, zone, start ?: slot))
-                }
-                addView(navRow(null, activity.getString(R.string.designer_move)) {
-                    designerMove = Triple(zone, start ?: slot, id!!)
-                    pop()
-                })
-                addView(navRow(null, activity.getString(R.string.designer_remove)) {
-                    editDraft(removeAt(layout, zone, start ?: slot))
-                    pop()
-                })
+        root.addView(group(fieldTitle(zone, slot, module)))
+        if (module == null) {
+            root.addView(navRow(null, activity.getString(R.string.designer_add)) {
+                designerMode = MODE_LIST
+                menu.refresh()
+            })
+        } else {
+            root.addView(navRow(null, activity.getString(R.string.designer_edit), module.name) {
+                designerMode = MODE_LIST
+                menu.refresh()
+            })
+            if (module.cat == PadModules.Cat.BLOCK && slot != null) {
+                root.addView(designerAlignRow(layout, zone, start ?: slot))
             }
+            root.addView(navRow(null, activity.getString(R.string.designer_move)) {
+                designerMove = Triple(zone, start ?: slot, id!!)
+                menu.refresh()
+            })
+            root.addView(navRow(null, activity.getString(R.string.designer_remove)) {
+                editDraft(removeAt(layout, zone, start ?: slot))
+            })
         }
+        root.addView(navRow(null, activity.getString(R.string.designer_deselect)) {
+            designerField = null
+            menu.refresh()
+        })
     }
 
-    /** The modules that fit this field, with the rules shown rather than enforced silently. */
-    fun menuDesignerListScreen(): View = with(menu) {
-        val parts = padParts()
-        val layout = draft().forOrientation(designerLandscape)
-        val field = designerField ?: return@with body { }
+    /** The modules that fit this field, listed under the preview so you can see each land. */
+    private fun listPanel(
+        root: LinearLayout,
+        layout: PadLayout,
+        parts: PadParts,
+    ) = with(menu) {
+        val field = designerField ?: return@with
         val zone = field.first
         val slot = field.second
         val centre = slot == null
         val current = layout.moduleAt(zone, slot)
-        val thumbH = (76 * activity.resources.displayMetrics.density).toInt()
+        val thumbH = (54 * activity.resources.displayMetrics.density).toInt()
         val thumbW = (thumbH / LayoutPreview.ASPECT).toInt()
 
         val options = (if (centre) {
@@ -262,39 +223,173 @@ class ControllerDesigner(
                 PadModules.optionsFor(PadModules.Cat.SHOULDER, parts, zone)
         }).filter { hasRoomFor(layout, parts, zone, slot, it) }
 
-        body {
-            for (module in options) {
-                val blocked = blockedReason(layout, zone, slot, module)
-                val next = if (blocked == null) place(layout, zone, slot, module) else layout
-                val replaces = if (blocked == null) replacedNames(layout, zone, slot, module) else null
-                val shot = LayoutPreview.render(
-                    console, PadRenderer.render(next, parts, landscape = false), thumbW, thumbH,
-                )
-                addView(
-                    modulePickRow(
-                        shot, module.name, blocked ?: replaces,
-                        selected = module.id == current,
-                        enabled = blocked == null,
-                    ) {
-                        editDraft(next)
-                        // Straight back to the canvas: the point of picking was to see it in place.
-                        pop()
-                        pop()
-                    },
-                )
-            }
+        root.addView(group(fieldTitle(zone, slot, PadModules.byId(current))))
+        for (module in options) {
+            val blocked = blockedReason(layout, zone, slot, module)
+            val next = if (blocked == null) place(layout, zone, slot, module) else layout
+            val replaces = if (blocked == null) replacedNames(layout, zone, slot, module) else null
+            val shot = LayoutPreview.render(
+                console,
+                PadRenderer.render(next, parts, designerLandscape),
+                thumbW,
+                thumbH,
+            )
+            root.addView(
+                modulePickRow(
+                    shot, module.name, blocked ?: replaces,
+                    selected = module.id == current,
+                    enabled = blocked == null,
+                ) {
+                    designerMode = MODE_MENU
+                    editDraft(next)
+                },
+            )
         }
+        root.addView(navRow(null, activity.getString(R.string.designer_back)) {
+            designerMode = MODE_MENU
+            menu.refresh()
+        })
+    }
+
+    private fun movePanel(root: LinearLayout) = with(menu) {
+        val moving = designerMove ?: return@with
+        root.addView(
+            note(
+                activity.getString(
+                    R.string.designer_moving,
+                    PadModules.byId(moving.third)?.name.orEmpty(),
+                ),
+            ),
+        )
+        root.addView(navRow(null, activity.getString(R.string.designer_move_cancel)) {
+            designerMove = null
+            menu.refresh()
+        })
+    }
+
+    /**
+     * The pad's own settings, as ordinary rows.
+     *
+     * These were pills inside the preview, which is where the wireframe puts them — but the
+     * wireframe is a drawing, and at the size the picture actually needs to be useful the pills
+     * came out too small to hit. Rows cost vertical space and win every time on a phone.
+     */
+    private fun settingsPanel(root: LinearLayout, layout: PadLayout) = with(menu) {
+        root.addView(group(activity.getString(R.string.designer_group_layout)))
+        root.addView(
+            navRow(
+                null, activity.getString(R.string.designer_orientation),
+                activity.getString(
+                    if (designerLandscape) R.string.designer_landscape_short
+                    else R.string.designer_portrait_short,
+                ),
+            ) {
+                designerLandscape = !designerLandscape
+                designerField = null
+                menu.refresh()
+            },
+        )
+        root.addView(
+            navRow(null, activity.getString(R.string.designer_zones), "${layout.zones}") {
+                pushSelect(
+                    activity.getString(R.string.designer_zones),
+                    PadLayout.ZONE_COUNTS.map { "$it" },
+                    PadLayout.ZONE_COUNTS.indexOf(layout.zones),
+                ) { which ->
+                    editDraft(layout.copy(zones = PadLayout.ZONE_COUNTS[which]).prunedToZones())
+                }
+            },
+        )
+        root.addView(
+            navRow(null, activity.getString(R.string.designer_width), PadLayout.splitLabel(layout.split)) {
+                pushSelect(
+                    activity.getString(R.string.designer_width),
+                    PadLayout.SPLITS.map { PadLayout.splitLabel(it) },
+                    PadLayout.SPLITS.indexOf(layout.split),
+                ) { which -> editDraft(layout.copy(split = PadLayout.SPLITS[which])) }
+            },
+        )
+        // The two largest scales only make sense with the picture elsewhere.
+        val scaleIds = PadLayout.SCALES +
+            if (layout.noScr) PadLayout.EXTERNAL_SCALES else emptyList()
+        root.addView(
+            navRow(null, activity.getString(R.string.designer_scale), PadLayout.scaleLabel(layout.scale)) {
+                pushSelect(
+                    activity.getString(R.string.designer_scale),
+                    scaleIds.map { PadLayout.scaleLabel(it) },
+                    scaleIds.indexOf(layout.scale).coerceAtLeast(0),
+                ) { which -> editDraft(layout.copy(scale = scaleIds[which])) }
+            },
+        )
+        root.addView(
+            toggleRow(activity.getString(R.string.designer_external), layout.noScr) {
+                editDraft(layout.copy(noScr = it))
+            },
+        )
+        if (layout.noScr) {
+            root.addView(
+                toggleRow(activity.getString(R.string.designer_reflow), layout.reflow) {
+                    editDraft(layout.copy(reflow = it))
+                },
+            )
+        }
+        root.addView(group(activity.getString(R.string.designer_group_shadow)))
+        root.addView(
+            toggleRow(activity.getString(R.string.designer_shadow_screen), layout.shadowScreen) {
+                editDraft(layout.copy(shadowScreen = it))
+            },
+        )
+        root.addView(
+            toggleRow(activity.getString(R.string.designer_shadow_buttons), layout.shadowButtons) {
+                editDraft(layout.copy(shadowButtons = it))
+            },
+        )
+        root.addView(
+            toggleRow(activity.getString(R.string.designer_shadow_dpad), layout.shadowDpad) {
+                editDraft(layout.copy(shadowDpad = it))
+            },
+        )
+        root.addView(
+            toggleRow(activity.getString(R.string.designer_shadow_stick), layout.shadowStick) {
+                editDraft(layout.copy(shadowStick = it))
+            },
+        )
+    }
+
+    private fun donePanel(root: LinearLayout, parts: PadParts) = with(menu) {
+        root.addView(
+            pair(
+                actionTile(
+                    activity.getString(R.string.designer_done),
+                    activity.getString(R.string.designer_done_sub),
+                ) {
+                    designerDraft = null
+                    designerField = null
+                    onDone()
+                },
+                actionTile(
+                    activity.getString(R.string.designer_reset),
+                    activity.getString(R.string.designer_reset_sub),
+                ) {
+                    layoutStore.resetPadDesign(console)
+                    designerDraft = padDesign()
+                    designerField = null
+                    onApplied()
+                    menu.refresh()
+                },
+            ),
+        )
     }
 
     /**
      * Alignment, as the wireframe draws it: three boxes with a marker sitting where the module
-     * will sit. Picking one shifts the module in the canvas immediately.
+     * will sit. Picking one shifts the module in the preview immediately.
      *
-     * A dropdown would have been less code, but "inner / centre / outer" only means anything once
-     * you can see which edge of the block is which — and on a mirrored pair of columns, outer is a
-     * different direction on each side. The picture says it; the words need translating.
+     * A dropdown would be less code, but "inner / centre / outer" only means something once you can
+     * see which edge of the block is which — and on a mirrored pair of columns, outer points the
+     * other way on each side. The picture says it; the words need translating.
      */
-    fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View {
+    private fun designerAlignRow(layout: PadLayout, zone: String, slot: Int): View {
         val key = zone + slot
         val current = layout.align[key] ?: 'c'
         val d = activity.resources.displayMetrics.density
@@ -530,8 +625,14 @@ class ControllerDesigner(
         if (!allowed || blockedReason(layout, zone, slot, module) != null) return
         val cleared = removeAt(layout, fromZone, fromSlot)
         designerMove = null
+        designerMode = MODE_MENU
         designerField = zone to slot
         editDraft(place(cleared, zone, slot, module))
+    }
+
+    private companion object {
+        const val MODE_MENU = "menu"
+        const val MODE_LIST = "list"
     }
 
     fun fieldTitle(zone: String, slot: Int?, module: PadModules.Module?): String {
