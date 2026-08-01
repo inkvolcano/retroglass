@@ -276,17 +276,34 @@ class ControllerDesigner(
      */
     private fun settingsPanel(root: LinearLayout, layout: PadLayout) = with(menu) {
         root.addView(group(activity.getString(R.string.designer_group_layout)))
+        // Orientation and where the picture goes are one choice, not two. As separate controls
+        // you could only reach a combination by setting each in turn, and since the external flag
+        // is stored per orientation the pair you were looking at was never obvious from the rows.
+        // Four named modes say exactly which of the four layouts you are editing.
+        val modes = listOf(false to false, false to true, true to false, true to true)
+        val modeLabels = modes.map { (land, ext) ->
+            activity.getString(
+                when {
+                    land && ext -> R.string.designer_mode_land_ext
+                    land -> R.string.designer_mode_land
+                    ext -> R.string.designer_mode_port_ext
+                    else -> R.string.designer_mode_port
+                },
+            )
+        }
+        val currentMode = modes.indexOf(designerLandscape to layout.noScr).coerceAtLeast(0)
         root.addView(
-            navRow(
-                null, activity.getString(R.string.designer_orientation),
-                activity.getString(
-                    if (designerLandscape) R.string.designer_landscape_short
-                    else R.string.designer_portrait_short,
-                ),
-            ) {
-                designerLandscape = !designerLandscape
-                designerField = null
-                menu.refresh()
+            navRow(null, activity.getString(R.string.designer_orientation), modeLabels[currentMode]) {
+                pushSelect(
+                    activity.getString(R.string.designer_orientation), modeLabels, currentMode,
+                ) { which ->
+                    val (land, ext) = modes[which]
+                    // Switch first: editDraft writes to whichever orientation is selected, and
+                    // the external flag belongs to the one being moved to, not the one left.
+                    designerLandscape = land
+                    designerField = null
+                    editDraft(draft().forOrientation(land).copy(noScr = ext))
+                }
             },
         )
         root.addView(
@@ -319,11 +336,6 @@ class ControllerDesigner(
                     scaleIds.map { PadLayout.scaleLabel(it) },
                     scaleIds.indexOf(layout.scale).coerceAtLeast(0),
                 ) { which -> editDraft(layout.copy(scale = scaleIds[which])) }
-            },
-        )
-        root.addView(
-            toggleRow(activity.getString(R.string.designer_external), layout.noScr) {
-                editDraft(layout.copy(noScr = it))
             },
         )
         if (layout.noScr) {

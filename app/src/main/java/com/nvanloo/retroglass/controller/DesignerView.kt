@@ -97,18 +97,22 @@ class DesignerView(context: Context) : View(context) {
         fill.color = bg
         canvas.drawRoundRect(RectF(0f, 0f, w, h), 10f * unit, 10f * unit, fill)
 
+        // The pad goes down first and the screen box over it. The pad's rendered bitmap is
+        // opaque, and in landscape its band is the whole canvas — drawing the screen first put it
+        // straight underneath, which is why landscape appeared to have no screen at all. Nothing
+        // is hidden by the reversal: in landscape the columns sit outside the screen rect, and the
+        // one case where a module shares that band (reflowed portrait) only happens with the
+        // picture on the glasses, where the screen is a dashed outline rather than a filled box.
         if (landscape) {
-            // Landscape puts the controls *over* the picture rather than under it, so the pad
-            // band is the whole canvas and the screen is the box the columns leave between them.
-            drawScreen(canvas, landscapeScreenRect(w, h, inset), unit)
             drawPad(canvas, w, inset, h - inset, unit)
+            drawScreen(canvas, landscapeScreenRect(w, h, inset), unit)
         } else {
             val screenBottom = inset + (h - inset * 2f) * screenFraction
-            drawScreen(canvas, RectF(inset, inset, w - inset, screenBottom), unit)
             // Reflowed, the picture is on the glasses and the band it was holding belongs to the
             // pad, so the columns start at the top of the phone rather than under the slit.
             val padTop = if (layout.reflowing) inset else screenBottom + 4f * unit
             drawPad(canvas, w, padTop, h - inset, unit)
+            drawScreen(canvas, RectF(inset, inset, w - inset, screenBottom), unit)
         }
     }
 

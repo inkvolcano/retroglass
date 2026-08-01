@@ -40,18 +40,26 @@ object ConsoleImages {
         private val boxW: Int,
         private val boxH: Int,
         private val origins: IntArray,
+        /**
+         * Which console each cell draws, or null for a cell that is not one.
+         *
+         * The controller sheet runs 7 across rather than 5 and carries two drawings that are not
+         * controllers at all, so it cannot share [SHEET_ORDER]'s straight row-major mapping.
+         */
+        private val order: List<Console?> = SHEET_ORDER,
     ) {
         private var bitmap: Bitmap? = null
         private var loaded = false
         private val cache = HashMap<Console, Bitmap>()
+        private val indexCache = HashMap<Int, Bitmap>()
 
         fun has(console: Console): Boolean {
-            val i = SHEET_ORDER.indexOf(console)
+            val i = order.indexOf(console)
             return i >= 0 && i * 2 + 1 < origins.size
         }
 
         fun get(context: Context, console: Console): Bitmap? {
-            val i = SHEET_ORDER.indexOf(console)
+            val i = order.indexOf(console)
             if (i < 0 || i * 2 + 1 >= origins.size) return null
             cache[console]?.let { return it }
 
@@ -70,6 +78,25 @@ object ConsoleImages {
             if (w <= 0 || h <= 0) return null
 
             return keyOutBlack(Bitmap.createBitmap(sh, x, y, w, h)).also { cache[console] = it }
+        }
+
+        /** A crop by raw cell index, for sheets whose cells are not consoles. */
+        fun cell(context: Context, index: Int): Bitmap? {
+            if (index < 0 || index * 2 + 1 >= origins.size) return null
+            indexCache[index]?.let { return it }
+            if (!loaded) {
+                loaded = true
+                bitmap = runCatching {
+                    BitmapFactory.decodeResource(context.resources, drawable)
+                }.getOrNull()
+            }
+            val sh = bitmap ?: return null
+            val x = origins[index * 2].coerceIn(0, (sh.width - boxW).coerceAtLeast(0))
+            val y = origins[index * 2 + 1].coerceIn(0, (sh.height - boxH).coerceAtLeast(0))
+            val w = boxW.coerceAtMost(sh.width - x)
+            val h = boxH.coerceAtMost(sh.height - y)
+            if (w <= 0 || h <= 0) return null
+            return keyOutBlack(Bitmap.createBitmap(sh, x, y, w, h)).also { indexCache[index] = it }
         }
 
         /**
@@ -125,6 +152,67 @@ object ConsoleImages {
             28, 1222, 228, 1221, 433, 1224, 632, 1226, 844, 1233,
         ),
     )
+
+    /**
+     * The controller each console shipped with, for the player slots in the library.
+     *
+     * Laid out 7 across, and two of the 37 drawings are not controllers — a 32X console and a
+     * spare stick unit — so the order is spelled out rather than derived from a row width.
+     */
+    private val PAD_ORDER: List<Console?> = listOf(
+        Console.NES, Console.GAMEBOY, Console.SNES, Console.VIRTUALBOY, Console.N64,
+        Console.GBA, Console.POKEMONMINI,
+        Console.NDS, Console.MASTERSYSTEM, Console.MEGADRIVE, Console.GAMEGEAR, Console.SEGACD,
+        Console.SEGA32X, null,
+        Console.SATURN, Console.DREAMCAST, Console.NAOMI, Console.ATOMISWAVE, Console.PSX,
+        Console.PS2, Console.PSP,
+        Console.ATARI2600, Console.ATARI8BIT, Console.ATARI5200, Console.ATARI7800, Console.LYNX,
+        Console.PCENGINE, Console.PCECD,
+        Console.THREEDO, Console.NGP, Console.INTELLIVISION, Console.COLECO, Console.VECTREX,
+        null, Console.NEOGEOCD,
+        Console.ARCADE, Console.WONDERSWAN,
+    )
+
+    val PADS = Sheet(
+        R.drawable.pad_line, 207, 174,
+        intArrayOf(
+            -4, 37, 183, 22, 414, 31, 626, 44, 841, 23, 1073, 39, 1298, 30,
+            -3, 198, 199, 208, 414, 204, 633, 207, 847, 200, 1067, 203, 1293, 221,
+            -2, 375, 212, 372, 419, 373, 636, 375, 846, 364, 1061, 369, 1287, 382,
+            -11, 526, 183, 528, 400, 535, 622, 530, 846, 542, 1063, 533, 1281, 534,
+            -10, 680, 195, 681, 406, 689, 622, 689, 838, 688, 1064, 693, 1281, 695,
+            14, 834, 231, 836,
+        ),
+        PAD_ORDER,
+    )
+
+    /**
+     * Where the game is shown, for the library's screen-mode tile. Indexed by [SCREEN_*] below
+     * rather than by console.
+     */
+    val SCREENS = Sheet(
+        R.drawable.screen_line, 414, 436,
+        intArrayOf(
+            23, 84, 463, 29, 944, 64,
+            -12, 485, 387, 499, 761, 536, 1147, 532,
+        ),
+        emptyList(),
+    )
+
+    /** Cell indices into [SCREENS]. */
+    const val SCREEN_LANDSCAPE_TOUCH = 0
+    const val SCREEN_PORTRAIT_TOUCH = 1
+    const val SCREEN_ROTATE = 2
+    const val SCREEN_LANDSCAPE_PLAIN = 3
+    const val SCREEN_PORTRAIT_PLAIN = 4
+    const val SCREEN_LANDSCAPE_GLASSES = 5
+    const val SCREEN_PORTRAIT_GLASSES = 6
+
+    /** The controller drawing for a console, or null if the sheet has none. Cached. */
+    fun pad(context: Context, console: Console): Bitmap? = PADS.get(context, console)
+
+    /** One of the screen-mode drawings by cell index. Cached. */
+    fun screen(context: Context, index: Int): Bitmap? = SCREENS.cell(context, index)
 
     /** True if console artwork exists (else callers should show a placeholder). */
     fun hasPhoto(console: Console): Boolean = CONSOLES.has(console)

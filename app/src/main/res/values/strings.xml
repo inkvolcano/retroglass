@@ -137,7 +137,10 @@
     <string name="designer_portrait_short">Portrait</string>
     <string name="designer_landscape_short">Landscape</string>
     <string name="designer_zones">Rows per side</string>
-    <string name="designer_external">Game on external screen</string>
+    <string name="designer_mode_port">Portrait</string>
+    <string name="designer_mode_port_ext">Portrait · external screen</string>
+    <string name="designer_mode_land">Landscape</string>
+    <string name="designer_mode_land_ext">Landscape · external screen</string>
     <string name="designer_reflow">Controls use the screen space</string>
     <string name="designer_shadow_screen">Shadow: screen</string>
     <string name="designer_done">Done</string>

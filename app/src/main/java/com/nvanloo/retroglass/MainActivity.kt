@@ -886,11 +886,17 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.parseColor("#26262E"))
         }, LinearLayout.LayoutParams(dp(1f), dp(58f)).apply { marginStart = dp(3f); marginEnd = dp(5f) })
 
-        val thumb = runCatching {
-            com.nvanloo.retroglass.controller.LayoutPreview.render(
-                console, com.nvanloo.retroglass.model.ControllerDefs.controlsFor(console), dp(42f), dp(60f),
-            )
-        }.getOrNull()
+        // A slot shows what is actually driving it: the phone's own touchscreen, or the
+        // controller the console shipped with. The generated touch-layout thumbnail that used to
+        // sit here said the same thing for every slot, including ones held by a real gamepad.
+        val landscape = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val touchArt = ConsoleImages.screen(
+            this,
+            if (landscape) ConsoleImages.SCREEN_LANDSCAPE_TOUCH
+            else ConsoleImages.SCREEN_PORTRAIT_TOUCH,
+        )
+        val padArt = ConsoleImages.pad(this, console)
         for (port in 0 until console.maxPlayers) {
             val onPort = surfaces.filter { portFor(it.key, it.device) == port }
             val occupied = onPort.isNotEmpty()
@@ -903,10 +909,14 @@ class MainActivity : AppCompatActivity() {
                 isClickable = true; isFocusable = true
                 setOnClickListener { onPlayerSlotTap(port, onPort) }
             }
+            // Empty slots show the console's controller too, greyed by the card's own alpha:
+            // it reads as "this is what could go here" rather than as a blank.
+            val usesPhone = onPort.any { !it.isGamepad }
+            val art = if (usesPhone) touchArt ?: padArt else padArt ?: touchArt
             card.addView(android.widget.ImageView(this).apply {
-                if (thumb != null) setImageBitmap(thumb)
+                art?.let { setImageBitmap(it) }
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-                layoutParams = LinearLayout.LayoutParams(dp(42f), dp(60f))
+                layoutParams = LinearLayout.LayoutParams(dp(50f), dp(46f))
             })
             card.addView(TextView(this).apply {
                 text = "P${port + 1}"
@@ -974,8 +984,9 @@ class MainActivity : AppCompatActivity() {
                 dp(56f), ViewGroup.LayoutParams.MATCH_PARENT,
             )
             addView(android.widget.ImageView(this@MainActivity).apply {
-                setImageBitmap(screenModeIcon(mode, dp(34f)))
-                layoutParams = LinearLayout.LayoutParams(dp(34f), dp(34f))
+                screenModeIcon(mode, dp(34f))?.let { setImageBitmap(it) }
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(38f), dp(34f))
             })
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.screen_label)
@@ -1024,42 +1035,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Draws a small device glyph for a screen mode (phone portrait/landscape, monitor, fullscreen). */
-    private fun screenModeIcon(mode: Int, px: Int): android.graphics.Bitmap {
-        val b = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
-        val c = android.graphics.Canvas(b)
-        val col = MenuTheme.FG
-        val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = col; style = android.graphics.Paint.Style.STROKE; strokeWidth = px * 0.055f
-            strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+    /**
+     * The screen-mode drawing for [mode], from the artwork sheet.
+     *
+     * External uses the portrait or landscape glasses drawing depending on how the phone is being
+     * held, because in that mode the phone *is* the pad — which way round you are holding it is
+     * the thing the icon is actually telling you about.
+     */
+    private fun screenModeIcon(mode: Int, px: Int): android.graphics.Bitmap? {
+        val landscape = resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val cell = when (mode) {
+            LayoutStore.SCREEN_INT_PORTRAIT -> ConsoleImages.SCREEN_PORTRAIT_TOUCH
+            LayoutStore.SCREEN_INT_LANDSCAPE -> ConsoleImages.SCREEN_LANDSCAPE_TOUCH
+            LayoutStore.SCREEN_EXTERNAL ->
+                if (landscape) ConsoleImages.SCREEN_LANDSCAPE_GLASSES
+                else ConsoleImages.SCREEN_PORTRAIT_GLASSES
+            // Fullscreen is the one mode with no touch pad at all, so it takes the plain frame -
+            // the absence of the finger is the whole distinction being drawn.
+            LayoutStore.SCREEN_FULLSCREEN -> ConsoleImages.SCREEN_LANDSCAPE_PLAIN
+            else -> ConsoleImages.SCREEN_ROTATE
         }
-        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = col }
-        val cx = px / 2f; val cy = px / 2f
-        fun rr(w: Float, h: Float, filled: Boolean = false, oy: Float = 0f) {
-            val r = android.graphics.RectF(cx - w / 2, cy - h / 2 + oy, cx + w / 2, cy + h / 2 + oy)
-            c.drawRoundRect(r, px * 0.08f, px * 0.08f, if (filled) fill else stroke)
-        }
-        when (mode) {
-            LayoutStore.SCREEN_INT_PORTRAIT -> {
-                rr(px * 0.46f, px * 0.70f)
-                c.drawLine(cx - px * 0.15f, cy - px * 0.13f, cx + px * 0.15f, cy - px * 0.13f, stroke)
-            }
-            LayoutStore.SCREEN_INT_LANDSCAPE -> {
-                rr(px * 0.72f, px * 0.46f)
-                c.drawLine(cx - px * 0.11f, cy - px * 0.15f, cx - px * 0.11f, cy + px * 0.15f, stroke)
-            }
-            LayoutStore.SCREEN_EXTERNAL -> {
-                val w = px * 0.72f; val h = px * 0.44f; val t = cy - h / 2 - px * 0.06f
-                c.drawRoundRect(android.graphics.RectF(cx - w / 2, t, cx + w / 2, t + h), px * 0.06f, px * 0.06f, stroke)
-                c.drawRect(android.graphics.RectF(cx - px * 0.045f, t + h, cx + px * 0.045f, t + h + px * 0.10f), fill)
-                c.drawRoundRect(android.graphics.RectF(cx - px * 0.15f, t + h + px * 0.10f, cx + px * 0.15f, t + h + px * 0.15f), px * 0.02f, px * 0.02f, fill)
-            }
-            LayoutStore.SCREEN_FULLSCREEN -> rr(px * 0.74f, px * 0.48f, filled = true)
-            else -> { // AUTO: a portrait and a landscape frame overlaid
-                rr(px * 0.64f, px * 0.42f)
-                rr(px * 0.40f, px * 0.60f)
-            }
-        }
-        return b
+        return ConsoleImages.screen(this, cell)
     }
 
     private fun onPlayerSlotTap(port: Int, onPort: List<Surface>) {
