@@ -910,7 +910,15 @@ class MainActivity : AppCompatActivity() {
                 // over a dark tile with fine line art left them nearly invisible.
                 alpha = if (occupied) 1f else 0.78f
                 isClickable = true; isFocusable = true
-                setOnClickListener { onPlayerSlotTap(port, onPort) }
+                setOnClickListener {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                    cyclePlayerSlot(port)
+                }
+                // Remap and stick tuning still exist, they are just not what a tap is for.
+                setOnLongClickListener {
+                    onPort.firstOrNull()?.let { showSurfaceConfig(it) }
+                    onPort.isNotEmpty()
+                }
             }
             // The touchscreen goes wherever the phone actually plays. With nothing plugged in
             // that is player one, even if no port is assigned yet — showing the console's own
@@ -1065,43 +1073,28 @@ class MainActivity : AppCompatActivity() {
         return ConsoleImages.screen(this, cell)
     }
 
-    private fun onPlayerSlotTap(port: Int, onPort: List<Surface>) {
-        // Straight to the surface when there is only one on this port - an intermediate list
-        // of one item is a tap that asks a question it already knows the answer to.
-        if (onPort.size == 1) {
-            showSurfaceConfig(onPort.first())
-            return
-        }
-        openLibraryMenuIfNeeded()
-        libraryMenu.push(getString(R.string.player_n, port + 1)) {
-            with(libraryMenu) {
-                body {
-                    for (surface in onPort) {
-                        addView(navRow(null, surface.name, portLabel(port), valueIsLive = false) {
-                            showSurfaceConfig(surface)
-                        })
-                    }
-                    addView(navRow(null, getString(R.string.assign_to_player, port + 1)) {
-                        assignToPort(port)
-                    })
-                }
-            }
-        }
-    }
-
-    private fun assignToPort(port: Int) {
+    /**
+     * Steps a player slot through what can drive it: nothing, the phone's touchscreen, then each
+     * connected gamepad.
+     *
+     * This used to open a menu, and a second one behind it for assigning — two different pickers,
+     * from opposite ends of the screen, to express a choice between at most three things. Setting
+     * up players is something you do while looking at the library, glancing between the slots and
+     * the pad in your hand, so it wants the same treatment as the screen-mode tile beside it: tap
+     * to step, watch the row update. Anything with more to say than that is still on a long press.
+     */
+    private fun cyclePlayerSlot(port: Int) {
         val surfaces = availableSurfaces()
-        openLibraryMenuIfNeeded()
-        libraryMenu.pushActions(
-            getString(R.string.assign_to_player, port + 1),
-            surfaces.map { surface ->
-                surface.name to {
-                    inputConfig.setPort(surface.key, port)
-                    buildControllerBar()
-                    libraryMenu.close()
-                }
-            },
-        )
+        val current = surfaces.firstOrNull { portFor(it.key, it.device) == port }
+        // null first, so a slot you did not mean to touch is one more tap from being empty again.
+        val choices: List<Surface?> = listOf(null) + surfaces
+        val index = choices.indexOfFirst { it?.key == current?.key }.coerceAtLeast(0)
+        val next = choices[(index + 1) % choices.size]
+
+        current?.let { inputConfig.setPort(it.key, InputConfig.PORT_OFF) }
+        // Assigning moves it: a surface drives one port, so taking it here frees wherever it was.
+        next?.let { inputConfig.setPort(it.key, port) }
+        buildControllerBar()
     }
 
     private fun showSurfaceConfig(s: Surface) {
