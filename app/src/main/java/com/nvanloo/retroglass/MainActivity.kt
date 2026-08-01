@@ -851,12 +851,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun surfaceKey(d: InputDevice?): String = d?.descriptor ?: "gamepad"
 
-    private fun portFor(key: String, device: InputDevice?): Int =
-        inputConfig.storedPort(key) ?: if (key == InputConfig.PHONE) {
-            if (hasGamepad()) InputConfig.PORT_OFF else 0
-        } else {
-            ((device?.controllerNumber ?: 1) - 1).coerceAtLeast(0)
+    /**
+     * Which player a surface drives.
+     *
+     * The touchscreen is a special case: it is the one input that is always present, and only one
+     * player can hold it. So when nothing else is connected it always drives somebody — player one
+     * unless it has been moved — and an "off" left over from when a gamepad *was* connected is
+     * ignored rather than leaving the pad orphaned with nobody able to play.
+     */
+    private fun portFor(key: String, device: InputDevice?): Int {
+        val stored = inputConfig.storedPort(key)
+        if (key == InputConfig.PHONE) {
+            return if (hasGamepad()) stored ?: InputConfig.PORT_OFF
+            else stored?.takeIf { it >= 0 } ?: 0
         }
+        return stored ?: ((device?.controllerNumber ?: 1) - 1).coerceAtLeast(0)
+    }
 
     private fun portLabel(port: Int): String =
         if (port < 0) getString(R.string.player_off) else getString(R.string.player_n, port + 1)
@@ -889,11 +899,9 @@ class MainActivity : AppCompatActivity() {
         // A slot shows what is actually driving it: the phone's own touchscreen, or the
         // controller the console shipped with. The generated touch-layout thumbnail that used to
         // sit here said the same thing for every slot, including ones held by a real gamepad.
-        val landscape = resources.configuration.orientation ==
-            android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val touchArt = ConsoleImages.screen(
             this,
-            if (landscape) ConsoleImages.SCREEN_LANDSCAPE_TOUCH
+            if (padIsLandscape()) ConsoleImages.SCREEN_LANDSCAPE_TOUCH
             else ConsoleImages.SCREEN_PORTRAIT_TOUCH,
         )
         val padArt = ConsoleImages.pad(this, console)
@@ -920,13 +928,16 @@ class MainActivity : AppCompatActivity() {
                     onPort.isNotEmpty()
                 }
             }
-            // The touchscreen goes wherever the phone actually plays. With nothing plugged in
-            // that is player one, even if no port is assigned yet — showing the console's own
-            // controller there would advertise hardware that is not connected. The remaining
-            // slots keep the console's pad, dimmed, reading as what could go in them.
+            // An empty slot says so. It used to draw the console's own pad, dimmed, meaning to
+            // read as "this could go here" — but a controller drawing is what an *assigned* slot
+            // looks like, so at a glance the row looked full of pads at slightly different
+            // brightnesses. Occupied slots show what is driving them; empty ones show a slot.
             val usesPhone = onPort.any { !it.isGamepad }
-            val phonePlaysHere = usesPhone || (!anyGamepad && port == 0)
-            val art = if (phonePlaysHere) touchArt ?: padArt else padArt ?: touchArt
+            val art = when {
+                !occupied -> emptySlotArt(dp(50f), dp(46f))
+                usesPhone -> touchArt ?: padArt
+                else -> padArt ?: touchArt
+            }
             card.addView(android.widget.ImageView(this).apply {
                 art?.let { setImageBitmap(it) }
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
@@ -1022,6 +1033,8 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                 cycleScreenMode()
+                // The slot icons follow the mode, so they are rebuilt with it.
+                buildControllerBar()
             }
         }
     }
@@ -1057,8 +1070,7 @@ class MainActivity : AppCompatActivity() {
      * the thing the icon is actually telling you about.
      */
     private fun screenModeIcon(mode: Int, px: Int): android.graphics.Bitmap? {
-        val landscape = resources.configuration.orientation ==
-            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val landscape = padIsLandscape()
         val cell = when (mode) {
             LayoutStore.SCREEN_INT_PORTRAIT -> ConsoleImages.SCREEN_PORTRAIT_TOUCH
             LayoutStore.SCREEN_INT_LANDSCAPE -> ConsoleImages.SCREEN_LANDSCAPE_TOUCH
@@ -1074,6 +1086,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Which way round the touch pad will be, for the slot icons.
+     *
+     * The screen mode decides it when the mode names an orientation — picking "internal portrait"
+     * and being shown a landscape pad would be the setting contradicting itself. Auto and External
+     * name no orientation, so those follow how the phone is being held, which is what Auto means
+     * and, with the game on the glasses, all the phone's orientation can tell you anyway.
+     */
+    private fun padIsLandscape(): Boolean = when (layoutStore.screenMode()) {
+        LayoutStore.SCREEN_INT_PORTRAIT -> false
+        LayoutStore.SCREEN_INT_LANDSCAPE, LayoutStore.SCREEN_FULLSCREEN -> true
+        else -> resources.configuration.orientation ==
+            android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    }
+
+    /**
+     * The placeholder for a slot with nothing in it: an empty outline with a plus.
+     *
+     * Dashed, because a solid frame reads as a thing rather than as the absence of one, and the
+     * plus because a tap is what fills it — the icon and the gesture should agree.
+     */
+    private fun emptySlotArt(w: Int, h: Int): android.graphics.Bitmap {
+        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            color = Color.parseColor("#7A8A6A")
+            strokeWidth = h * 0.045f
+            strokeCap = android.graphics.Paint.Cap.ROUND
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(h * 0.10f, h * 0.075f), 0f)
+        }
+        val inset = h * 0.16f
+        canvas.drawRoundRect(
+            android.graphics.RectF(inset, inset, w - inset, h - inset),
+            h * 0.12f, h * 0.12f, paint,
+        )
+        val plus = android.graphics.Paint(paint).apply { pathEffect = null }
+        val cx = w / 2f
+        val cy = h / 2f
+        val r = h * 0.13f
+        canvas.drawLine(cx - r, cy, cx + r, cy, plus)
+        canvas.drawLine(cx, cy - r, cx, cy + r, plus)
+        return bmp
+    }
+
+    /**
      * Steps a player slot through what can drive it: nothing, the phone's touchscreen, then each
      * connected gamepad.
      *
@@ -1086,6 +1143,16 @@ class MainActivity : AppCompatActivity() {
     private fun cyclePlayerSlot(port: Int) {
         val surfaces = availableSurfaces()
         val current = surfaces.firstOrNull { portFor(it.key, it.device) == port }
+
+        // With only the touchscreen there is nothing to cycle through, and somebody has to be
+        // holding it — so a tap on another slot moves the player rather than offering an empty
+        // state that would leave nobody able to play.
+        if (surfaces.size == 1) {
+            if (current == null) inputConfig.setPort(surfaces.first().key, port)
+            buildControllerBar()
+            return
+        }
+
         // null first, so a slot you did not mean to touch is one more tap from being empty again.
         val choices: List<Surface?> = listOf(null) + surfaces
         val index = choices.indexOfFirst { it?.key == current?.key }.coerceAtLeast(0)
