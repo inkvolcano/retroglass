@@ -897,6 +897,7 @@ class MainActivity : AppCompatActivity() {
             else ConsoleImages.SCREEN_PORTRAIT_TOUCH,
         )
         val padArt = ConsoleImages.pad(this, console)
+        val anyGamepad = surfaces.any { it.isGamepad }
         for (port in 0 until console.maxPlayers) {
             val onPort = surfaces.filter { portFor(it.key, it.device) == port }
             val occupied = onPort.isNotEmpty()
@@ -905,14 +906,19 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 background = GradientDrawable().apply { cornerRadius = dp(12f).toFloat(); setColor(MenuTheme.TILE) }
                 setPadding(dp(9f), dp(6f), dp(9f), dp(6f))
-                alpha = if (occupied) 1f else 0.42f
+                // Empty slots are dimmed to read as available rather than assigned, but 0.42
+                // over a dark tile with fine line art left them nearly invisible.
+                alpha = if (occupied) 1f else 0.78f
                 isClickable = true; isFocusable = true
                 setOnClickListener { onPlayerSlotTap(port, onPort) }
             }
-            // Empty slots show the console's controller too, greyed by the card's own alpha:
-            // it reads as "this is what could go here" rather than as a blank.
+            // The touchscreen goes wherever the phone actually plays. With nothing plugged in
+            // that is player one, even if no port is assigned yet — showing the console's own
+            // controller there would advertise hardware that is not connected. The remaining
+            // slots keep the console's pad, dimmed, reading as what could go in them.
             val usesPhone = onPort.any { !it.isGamepad }
-            val art = if (usesPhone) touchArt ?: padArt else padArt ?: touchArt
+            val phonePlaysHere = usesPhone || (!anyGamepad && port == 0)
+            val art = if (phonePlaysHere) touchArt ?: padArt else padArt ?: touchArt
             card.addView(android.widget.ImageView(this).apply {
                 art?.let { setImageBitmap(it) }
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER

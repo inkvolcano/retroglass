@@ -47,6 +47,15 @@ object ConsoleImages {
          * controllers at all, so it cannot share [SHEET_ORDER]'s straight row-major mapping.
          */
         private val order: List<Console?> = SHEET_ORDER,
+        /**
+         * Multiplies the alpha derived from stroke brightness.
+         *
+         * The console art is drawn heavy and shown large, so its own brightness carries. The
+         * controller and screen sheets are finer-lined and land in tiles a third the size, where
+         * the same rule renders them as barely-there grey. Lifting alpha keeps the soft stroke
+         * falloff — which is what stops the crops looking cut out — while making them legible.
+         */
+        private val alphaBoost: Float = 1f,
     ) {
         private var bitmap: Bitmap? = null
         private var loaded = false
@@ -118,7 +127,7 @@ object ConsoleImages {
                 val r = (p shr 16) and 0xFF
                 val g = (p shr 8) and 0xFF
                 val b = p and 0xFF
-                val a = maxOf(r, g, b)
+                val a = (maxOf(r, g, b) * alphaBoost).toInt().coerceAtMost(255)
                 px[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
             }
             return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
@@ -184,6 +193,7 @@ object ConsoleImages {
             14, 834, 231, 836,
         ),
         PAD_ORDER,
+        alphaBoost = 1.7f,
     )
 
     /**
@@ -197,6 +207,7 @@ object ConsoleImages {
             -12, 485, 387, 499, 761, 536, 1147, 532,
         ),
         emptyList(),
+        alphaBoost = 1.7f,
     )
 
     /** Cell indices into [SCREENS]. */
