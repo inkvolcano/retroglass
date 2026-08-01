@@ -103,7 +103,12 @@ class DesignerView(context: Context) : View(context) {
         // is hidden by the reversal: in landscape the columns sit outside the screen rect, and the
         // one case where a module shares that band (reflowed portrait) only happens with the
         // picture on the glasses, where the screen is a dashed outline rather than a filled box.
-        if (landscape) {
+        if (layout.reflowing) {
+            // Reflowed, the band the screen was holding belongs to the pad — so there is no
+            // screen box to draw. Drawing one anyway put its label straight through the column
+            // and zone labels that now occupy that space, and framed an area the pad has taken.
+            drawPad(canvas, w, inset, h - inset, unit)
+        } else if (landscape) {
             drawPad(canvas, w, inset, h - inset, unit)
             drawScreen(canvas, landscapeScreenRect(w, h, inset), unit)
         } else {

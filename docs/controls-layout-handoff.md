@@ -335,6 +335,14 @@ when it covers the part of the layout you are trying to judge.
 The shadow toggles now drive the real pad: `ControllerView` skips the contact-shadow pass per module
 family, so a pad can lift its buttons off the glass while leaving a flat d-pad.
 
+### 7.5 Verified on device
+
+Row counts 5/6/7 (row 1 keeps its height, the rest redivide), external-screen mode, reflow, and
+the mode picker were all exercised on a Galaxy Z Flip. One bug came out of it: reflowed portrait
+still drew the screen box over the band the columns had just taken, putting its label straight
+through the LC/RC/CT labels. Reflowed layouts now draw no screen box at all, which is the honest
+rendering — the band belongs to the pad, and the picture is on the glasses.
+
 ### 7.4 Persistence
 `zones`, `noScr` and `reflow` join the serialised layout; `scale` widens from a single char to an id
 so it can carry `xxl`/`xxxl`. Older saved strings parse unchanged — every new key falls back to its
